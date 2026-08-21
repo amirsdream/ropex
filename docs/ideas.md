@@ -2,7 +2,11 @@
 
 Nightly capture. Newest first. Each entry should be one shippable idea, not a slogan.
 
-## Policy admission + subagent fan-out
+## Concurrent drain + delivery replay + GitRepo sync
+
+Parallel drain with `--concurrency`, replay journal entries, and local GitRepo sync stub.
+
+**Shipped (2026-08-21 night):** `drainQueue` concurrency, `replayDelivery`, `syncGitRepos`, `ropex demo` e2e sandbox.
 
 Gate tool calls with Policy deny/requireApproval before DeepSeek executes; fan large tasks across idle replicas.
 

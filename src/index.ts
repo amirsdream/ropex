@@ -47,3 +47,6 @@ export { registerSkill, shareSkill, skillsForAgent, latestSkill } from "./skills
 export { metricsSnapshot, metricsPrometheus } from "./metrics.js";
 export { admitTool, admitCalls, admitTask, effectivePermissions } from "./admission.js";
 export { fanOutTask, shouldFanOut, shardCount } from "./fanout.js";
+export { syncGitRepos, resolveGitRepoPath, gitRepoIntervalMs } from "./gitrepo.js";
+export { replayDelivery } from "./journal.js";
+export { runSandboxDemo } from "./demo.js";

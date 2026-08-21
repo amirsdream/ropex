@@ -8,9 +8,11 @@ import { enqueueTask, queueSummary } from "./queue.js";
 import { runTask } from "./runtime.js";
 import { drainQueue } from "./scheduler.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
-import { deliveriesFor } from "./journal.js";
+import { deliveriesFor, replayDelivery } from "./journal.js";
 import { shareSkill } from "./skills.js";
 import { fanOutTask } from "./fanout.js";
+import { syncGitRepos } from "./gitrepo.js";
+import { runSandboxDemo } from "./demo.js";
 import { parseManifests } from "./spec.js";
 import { ingestGithubWebhook, signGithubPayload } from "./webhook.js";
 import { parseInterval, watchLoop, watchOnce } from "./watch.js";
@@ -26,7 +28,11 @@ Usage:
   ropex github simulate <event> --repo <org/name> [--title t]
   ropex webhook simulate <event> --repo <org/name> [--title t] [--secret s]
   ropex queue                     Show work queue + metrics
-  ropex drain [--limit N]         Claim idle workers and run pending queue
+  ropex drain [--limit N] [--concurrency N]
+                                     Claim idle workers and run pending queue
+  ropex sync                          Sync declared GitRepo paths (local stub)
+  ropex replay <delivery-id>          Replay a delivery into the journal
+  ropex demo [--root path]            End-to-end sandbox demo (no network)
   ropex watch <path> [--once] [--interval 5s]
                                      Reconcile manifests on an interval (Flux-style)
   ropex metrics [--prometheus]    Export cluster metrics
@@ -175,10 +181,52 @@ async function main(argv: string[]): Promise<number> {
     case "drain": {
       const state = loadState(root);
       const limit = Number(flag(rest, "--limit") ?? "32");
-      const results = await drainQueue(state, { root, limit });
+      const concurrency = Number(flag(rest, "--concurrency") ?? "1");
+      const results = await drainQueue(state, { root, limit, concurrency });
       saveState(root, state);
-      console.log(`drained ${results.length}  remaining ${queueSummary(state).pending}`);
+      console.log(
+        `drained ${results.length}  concurrency=${concurrency}  remaining ${queueSummary(state).pending}`,
+      );
       for (const r of results) console.log(`  ${r.worker.id}: ${r.output}`);
+      return 0;
+    }
+    case "sync": {
+      const state = loadState(root);
+      if (!state.gitRepos.length) {
+        console.log("no GitRepo manifests in state — apply fleets first");
+        return 0;
+      }
+      const results = syncGitRepos(root, state);
+      for (const r of results) {
+        if (r.ok) {
+          console.log(
+            `ok ${r.repo}  path=${r.path}  create=${r.watch?.plan.create.length ?? 0} retire=${r.watch?.plan.retire.length ?? 0}`,
+          );
+        } else {
+          console.log(`skip ${r.repo}  ${r.reason}`);
+        }
+      }
+      return 0;
+    }
+    case "replay": {
+      const id = rest[0];
+      if (!id) return fail("usage: ropex replay <delivery-id>");
+      const state = loadState(root);
+      const replayed = replayDelivery(state, id);
+      if (!replayed) return fail(`delivery not found: ${id}`);
+      saveState(root, state);
+      console.log(`replayed ${replayed.id}  kind=${replayed.kind}`);
+      return 0;
+    }
+    case "demo": {
+      const demoRoot = flag(rest, "--root") ?? join(root, "sandbox", "demo");
+      const concurrency = Number(flag(rest, "--concurrency") ?? "2");
+      const result = await runSandboxDemo(demoRoot, { concurrency });
+      for (const s of result.steps) console.log(`  ${s}`);
+      console.log(
+        `demo complete  workers=${result.workers} drained=${result.drained} deliveries=${result.deliveries}`,
+      );
+      console.log(`root ${result.root}`);
       return 0;
     }
     case "watch": {

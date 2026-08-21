@@ -44,3 +44,24 @@ export function deliveriesFor(
   if (filter.limit) rows = rows.slice(0, filter.limit);
   return rows;
 }
+
+/**
+ * Replay a prior delivery into the journal (audit / re-notify without re-running the task).
+ * Marks body with [replay] so git-native trails stay honest.
+ */
+export function replayDelivery(
+  state: ClusterState,
+  deliveryId: string,
+): DeliveryRecord | undefined {
+  ensureJournal(state);
+  const orig = state.deliveries.find((d) => d.id === deliveryId);
+  if (!orig) return undefined;
+  const replay: DeliveryRecord = {
+    ...orig,
+    id: `replay-${orig.id}-${Date.now()}`,
+    at: new Date().toISOString(),
+    body: orig.body.includes("[replay]") ? orig.body : `${orig.body} [replay]`,
+  };
+  state.deliveries.push(replay);
+  return replay;
+}
