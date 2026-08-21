@@ -2,6 +2,10 @@
 
 Nightly capture. Newest first. Each entry should be one shippable idea, not a slogan.
 
+## Map harness profiles to live DeepSeek Harness
+
+`harness.profile` (`minimal` | `code` | `standard` | `creator`) should load a real `@deepseek-ai/dsh` plugin pack instead of the simulated kernel. First slice: one adapter that boots dsh headless with the matching preset, runs a single Hermes-planned tool program, and returns the trajectory. Keep Policy denylist as a permissions plugin in front. No GitHub App required for this slice — prove it in `ropex --root sandbox run`.
+
 ## Worktree per worker
 
 Each replica gets its own git worktree under `sandbox/worktrees/<worker-id>/`. The harness `fs` and `shell` plugins are chrooted there so a 20-replica `pr-factory` cannot clobber the same files. First slice: create/destroy worktrees in the reconciler (pending → running creates, retired removes) and point `runTask` at that cwd. No extra model required.
