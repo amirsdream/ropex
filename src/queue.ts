@@ -3,6 +3,7 @@
  * GitHub webhooks / simulate / CLI enqueue; drain claims idle workers LRU-first.
  */
 
+import { admitTask } from "./admission.js";
 import type { ClusterMetrics, ClusterState, QueuedTask, Task, Worker } from "./types.js";
 
 export function emptyMetrics(): ClusterMetrics {
@@ -24,17 +25,23 @@ export function enqueueTask(
   const existing = state.queue.find((q) => q.id === task.id && q.status === "pending");
   if (existing) return existing;
 
+  const decision = admitTask(state, task);
   const item: QueuedTask = {
     id: task.id,
     task,
     enqueuedAt: new Date().toISOString(),
-    status: "pending",
+    status: decision.status === "deny" ? "failed" : "pending",
     attempts: 0,
     source,
+    error: decision.status === "deny" ? decision.reason : undefined,
+    finishedAt: decision.status === "deny" ? new Date().toISOString() : undefined,
   };
   state.queue.push(item);
   state.metrics.tasksEnqueued += 1;
   state.metrics.lastEventAt = item.enqueuedAt;
+  if (decision.status === "deny") {
+    state.metrics.tasksFailed += 1;
+  }
   return item;
 }
 

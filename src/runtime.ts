@@ -1,3 +1,4 @@
+import { admitCalls } from "./admission.js";
 import { bootDsh } from "./dsh.js";
 import { createHermes } from "./hermes.js";
 import { buildAgentImage, type ImageResolveOptions } from "./image.js";
@@ -69,8 +70,27 @@ export async function runTask(
   // compose + plan (Hermes)
   const planned = hermes.plan(task);
 
-  // execute (DeepSeek / dsh)
-  const { steps } = await dsh.execute(planned);
+  // policy admission — deny fails closed; approval-gated tools are not executed
+  const admission = admitCalls(state.policies, planned.calls);
+  const { steps: execSteps } = await dsh.execute({
+    thoughts: planned.thoughts,
+    calls: admission.allowed,
+  });
+
+  const gatedSteps: TrajectoryStep[] = [
+    ...admission.denied.map((d) => ({
+      thought: "policy admission",
+      calls: [{ plugin: "admission", name: d.name, input: { status: "deny" } }],
+      observation: d.reason,
+    })),
+    ...admission.needsApproval.map((d) => ({
+      thought: "policy admission",
+      calls: [{ plugin: "admission", name: d.name, input: { status: "approval" } }],
+      observation: d.reason,
+    })),
+    ...execSteps,
+  ];
+  const steps = gatedSteps;
 
   // deliver (DeepSeek)
   let delivery: RunResult["delivery"];

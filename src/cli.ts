@@ -9,7 +9,8 @@ import { runTask } from "./runtime.js";
 import { drainQueue } from "./scheduler.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { deliveriesFor } from "./journal.js";
-import { shareSkill, skillsForAgent } from "./skills.js";
+import { shareSkill } from "./skills.js";
+import { fanOutTask } from "./fanout.js";
 import { parseManifests } from "./spec.js";
 import { ingestGithubWebhook, signGithubPayload } from "./webhook.js";
 import { parseInterval, watchLoop, watchOnce } from "./watch.js";
@@ -31,6 +32,8 @@ Usage:
   ropex metrics [--prometheus]    Export cluster metrics
   ropex journal                   Show delivery journal
   ropex skills [share <name> --to <agent>]
+  ropex fanout --agent <name> <prompt>
+                                     Shard a task across idle replicas
   ropex scale <fleet> --replicas N
                                      Print YAML to commit (Git is source of truth)
   ropex memory                    Show shared memory stream
@@ -243,6 +246,22 @@ async function main(argv: string[]): Promise<number> {
           `  ${s.name}@v${s.version} origin=${s.originAgent} shared=[${s.sharedWith.join(",")}]`,
         );
       }
+      return 0;
+    }
+    case "fanout": {
+      const agent = flag(rest, "--agent");
+      const prompt = positional(rest).join(" ");
+      if (!agent || !prompt) return fail("fanout requires --agent <name> and a prompt");
+      const state = loadState(root);
+      const plan = fanOutTask(state, {
+        id: `fanout-${Date.now()}`,
+        agent,
+        prompt: /fan|shard|parallel/i.test(prompt) ? prompt : `${prompt} fan-out:3`,
+      });
+      console.log(`sharded ${plan.shards.length} from ${plan.parentId}`);
+      const results = await drainQueue(state, { root });
+      saveState(root, state);
+      for (const r of results) console.log(`  ${r.worker.id}: ${r.output}`);
       return 0;
     }
     case "scale": {

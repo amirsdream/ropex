@@ -2,6 +2,16 @@
 
 Nightly capture. Newest first. Each entry should be one shippable idea, not a slogan.
 
+## Policy admission + subagent fan-out
+
+Gate tool calls with Policy deny/requireApproval before DeepSeek executes; fan large tasks across idle replicas.
+
+**Shipped (2026-08-21 night):** `admitCalls` / enqueue deny, `fanOutTask` + `ropex fanout`, UI queue + delivery journal panels.
+
+Append-only delivery trail, versioned shareable skills, Prometheus metrics export.
+
+**Shipped (2026-08-21 night):** `deliveries[]`, `skillRegistry` + `shareSkill`, `ropex metrics [--prometheus]`, `/api/v1/metrics|deliveries|skills`.
+
 ## GitRepo watch loop
 
 Watch declared `GitRepo` paths on an interval, re-parse manifests, reconcile digests, and write state — Flux-style. First slice: `ropex watch --once` / `--interval 5s` over local paths (no remote clone). Prove drift detection: edit YAML → retire+create.

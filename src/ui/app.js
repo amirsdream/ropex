@@ -81,6 +81,52 @@ function renderWorkers(view) {
     .join("");
 }
 
+function renderQueue(view) {
+  const el = $("#queue-rail");
+  if (!view.queue?.length) {
+    el.innerHTML = `<p class="empty">Queue empty. Webhook or simulate to enqueue.</p>`;
+    return;
+  }
+  el.innerHTML = view.queue
+    .slice()
+    .reverse()
+    .map(
+      (q, i) => `
+      <div class="worker-row" style="animation-delay:${Math.min(i, 12) * 0.03}s">
+        <div>
+          <div class="worker-id">${escapeHtml(q.agent)}</div>
+          <div class="digest">${escapeHtml(q.prompt)}</div>
+        </div>
+        <div class="status status-${q.status === "done" ? "idle" : q.status}">${q.status}</div>
+        <div class="digest">${escapeHtml(q.source)}</div>
+        <div class="digest">${escapeHtml(q.id)}</div>
+      </div>`,
+    )
+    .join("");
+}
+
+function renderJournal(view) {
+  const el = $("#journal-stream");
+  if (!view.deliveries?.length) {
+    el.innerHTML = `<p class="empty">No deliveries yet.</p>`;
+    return;
+  }
+  el.innerHTML = view.deliveries
+    .map(
+      (d, i) => `
+      <article class="mem-item" style="animation-delay:${Math.min(i, 12) * 0.04}s">
+        <div class="mem-meta">
+          <span class="scope">${escapeHtml(d.kind)}</span>
+          <span>${escapeHtml(d.agent)}</span>
+          ${d.repo ? `<span>${escapeHtml(d.repo)}</span>` : ""}
+          <span>${formatTime(d.at)}</span>
+        </div>
+        <p class="mem-text">${escapeHtml(d.body)}</p>
+      </article>`,
+    )
+    .join("");
+}
+
 function renderSurfaces(view) {
   $("#hermes-list").innerHTML = view.hermes
     .map(
@@ -113,6 +159,7 @@ function renderMeta(view) {
     `revision ${view.revision}`,
     view.source ? `source ${view.source}` : null,
     view.lastReconcile ? `reconciled ${formatTime(view.lastReconcile)}` : null,
+    view.metrics ? `idle ${view.metrics.workersIdle} · failed tasks ${view.metrics.tasksFailed}` : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -142,6 +189,8 @@ async function main() {
     renderWorkflow(view);
     renderMemory(view);
     renderWorkers(view);
+    renderQueue(view);
+    renderJournal(view);
     renderSurfaces(view);
   } catch (err) {
     $("#tagline").textContent = "Control plane unreachable";

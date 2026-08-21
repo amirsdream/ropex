@@ -116,6 +116,21 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
       source: item.source,
       prompt: item.task.prompt,
     })),
+    deliveries: (state.deliveries ?? []).slice(-30).map((d) => ({
+      id: d.id,
+      kind: d.kind,
+      agent: d.agent,
+      body: d.body,
+      at: d.at,
+      repo: d.repo,
+    })),
+    metrics: {
+      tasksCompleted: state.metrics.tasksCompleted,
+      tasksFailed: state.metrics.tasksFailed,
+      queuePending: q.pending,
+      workersIdle: live.filter((w) => w.status === "idle").length,
+      deliveries: state.deliveries?.length ?? 0,
+    },
   };
 }
 

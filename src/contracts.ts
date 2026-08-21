@@ -175,6 +175,14 @@ export type ControlPlaneView = {
   skills: LearnedSkill[];
   workflow: Array<{ id: string; owner: string; purpose: string }>;
   queue: Array<{ id: string; status: string; agent: string; source: string; prompt: string }>;
+  deliveries: Array<{ id: string; kind: string; agent: string; body: string; at: string; repo?: string }>;
+  metrics: {
+    tasksCompleted: number;
+    tasksFailed: number;
+    queuePending: number;
+    workersIdle: number;
+    deliveries: number;
+  };
 };
 
 /** Stable API routes the UI and CLI share. */

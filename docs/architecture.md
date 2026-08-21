@@ -195,6 +195,16 @@ GitHub webhooks (HMAC-verified), `github simulate`, and CLI enqueue into `Cluste
 
 `ropex watch <path> [--once] [--interval 5s]` re-reads local manifest trees and reconciles — Flux-style drift control without a remote clone (yet). Scale or skill edits produce create/retire/image rolls.
 
+## Observability
+
+- **Delivery journal** — every comment/check/PR appends to `state.deliveries` (`ropex journal`).
+- **Skill registry** — versioned skills with `shareSkill` across agents (`ropex skills`).
+- **Metrics** — JSON or Prometheus text (`ropex metrics --prometheus`, `/api/v1/metrics`).
+
+## DeepSeek adapter seam
+
+`bootDsh(spec)` loads a **profile pack** (`minimal` | `code` | `standard` | `creator`) and runs Hermes plans through it. `backend: "simulated"` today; `backend: "live"` is reserved for `@deepseek-ai/dsh`.
+
 ## What is still simulated
 
 Tools, delivery, memory backend, GitRepo watch, live `@deepseek-ai/dsh`, and live Hermes. The contracts above are the seams those live adapters plug into.
