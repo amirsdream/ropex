@@ -177,3 +177,59 @@ export function deliveryPlugin(kind: "comment" | "pull_request" | "check"): Plug
     },
   };
 }
+
+/**
+ * DeepSeek memory plugin — mounts a Hermes MemoryPort onto the kernel.
+ * Tools can remember/query through ctx.get("memory").
+ */
+export function memoryPlugin(port: import("./contracts.js").MemoryPort): Plugin {
+  return {
+    name: `memory:${port.context.policy.write}`,
+    kind: "memory",
+    apply(ctx) {
+      ctx.set("memory", port);
+      const kernel = ctx.get<Kernel>("kernel");
+      kernel.registerTool("memory", (input) => {
+        const action = String(input.action ?? "query");
+        if (action === "remember") {
+          const fact = port.remember(String(input.text ?? ""), {
+            scope: input.scope as import("./types.js").MemoryScope | undefined,
+            tags: Array.isArray(input.tags) ? (input.tags as string[]) : undefined,
+          });
+          return JSON.stringify({ ok: true, fact });
+        }
+        if (action === "promote") {
+          const fact = port.promote(String(input.id ?? ""), input.scope as import("./types.js").MemoryScope);
+          return JSON.stringify({ ok: Boolean(fact), fact });
+        }
+        const facts = port.query({
+          text: input.text ? String(input.text) : undefined,
+          limit: typeof input.limit === "number" ? input.limit : 20,
+        });
+        return JSON.stringify({ ok: true, facts });
+      });
+    },
+  };
+}
+
+/** DeepSeek skills plugin — exposes learned + image skills to the kernel. */
+export function skillsPlugin(skills: string[]): Plugin {
+  return {
+    name: "skills",
+    kind: "skills",
+    apply(ctx) {
+      ctx.set("skills", [...skills]);
+    },
+  };
+}
+
+/** DeepSeek soul plugin — Hermes identity available inside the harness. */
+export function soulPlugin(soul: string): Plugin {
+  return {
+    name: "soul",
+    kind: "soul",
+    apply(ctx) {
+      ctx.set("soul", soul);
+    },
+  };
+}

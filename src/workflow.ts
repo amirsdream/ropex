@@ -5,6 +5,7 @@
 
 import type { DesiredAgent, GithubSpec, HarnessProfile, HermesSpec } from "./types.js";
 import { buildAgentImage, type ImageResolveOptions } from "./image.js";
+import { resolveSharePolicy } from "./memory.js";
 
 export type WorkflowOwner = "hermes" | "deepseek" | "ropex";
 
@@ -51,6 +52,7 @@ export type AgentWorkflow = {
   brain: {
     soul: string;
     memory: HermesSpec["memory"];
+    share: import("./types.js").MemoryShareSpec;
     skills: string[];
     learning: boolean;
   };
@@ -76,6 +78,7 @@ export function composeWorkflow(
     brain: {
       soul: image.soulText || image.hermes.soul || "default",
       memory: image.hermes.memory,
+      share: resolveSharePolicy(image.hermes),
       skills: [...image.hermes.skills],
       learning: image.hermes.learning,
     },

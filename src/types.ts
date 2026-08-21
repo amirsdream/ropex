@@ -18,10 +18,29 @@ export type HarnessSpec = {
   model?: string;
 };
 
+/** Where a memory fact lives in the shared store. */
+export type MemoryScope = "worker" | "agent" | "fleet" | "cluster";
+
+/** Read/write policy for cross-replica memory sharing. */
+export type MemoryShareSpec = {
+  /** Scopes this worker may read from (union). */
+  read: MemoryScope[];
+  /** Scope used when writing new facts. */
+  write: MemoryScope;
+};
+
+export type MemoryBackend = "sqlite" | "none" | "shared";
+
 export type HermesSpec = {
   /** Path to SOUL.md / identity file. */
   soul?: string;
-  memory: "sqlite" | "none";
+  /** Local sqlite, disabled, or cluster-shared memory bus. */
+  memory: MemoryBackend;
+  /**
+   * Cross-replica share policy.
+   * Defaults: sqlite → agent; shared → agent+fleet read / agent write; none → empty.
+   */
+  share?: MemoryShareSpec;
   skills: string[];
   /** Closed learning loop: extract skills from trajectories. */
   learning: boolean;
@@ -116,6 +135,15 @@ export type MemoryFact = {
   at: string;
 };
 
+/** Memory fact with share scope — the durable unit on the cluster bus. */
+export type SharedMemoryFact = MemoryFact & {
+  scope: MemoryScope;
+  worker?: string;
+  fleet?: string;
+  tags?: string[];
+  sourceWorker?: string;
+};
+
 export type LearnedSkill = {
   name: string;
   agent: string;
@@ -130,7 +158,8 @@ export type ClusterState = {
   workers: Worker[];
   gitRepos: GitRepo[];
   policies: Policy[];
-  memory: MemoryFact[];
+  /** Cluster memory bus (scoped facts). Legacy flat MemoryFact rows are upgraded on load. */
+  memory: SharedMemoryFact[];
   skills: LearnedSkill[];
   lastReconcile?: string;
 };

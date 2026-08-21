@@ -125,6 +125,34 @@ flowchart LR
 | `deliver` | DeepSeek | Delivery plugin → comment / check / PR |
 | `learn` | Hermes | Distill trajectory → skill for the next replica |
 
+## Shared memory
+
+Facts live on a cluster bus with scopes. Hermes remembers through `MemoryPort`; DeepSeek mounts the same port as the `memory` plugin.
+
+| Scope | Visible to |
+| --- | --- |
+| `worker` | Same worker id only |
+| `agent` | All replicas of that agent |
+| `fleet` | Workers derived from the same fleet |
+| `cluster` | Every worker |
+
+`hermes.share.read` / `hermes.share.write` set the policy (baked into the agent image digest). Defaults: `sqlite` → agent; `shared` → agent+fleet read / agent write; `none` → worker-local only.
+
+```mermaid
+flowchart TB
+  subgraph Bus["SharedMemoryStore"]
+    F1["fact scope=agent"]
+    F2["fact scope=fleet"]
+  end
+  W0["triage:0"] -->|remember| F1
+  W1["triage:1"] -->|query| F1
+  FA["factory-0:0"] -->|remember| F2
+  FB["factory-1:0"] -->|query| F2
+  W0 -.->|no| F2
+```
+
+Control-plane UI: `ropex ui` serves `src/ui` and `/api/v1/view` (Hermes + DeepSeek surfaces, memory rope, workers).
+
 ### Task sequence
 
 ```mermaid

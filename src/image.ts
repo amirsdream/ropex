@@ -33,6 +33,12 @@ export function agentImagePayload(agent: DesiredAgent, soulText: string): string
       soul: agent.spec.hermes.soul ?? null,
       soulText,
       memory: agent.spec.hermes.memory,
+      share: agent.spec.hermes.share
+        ? {
+            read: [...agent.spec.hermes.share.read].sort(),
+            write: agent.spec.hermes.share.write,
+          }
+        : null,
       learning: agent.spec.hermes.learning,
       skills: [...agent.spec.hermes.skills].sort(),
     },

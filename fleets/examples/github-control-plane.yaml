@@ -38,7 +38,10 @@ spec:
       - fs
   hermes:
     soul: souls/triage.md
-    memory: sqlite
+    memory: shared
+    share:
+      read: [agent]
+      write: agent
     learning: true
     skills:
       - issue-triage
@@ -69,7 +72,10 @@ spec:
       - shell
   hermes:
     soul: souls/reviewer.md
-    memory: sqlite
+    memory: shared
+    share:
+      read: [agent, fleet]
+      write: agent
     learning: true
     skills:
       - pr-review
@@ -106,7 +112,10 @@ spec:
           - subagent
       hermes:
         soul: souls/builder.md
-        memory: sqlite
+        memory: shared
+        share:
+          read: [agent, fleet]
+          write: agent
         learning: true
         skills:
           - implement-issue

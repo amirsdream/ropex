@@ -1,11 +1,15 @@
+import type { HermesContract, HarnessLoopContract, MemoryPort } from "./contracts.js";
 import type { AgentSpec, HarnessProfile } from "./types.js";
 import {
   deliveryPlugin,
   Kernel,
   loopPlugin,
+  memoryPlugin,
   modelPlugin,
   permissionsPlugin,
   sessionPlugin,
+  skillsPlugin,
+  soulPlugin,
   toolsPlugin,
   type LoopMode,
 } from "./plugins.js";
@@ -24,23 +28,55 @@ export function loopModeFor(profile: HarnessProfile): LoopMode {
 export function toolsFor(spec: AgentSpec): string[] {
   const fromPlugins = spec.harness.plugins
     .map((p) => p.replace(/^tools:/, ""))
-    .filter((p) => !p.startsWith("model:") && p !== "loop" && p !== "session" && p !== "permissions");
+    .filter(
+      (p) =>
+        !p.startsWith("model:") &&
+        p !== "loop" &&
+        p !== "session" &&
+        p !== "permissions" &&
+        p !== "memory" &&
+        p !== "skills" &&
+        p !== "soul",
+    );
   const named = fromPlugins.length ? fromPlugins.flatMap((p) => p.split(/[+,]/)) : PROFILE_TOOLS[spec.harness.profile];
   return [...new Set(named)];
 }
 
+export type CreateHarnessOptions = {
+  deny?: string[];
+  requireApproval?: string[];
+  /** Hermes brain — mounts soul + skills plugins onto the DeepSeek kernel. */
+  hermes?: HermesContract;
+  /** Shared memory port (defaults to hermes.port when present). */
+  memory?: MemoryPort;
+};
+
 export async function createHarness(
   spec: AgentSpec,
-  policy?: { deny: string[]; requireApproval: string[] },
+  opts: CreateHarnessOptions = {},
 ): Promise<Kernel> {
   const kernel = new Kernel();
   const model = spec.harness.model ?? "deepseek-v4-flash";
+  const tools = toolsFor(spec);
+  const memoryPort = opts.memory ?? opts.hermes?.port;
+  if (memoryPort && !tools.includes("memory")) {
+    tools.push("memory");
+  }
+
   kernel
     .use(modelPlugin(model))
     .use(sessionPlugin())
-    .use(permissionsPlugin(policy?.deny ?? [], policy?.requireApproval ?? []))
-    .use(toolsPlugin(toolsFor(spec)))
+    .use(permissionsPlugin(opts.deny ?? [], opts.requireApproval ?? []))
+    .use(toolsPlugin(tools))
     .use(loopPlugin(loopModeFor(spec.harness.profile)));
+
+  if (opts.hermes) {
+    kernel.use(soulPlugin(opts.hermes.soul));
+    kernel.use(skillsPlugin(opts.hermes.skills));
+  }
+  if (memoryPort) {
+    kernel.use(memoryPlugin(memoryPort));
+  }
   if (spec.github) {
     kernel.use(deliveryPlugin(spec.github.deliver));
   }
@@ -48,7 +84,4 @@ export async function createHarness(
   return kernel;
 }
 
-export type HarnessLoop = {
-  mode: LoopMode;
-  run(calls: Array<{ name: string; input: Record<string, unknown> }>): Promise<string[]>;
-};
+export type HarnessLoop = HarnessLoopContract;

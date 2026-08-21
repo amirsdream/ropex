@@ -3,6 +3,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { applyManifestText, loadState, planReconcile, saveState } from "./controller.js";
 import { agentsForEvent, eventToTask, pickWorker } from "./github.js";
+import { buildControlPlaneView, startControlPlaneServer } from "./api.js";
 import { runTask } from "./runtime.js";
 import { parseManifests } from "./spec.js";
 import type { GithubEvent, ReconcilePlan } from "./types.js";
@@ -17,6 +18,8 @@ Usage:
   ropex github simulate <event> --repo <org/name> [--title t]
   ropex scale <fleet> --replicas N
                                      Print YAML to commit (Git is source of truth)
+  ropex memory                    Show shared memory stream
+  ropex ui [--port N]             Serve control-plane UI + /api/v1/*
   ropex help
 `;
 
@@ -118,6 +121,32 @@ async function main(argv: string[]): Promise<number> {
         "# commit this to git — the controller derives workers from the repo",
       ].join("\n");
       console.log(yaml);
+      return 0;
+    }
+    case "memory": {
+      const state = loadState(root);
+      const view = buildControlPlaneView(state);
+      if (!view.memory.length) {
+        console.log("no shared memory facts yet");
+        return 0;
+      }
+      for (const m of view.memory) {
+        console.log(`[${m.scope}] ${m.agent}${m.fleet ? `@${m.fleet}` : ""}  ${m.text}`);
+      }
+      return 0;
+    }
+    case "ui": {
+      const port = Number(flag(rest, "--port") ?? "7780");
+      const server = await startControlPlaneServer({
+        root,
+        port,
+        loadState,
+      });
+      console.log(`ropex ui  http://127.0.0.1:${server.port}`);
+      console.log(`api       http://127.0.0.1:${server.port}/api/v1/view`);
+      await new Promise(() => {
+        /* keep process alive until killed */
+      });
       return 0;
     }
     case "help":

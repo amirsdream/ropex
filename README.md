@@ -66,6 +66,8 @@ npx tsx src/cli.ts apply fleets/examples
 npx tsx src/cli.ts status
 npx tsx src/cli.ts github simulate issues.opened --repo acme/app --title "login is broken"
 npx tsx src/cli.ts run --agent triage "summarize open bugs"
+npx tsx src/cli.ts memory
+npx tsx src/cli.ts ui
 ```
 
 `apply` reads YAML, expands fleets, applies policy, and writes `.ropex/state.json`. That local store is a stand-in for a real cluster; the contract is the same.
@@ -87,7 +89,10 @@ spec:
         plugins: [github, fs, shell]
       hermes:
         soul: souls/builder.md
-        memory: sqlite
+        memory: shared          # sqlite | none | shared
+        share:
+          read: [agent, fleet]
+          write: agent
         learning: true
         skills: [implement-issue, open-pr]
       github:
@@ -109,11 +114,13 @@ Kinds:
 
 ## Runtime split
 
-**Hermes** plans: soul + skills + memory decide *what* to do and learn from the trajectory.
+**Hermes** plans: soul + skills + **MemoryPort** decide *what* to do and learn from the trajectory.
 
-**DeepSeek Harness** executes: a plugin kernel runs the loop (`tool-calls` or Code-mode collapsed program), tools, permissions, session, and GitHub delivery.
+**DeepSeek Harness** executes: a plugin kernel runs the loop (`tool-calls` or Code-mode collapsed program), tools, permissions, session, memory/skills/soul plugins, and GitHub delivery.
 
-Neither is a wrapper slogan. `src/plugins.ts` is a Cordis-shaped kernel. `src/hermes.ts` is the learn-loop. `src/runtime.ts` is the glue. `src/controller.ts` is the GitOps reconciler.
+**Shared memory** is scoped (`worker` | `agent` | `fleet` | `cluster`) with a read/write policy on `hermes.share`. Replicas of the same agent share agent-scoped facts; fleets can opt into fleet-scoped facts. Contracts live in `src/contracts.ts`; the store is `src/memory.ts`.
+
+Neither is a wrapper slogan. `src/plugins.ts` is a Cordis-shaped kernel. `src/hermes.ts` is the learn-loop. `src/runtime.ts` is the glue. `src/controller.ts` is the GitOps reconciler. `src/api.ts` + `src/ui/` are the control-plane view (`ropex ui`).
 
 ## GitHub as the agent OS
 
@@ -129,7 +136,7 @@ See [architecture](./docs/architecture.md) for the Kubernetes analogy, image dig
 
 ## Status
 
-Immutable workers (agent image digests) + Hermes/DeepSeek workflow stages are in the control plane. Still a local prototype: simulated tools, no live DeepSeek or Hermes process yet.
+Immutable workers (agent image digests) + Hermes/DeepSeek workflow stages + scoped memory sharing + control-plane UI are in the tree. Still a local prototype: simulated tools, no live DeepSeek or Hermes process yet.
 
 ## License
 
