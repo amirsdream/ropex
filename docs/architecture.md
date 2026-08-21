@@ -179,12 +179,17 @@ sequenceDiagram
 
 ## Worker lifecycle
 
-`pending → running → idle → (retired | failed)`
+`pending → idle → running → idle → (retired | failed)`
 
-- Reconcile stamps `running` on create.
+- Reconcile stamps **`idle`** on create (ready for work).
+- Scheduler **claims** an idle worker → `running`, runs Hermes→DeepSeek, then back to `idle`.
 - `runTask` requires worker digest == desired image digest (drift fails closed).
-- After a task, worker returns to `idle`.
 - Spec shrink or image roll marks the old worker `retired` (kept in history).
+- Each live worker gets an isolated **worktree** under `sandbox/worktrees/`; retired workers tear it down.
+
+## Work queue
+
+GitHub webhooks (HMAC-verified), `github simulate`, and CLI enqueue into `ClusterState.queue`. `ropex drain` claims pending items onto LRU-idle workers and records metrics.
 
 ## What is still simulated
 

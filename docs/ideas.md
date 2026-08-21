@@ -2,9 +2,9 @@
 
 Nightly capture. Newest first. Each entry should be one shippable idea, not a slogan.
 
-## Immutable agents + Hermes/DeepSeek workflow
+## GitRepo watch loop
 
-Ropex should orchestrate like Kubernetes: provision **immutable workers** from a content-addressed agent image (soul + skills + harness + github), and run a fixed workflow that keeps Hermes for compose/plan/learn and DeepSeek Harness for execute/deliver. First slice: image digest on workers, digest-mismatch rolls (retire+create), `composeWorkflow` stages in `runTask`. No live model required.
+Watch declared `GitRepo` paths on an interval, re-parse manifests, reconcile digests, and write state — Flux-style. First slice: `ropex watch --once` / `--interval 5s` over local paths (no remote clone). Prove drift detection: edit YAML → retire+create.
 
 ## Map harness profiles to live DeepSeek Harness
 
@@ -12,16 +12,23 @@ Ropex should orchestrate like Kubernetes: provision **immutable workers** from a
 
 ## Worktree per worker
 
-Each replica gets its own git worktree under `sandbox/worktrees/<worker-id>/`. The harness `fs` and `shell` plugins are chrooted there so a 20-replica `pr-factory` cannot clobber the same files. First slice: create/destroy worktrees in the reconciler (pending → running creates, retired removes) and point `runTask` at that cwd. No extra model required.
+Each replica gets its own sandbox under `sandbox/worktrees/<worker-id>/` (git worktree when possible). The harness `fs` and `shell` plugins are chrooted there so a 20-replica `pr-factory` cannot clobber the same files.
+
+**Shipped (2026-08-21 night):** worktree isolation + cwd-chrooted tools + durable queue + HMAC webhook ingress + fair LRU scheduler (`ropex drain` / `webhook simulate`). Workers boot `idle`; claim → `running` → `idle`.
 
 ## GitHub App is the queue
 
-Ship a GitHub App that maps `issues.opened` / `issues.labeled` / `pull_request.*` into Ropex tasks. Match `Agent.spec.github.events` + label selectors, pick an idle worker, run Hermes→harness, deliver via comment / check / PR. Store deliveries as issue comments so git blame and review stay native. First slice: webhook ingress + HMAC verify + enqueue; no live model required.
+Ship a GitHub App that maps `issues.opened` / `issues.labeled` / `pull_request.*` into Ropex tasks. Match `Agent.spec.github.events` + label selectors, pick an idle worker, run Hermes→harness, deliver via comment / check / PR.
+
+**Partial (2026-08-21 night):** webhook HMAC verify + parse + enqueue + drain. Live GitHub App registration still open.
+
+## Immutable agents + Hermes/DeepSeek workflow
+
+**Shipped:** image digest on workers, digest-mismatch rolls, `composeWorkflow` stages, shared memory scopes, control-plane UI.
 
 ## 2026-08-21 — bootstrap
 
 - Git is the control plane; GitHub is the queue; workers = DeepSeek Harness + Hermes.
 - Declare `Agent` / `Fleet` / `Policy` / `GitRepo` in YAML. Reconcile replicas like pods.
-- Wire live `@deepseek-ai/dsh` (everything is a plugin) and `hermes-agent` (soul, memory, skills, learn-loop).
-- GitHub App: issues/PRs as work items; comments/checks/PRs as delivery.
+- Wire live `@deepseek-ai/dsh` and `hermes-agent`.
 - Watch a real `GitRepo` and scale with a commit to `spec.replicas`.

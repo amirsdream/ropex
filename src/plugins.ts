@@ -111,19 +111,32 @@ export function permissionsPlugin(deny: string[], requireApproval: string[]): Pl
   };
 }
 
-export function toolsPlugin(names: string[]): Plugin {
+export function toolsPlugin(names: string[], opts: { cwd?: string } = {}): Plugin {
   return {
     name: `tools:${names.join("+")}`,
     kind: "tools",
     apply(ctx) {
       const kernel = ctx.get<Kernel>("kernel");
+      if (opts.cwd) ctx.set("cwd", opts.cwd);
       for (const name of names) {
         kernel.registerTool(name, (input) => {
           const perms = ctx.get<{ deny: string[] }>("permissions");
           if (perms.deny.includes(name)) {
             return `denied: ${name}`;
           }
-          return JSON.stringify({ ok: true, tool: name, input });
+          let cwd = opts.cwd;
+          if (!cwd) {
+            try {
+              cwd = ctx.get<string>("cwd");
+            } catch {
+              cwd = undefined;
+            }
+          }
+          // fs/shell are chrooted to the worker worktree when present.
+          if ((name === "fs" || name === "shell" || name === "bash") && cwd) {
+            return JSON.stringify({ ok: true, tool: name, cwd, input });
+          }
+          return JSON.stringify({ ok: true, tool: name, input, ...(cwd ? { cwd } : {}) });
         });
       }
     },

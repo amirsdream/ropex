@@ -8,11 +8,11 @@ async function loadView() {
 
 function renderPulse(view) {
   const el = $("#pulse");
-  const items = [
+    const items = [
     ["live", view.counts.workersLive],
     ["memory", view.counts.memoryFacts],
-    ["skills", view.counts.skills],
-    ["rev", view.revision],
+    ["queue", view.counts.queuePending],
+    ["done", view.counts.tasksCompleted],
   ];
   el.innerHTML = items
     .map(

@@ -4,8 +4,11 @@ import { join, resolve } from "node:path";
 import { applyManifestText, loadState, planReconcile, saveState } from "./controller.js";
 import { agentsForEvent, eventToTask, pickWorker } from "./github.js";
 import { buildControlPlaneView, startControlPlaneServer } from "./api.js";
+import { enqueueTask, queueSummary } from "./queue.js";
 import { runTask } from "./runtime.js";
+import { drainQueue } from "./scheduler.js";
 import { parseManifests } from "./spec.js";
+import { ingestGithubWebhook, signGithubPayload } from "./webhook.js";
 import type { GithubEvent, ReconcilePlan } from "./types.js";
 
 const HELP = `ropex — GitOps control plane for agent fleets
@@ -16,6 +19,9 @@ Usage:
   ropex status                    List derived workers
   ropex run --agent <name> <task> Execute one task on a live worker
   ropex github simulate <event> --repo <org/name> [--title t]
+  ropex webhook simulate <event> --repo <org/name> [--title t] [--secret s]
+  ropex queue                     Show work queue + metrics
+  ropex drain [--limit N]         Claim idle workers and run pending queue
   ropex scale <fleet> --replicas N
                                      Print YAML to commit (Git is source of truth)
   ropex memory                    Show shared memory stream
@@ -53,9 +59,12 @@ async function main(argv: string[]): Promise<number> {
       }
       console.log(`revision ${state.revision}  source ${state.source}`);
       console.log(`workers ${liveCount(state.workers)} live / ${state.workers.length} known`);
+      const q = queueSummary(state);
+      console.log(`queue pending=${q.pending} claimed=${q.claimed} done=${q.done} failed=${q.failed}`);
       for (const w of state.workers.filter((x) => x.status !== "retired")) {
         const fleet = w.fleet ? ` fleet=${w.fleet}` : "";
-        console.log(`  ${w.id}  ${w.status}  ${w.harness}  ${w.model}  image=${w.imageDigest}${fleet}`);
+        const wt = w.worktree ? ` worktree=${w.worktree}` : "";
+        console.log(`  ${w.id}  ${w.status}  ${w.harness}  ${w.model}  image=${w.imageDigest}${fleet}${wt}`);
       }
       if (state.skills.length) {
         console.log("learned skills:");
@@ -93,18 +102,71 @@ async function main(argv: string[]): Promise<number> {
         return 1;
       }
       for (const agent of matched) {
-        const worker = pickWorker(state, agent.metadata.name);
-        if (!worker) {
-          console.log(`matched ${agent.metadata.name} but no worker`);
-          continue;
-        }
-        worker.status = "running";
-        const result = await runTask(state, worker, eventToTask(agent, event), { root });
-        console.log(`${agent.metadata.name}: ${result.output}`);
-        if (result.delivery) console.log(`  -> ${result.delivery.kind}`);
-        console.log(`  image ${result.imageDigest}`);
+        enqueueTask(state, eventToTask(agent, event), "github");
       }
+      const results = await drainQueue(state, { root });
+      for (const result of results) {
+        console.log(`${result.worker.agent}: ${result.output}`);
+        if (result.delivery) console.log(`  -> ${result.delivery.kind}`);
+        console.log(`  image ${result.imageDigest}  worktree ${result.worktree ?? "-"}`);
+      }
+      if (!results.length) console.log("enqueued but no idle workers to claim");
       saveState(root, state);
+      return 0;
+    }
+    case "webhook": {
+      if (rest[0] !== "simulate") return fail("usage: ropex webhook simulate <event> --repo org/name");
+      const eventType = rest[1];
+      const repo = flag(rest, "--repo");
+      const title = flag(rest, "--title") ?? "webhook event";
+      const secret = flag(rest, "--secret") ?? "";
+      if (!eventType || !repo) return fail("webhook simulate requires <event> and --repo");
+      const [eventName, action] = eventType.includes(".")
+        ? (eventType.split(".") as [string, string])
+        : [eventType, "opened"];
+      const payload = {
+        action,
+        repository: { full_name: repo },
+        issue: { title, number: 1, body: "", labels: [] },
+        pull_request: { title, number: 1, body: "", labels: [] },
+      };
+      const rawBody = JSON.stringify(payload);
+      const state = loadState(root);
+      const headers = {
+        "x-github-event": eventName.startsWith("pull_request") ? "pull_request" : "issues",
+        "x-github-delivery": `sim-${Date.now()}`,
+        "x-hub-signature-256": secret ? signGithubPayload(secret, rawBody) : undefined,
+      };
+      const ingested = ingestGithubWebhook(state, rawBody, headers, secret);
+      if (!ingested.ok) {
+        console.error(ingested.reason ?? "ingest failed");
+        return 1;
+      }
+      console.log(`enqueued ${ingested.enqueued.length}  event ${ingested.event?.type ?? "?"}`);
+      const results = await drainQueue(state, { root });
+      for (const r of results) console.log(`${r.worker.agent}: ${r.output}`);
+      saveState(root, state);
+      return 0;
+    }
+    case "queue": {
+      const state = loadState(root);
+      const q = queueSummary(state);
+      console.log(`pending=${q.pending} claimed=${q.claimed} done=${q.done} failed=${q.failed}`);
+      console.log(
+        `metrics completed=${state.metrics.tasksCompleted} failed=${state.metrics.tasksFailed} enqueued=${state.metrics.tasksEnqueued}`,
+      );
+      for (const item of state.queue.slice(-20)) {
+        console.log(`  [${item.status}] ${item.source} ${item.task.agent}  ${item.task.prompt}`);
+      }
+      return 0;
+    }
+    case "drain": {
+      const state = loadState(root);
+      const limit = Number(flag(rest, "--limit") ?? "32");
+      const results = await drainQueue(state, { root, limit });
+      saveState(root, state);
+      console.log(`drained ${results.length}  remaining ${queueSummary(state).pending}`);
+      for (const r of results) console.log(`  ${r.worker.id}: ${r.output}`);
       return 0;
     }
     case "scale": {

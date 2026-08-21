@@ -19,3 +19,24 @@ export {
   memoryContextFor,
 } from "./memory.js";
 export { buildControlPlaneView, memoryForWorker, startControlPlaneServer } from "./api.js";
+export {
+  ensureWorktree,
+  removeWorktree,
+  worktreePath,
+  applyWorktrees,
+} from "./worktree.js";
+export {
+  enqueueTask,
+  claimPending,
+  completeQueued,
+  pickIdleWorker,
+  queueSummary,
+  emptyMetrics,
+} from "./queue.js";
+export { drainQueue } from "./scheduler.js";
+export {
+  ingestGithubWebhook,
+  verifyGithubSignature,
+  signGithubPayload,
+  parseGithubWebhook,
+} from "./webhook.js";

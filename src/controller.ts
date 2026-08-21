@@ -8,8 +8,10 @@ import {
   maxReplicas,
   parseManifests,
 } from "./spec.js";
-import { expandWorkers } from "./runtime.js";
+import { expandWorkers, runTask } from "./runtime.js";
 import { normalizeFact } from "./memory.js";
+import { emptyMetrics, ensureQueue } from "./queue.js";
+import { applyWorktrees } from "./worktree.js";
 import type { ClusterState, Manifest, ReconcilePlan, SharedMemoryFact, Worker } from "./types.js";
 
 export const STATE_FILE = ".ropex/state.json";
@@ -24,6 +26,8 @@ export function emptyState(source = ""): ClusterState {
     policies: [],
     memory: [],
     skills: [],
+    queue: [],
+    metrics: emptyMetrics(),
   };
 }
 
@@ -34,6 +38,7 @@ export function loadState(root: string): ClusterState {
     state.memory = (state.memory ?? []).map((f) =>
       normalizeFact(f as SharedMemoryFact),
     );
+    ensureQueue(state);
     return state;
   } catch {
     return emptyState();
@@ -78,7 +83,7 @@ export function planReconcile(
   for (const next of desiredWorkers) {
     const prev = currentById.get(next.id);
     if (!prev) {
-      create.push({ ...next, status: "running" });
+      create.push({ ...next, status: "idle" });
       continue;
     }
     if (prev.imageDigest !== next.imageDigest) {
@@ -86,7 +91,7 @@ export function planReconcile(
       retire.push({ ...prev, status: "retired" });
       create.push({
         ...next,
-        status: "running",
+        status: "idle",
         // Carry learned skills across rolls (volume), not image fields.
         skills: [...new Set([...next.skills, ...prev.skills])],
       });
@@ -95,8 +100,17 @@ export function planReconcile(
     // Same image: keep identity; only lifecycle status may change.
     update.push({
       ...prev,
-      status: prev.status === "failed" ? "failed" : prev.status === "idle" ? "idle" : "running",
+      status:
+        prev.status === "failed"
+          ? "failed"
+          : prev.status === "running"
+            ? "running"
+            : prev.status === "idle"
+              ? "idle"
+              : "idle",
       skills: [...new Set([...prev.skills, ...next.skills])],
+      worktree: prev.worktree,
+      lastTaskAt: prev.lastTaskAt,
     });
   }
   for (const prev of current.workers) {
@@ -109,6 +123,11 @@ export function planReconcile(
   const retiredHistory = current.workers.filter((w) => w.status === "retired");
   const workers = [...create, ...update, ...retiredHistory, ...retire];
 
+  const plan: ReconcilePlan = { create, retire, update, capped };
+  if (opts.root) {
+    applyWorktrees(opts.root, plan);
+  }
+
   const next: ClusterState = {
     ...current,
     revision: current.revision + 1,
@@ -117,10 +136,12 @@ export function planReconcile(
     workers,
     gitRepos,
     policies,
+    queue: current.queue ?? [],
+    metrics: current.metrics ?? emptyMetrics(),
     lastReconcile: new Date().toISOString(),
   };
 
-  return { next, plan: { create, retire, update, capped } };
+  return { next, plan };
 }
 
 export function applyManifestText(

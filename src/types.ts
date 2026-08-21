@@ -126,6 +126,10 @@ export type Worker = {
   /** Image skills plus runtime-learned skills (volume-like, not part of digest). */
   skills: string[];
   model: string;
+  /** Isolated sandbox path for fs/shell (sandbox/worktrees/<id>). */
+  worktree?: string;
+  /** Last task finish time — fair scheduling prefers least-recently-used. */
+  lastTaskAt?: string;
 };
 
 export type MemoryFact = {
@@ -161,6 +165,9 @@ export type ClusterState = {
   /** Cluster memory bus (scoped facts). Legacy flat MemoryFact rows are upgraded on load. */
   memory: SharedMemoryFact[];
   skills: LearnedSkill[];
+  /** Durable work queue (webhook / simulate / CLI). */
+  queue: QueuedTask[];
+  metrics: ClusterMetrics;
   lastReconcile?: string;
 };
 
@@ -187,6 +194,27 @@ export type Task = {
   event?: GithubEvent;
 };
 
+/** Work-queue item — GitHub webhook / CLI / simulate all land here. */
+export type QueuedTask = {
+  id: string;
+  task: Task;
+  enqueuedAt: string;
+  status: "pending" | "claimed" | "done" | "failed";
+  workerId?: string;
+  attempts: number;
+  source: "cli" | "github" | "webhook";
+  error?: string;
+  finishedAt?: string;
+};
+
+export type ClusterMetrics = {
+  tasksCompleted: number;
+  tasksFailed: number;
+  tasksEnqueued: number;
+  lastEventAt?: string;
+  lastDrainAt?: string;
+};
+
 export type ToolCall = {
   plugin: string;
   name: string;
@@ -211,4 +239,6 @@ export type RunResult = {
   delivery?: { kind: GithubSpec["deliver"]; body: string };
   learned?: LearnedSkill;
   output: string;
+  /** Worktree cwd used for fs/shell isolation. */
+  worktree?: string;
 };

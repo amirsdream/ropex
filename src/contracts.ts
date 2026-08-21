@@ -119,6 +119,7 @@ export type WorkerView = {
   plugins: string[];
   skills: string[];
   memoryReadable: number;
+  worktree?: string;
 };
 
 export type FleetView = {
@@ -163,6 +164,8 @@ export type ControlPlaneView = {
     fleets: number;
     memoryFacts: number;
     skills: number;
+    queuePending: number;
+    tasksCompleted: number;
   };
   workers: WorkerView[];
   fleets: FleetView[];
@@ -171,6 +174,7 @@ export type ControlPlaneView = {
   harness: HarnessSurfaceView[];
   skills: LearnedSkill[];
   workflow: Array<{ id: string; owner: string; purpose: string }>;
+  queue: Array<{ id: string; status: string; agent: string; source: string; prompt: string }>;
 };
 
 /** Stable API routes the UI and CLI share. */
@@ -178,5 +182,6 @@ export const API_ROUTES = {
   view: "/api/v1/view",
   memory: "/api/v1/memory",
   workers: "/api/v1/workers",
+  queue: "/api/v1/queue",
   health: "/api/v1/health",
 } as const;

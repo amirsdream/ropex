@@ -18,6 +18,7 @@ import {
 } from "./contracts.js";
 import { loopModeFor, toolsFor } from "./harness.js";
 import { memoryContextFor, resolveSharePolicy, SharedMemoryStore } from "./memory.js";
+import { ensureQueue, queueSummary } from "./queue.js";
 import { WORKFLOW_STAGES } from "./workflow.js";
 import type { ClusterState, DesiredAgent } from "./types.js";
 
@@ -41,9 +42,11 @@ const MIME: Record<string, string> = {
 };
 
 export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
+  ensureQueue(state);
   const live = state.workers.filter((w) => w.status !== "retired");
   const fleets = buildFleetViews(state);
   const store = SharedMemoryStore.fromState(state);
+  const q = queueSummary(state);
 
   const workers: WorkerView[] = live.map((w) => {
     const agent = state.desired.find((a) => a.metadata.name === w.agent);
@@ -62,6 +65,7 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
       plugins: [...w.plugins],
       skills: [...w.skills],
       memoryReadable: store.query(ctx).length,
+      worktree: w.worktree,
     };
   });
 
@@ -94,6 +98,8 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
       fleets: fleets.length,
       memoryFacts: state.memory.length,
       skills: state.skills.length,
+      queuePending: q.pending,
+      tasksCompleted: state.metrics.tasksCompleted,
     },
     workers,
     fleets,
@@ -102,6 +108,13 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
     harness,
     skills: [...state.skills],
     workflow: WORKFLOW_STAGES.map((s) => ({ id: s.id, owner: s.owner, purpose: s.purpose })),
+    queue: state.queue.slice(-40).map((item) => ({
+      id: item.id,
+      status: item.status,
+      agent: item.task.agent,
+      source: item.source,
+      prompt: item.task.prompt,
+    })),
   };
 }
 
@@ -205,6 +218,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
   }
   if (url.pathname === API_ROUTES.workers) {
     return json(res, buildControlPlaneView(state).workers);
+  }
+  if (url.pathname === API_ROUTES.queue) {
+    return json(res, {
+      summary: queueSummary(state),
+      metrics: state.metrics,
+      items: state.queue,
+    });
   }
 
   // Static UI

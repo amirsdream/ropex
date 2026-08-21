@@ -3,6 +3,7 @@ import { createHermes } from "./hermes.js";
 import { buildAgentImage, type ImageResolveOptions } from "./image.js";
 import { SharedMemoryStore } from "./memory.js";
 import { composeWorkflow } from "./workflow.js";
+import { ensureWorktree } from "./worktree.js";
 import type {
   ClusterState,
   DesiredAgent,
@@ -13,11 +14,16 @@ import type {
   Worker,
 } from "./types.js";
 
+export type RunTaskOptions = ImageResolveOptions & {
+  /** Override worktree root (defaults to opts.root or cwd). */
+  worktreeRoot?: string;
+};
+
 export async function runTask(
   state: ClusterState,
   worker: Worker,
   task: Task,
-  opts: ImageResolveOptions = {},
+  opts: RunTaskOptions = {},
 ): Promise<RunResult> {
   const agent = state.desired.find((a) => a.metadata.name === worker.agent);
   if (!agent) {
@@ -30,6 +36,10 @@ export async function runTask(
       `worker ${worker.id} image ${worker.imageDigest} drift from desired ${workflow.imageDigest}; reconcile first`,
     );
   }
+
+  const root = opts.worktreeRoot ?? opts.root ?? process.cwd();
+  const worktree = worker.worktree ?? ensureWorktree(root, worker);
+  worker.worktree = worktree;
 
   const policy = effectivePolicy(state.policies);
   const store = SharedMemoryStore.fromState(state);
@@ -46,6 +56,7 @@ export async function runTask(
     ...policy,
     hermes,
     memory: hermes.port,
+    cwd: worktree,
   });
 
   // compose + plan (Hermes)
@@ -91,6 +102,7 @@ export async function runTask(
   });
 
   worker.status = "idle";
+  worker.lastTaskAt = new Date().toISOString();
   return {
     task,
     worker,
@@ -101,6 +113,7 @@ export async function runTask(
     delivery,
     learned,
     output: summarize(task, steps),
+    worktree,
   };
 }
 

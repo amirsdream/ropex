@@ -1,5 +1,6 @@
 import type { ClusterState, DesiredAgent, GithubEvent, Task, Worker } from "./types.js";
 import { labelsMatch } from "./spec.js";
+import { pickIdleWorker } from "./queue.js";
 
 export function agentsForEvent(state: ClusterState, event: GithubEvent): DesiredAgent[] {
   const repoLabels = repoToLabels(event.repo);
@@ -13,9 +14,9 @@ export function workersForAgent(state: ClusterState, agentName: string): Worker[
   return state.workers.filter((w) => w.agent === agentName && w.status !== "retired");
 }
 
+/** Fair pick: idle/pending only, least-recently-used first. */
 export function pickWorker(state: ClusterState, agentName: string): Worker | undefined {
-  const live = workersForAgent(state, agentName);
-  return live.find((w) => w.status === "idle" || w.status === "running" || w.status === "pending") ?? live[0];
+  return pickIdleWorker(state, agentName) ?? workersForAgent(state, agentName)[0];
 }
 
 export function eventToTask(agent: DesiredAgent, event: GithubEvent): Task {
