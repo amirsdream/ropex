@@ -1,7 +1,9 @@
-import { createHarness, type HarnessLoop } from "./harness.js";
+import { bootDsh } from "./dsh.js";
 import { createHermes } from "./hermes.js";
 import { buildAgentImage, type ImageResolveOptions } from "./image.js";
+import { recordDelivery } from "./journal.js";
 import { SharedMemoryStore } from "./memory.js";
+import { registerSkill, skillsForAgent } from "./skills.js";
 import { composeWorkflow } from "./workflow.js";
 import { ensureWorktree } from "./worktree.js";
 import type {
@@ -43,39 +45,37 @@ export async function runTask(
 
   const policy = effectivePolicy(state.policies);
   const store = SharedMemoryStore.fromState(state);
+  const registrySkills = skillsForAgent(state, worker.agent).map((s) => s.name);
   const hermes = createHermes(agent.spec, {
     store,
     worker,
     skills: [
       ...workflow.brain.skills,
       ...worker.skills,
+      ...registrySkills,
       ...state.skills.filter((s) => s.agent === worker.agent).map((s) => s.name),
     ],
   });
-  const kernel = await createHarness(agent.spec, {
+
+  // DeepSeek adapter (simulated profile pack; live stub until @deepseek-ai/dsh)
+  const dsh = await bootDsh(agent.spec, {
     ...policy,
     hermes,
     memory: hermes.port,
     cwd: worktree,
+    backend: "simulated",
   });
 
   // compose + plan (Hermes)
   const planned = hermes.plan(task);
 
-  // execute (DeepSeek)
-  const loop = kernel.context().get<HarnessLoop>("loop");
-  const observations = await loop.run(planned.calls);
-
-  const steps: TrajectoryStep[] = planned.calls.map((call, i) => ({
-    thought: planned.thoughts[Math.min(i, planned.thoughts.length - 1)] ?? "",
-    calls: [{ plugin: "tools", name: call.name, input: call.input }],
-    observation: observations[i] ?? "",
-  }));
+  // execute (DeepSeek / dsh)
+  const { steps } = await dsh.execute(planned);
 
   // deliver (DeepSeek)
   let delivery: RunResult["delivery"];
   try {
-    const d = kernel.context().get<{
+    const d = dsh.kernel.context().get<{
       kind: "comment" | "pull_request" | "check";
       send: (body: string) => { kind: "comment" | "pull_request" | "check"; body: string };
     }>("delivery");
@@ -89,6 +89,7 @@ export async function runTask(
   if (learned) {
     state.skills.push(learned);
     worker.skills = [...new Set([...worker.skills, learned.name])];
+    registerSkill(state, learned, `via ${dsh.pack.profile} pack`);
   }
   hermes.remember({
     id: `${task.id}-done`,
@@ -101,9 +102,7 @@ export async function runTask(
     tags: ["task-complete"],
   });
 
-  worker.status = "idle";
-  worker.lastTaskAt = new Date().toISOString();
-  return {
+  const result: RunResult = {
     task,
     worker,
     imageDigest: worker.imageDigest,
@@ -115,6 +114,11 @@ export async function runTask(
     output: summarize(task, steps),
     worktree,
   };
+  recordDelivery(state, result);
+
+  worker.status = "idle";
+  worker.lastTaskAt = new Date().toISOString();
+  return result;
 }
 
 export function workerFromDesired(

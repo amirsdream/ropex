@@ -183,5 +183,8 @@ export const API_ROUTES = {
   memory: "/api/v1/memory",
   workers: "/api/v1/workers",
   queue: "/api/v1/queue",
+  metrics: "/api/v1/metrics",
+  deliveries: "/api/v1/deliveries",
+  skills: "/api/v1/skills",
   health: "/api/v1/health",
 } as const;

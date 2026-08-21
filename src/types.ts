@@ -155,6 +155,34 @@ export type LearnedSkill = {
   at: string;
 };
 
+/** Cluster-wide skill catalog entry (versioned, shareable across agents). */
+export type SkillRecord = {
+  name: string;
+  version: number;
+  /** Owning agent that first learned it; may be shared to others. */
+  originAgent: string;
+  fromTask: string;
+  at: string;
+  /** Agents allowed to load this skill (empty = origin only). */
+  sharedWith: string[];
+  /** Short recipe / description distilled from the trajectory. */
+  summary: string;
+};
+
+/** Append-only delivery audit log (git-native delivery trail). */
+export type DeliveryRecord = {
+  id: string;
+  at: string;
+  kind: "comment" | "pull_request" | "check";
+  body: string;
+  workerId: string;
+  agent: string;
+  taskId: string;
+  imageDigest: string;
+  repo?: string;
+  number?: number;
+};
+
 export type ClusterState = {
   revision: number;
   source: string;
@@ -165,6 +193,10 @@ export type ClusterState = {
   /** Cluster memory bus (scoped facts). Legacy flat MemoryFact rows are upgraded on load. */
   memory: SharedMemoryFact[];
   skills: LearnedSkill[];
+  /** Versioned skill registry (superset of learned skills). */
+  skillRegistry: SkillRecord[];
+  /** Append-only delivery journal. */
+  deliveries: DeliveryRecord[];
   /** Durable work queue (webhook / simulate / CLI). */
   queue: QueuedTask[];
   metrics: ClusterMetrics;

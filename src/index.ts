@@ -41,3 +41,7 @@ export {
   parseGithubWebhook,
 } from "./webhook.js";
 export { watchOnce, watchLoop, parseInterval, readManifestTree } from "./watch.js";
+export { bootDsh, profilePack, DSH_PROFILE_PACKS } from "./dsh.js";
+export { recordDelivery, deliveriesFor } from "./journal.js";
+export { registerSkill, shareSkill, skillsForAgent, latestSkill } from "./skills.js";
+export { metricsSnapshot, metricsPrometheus } from "./metrics.js";

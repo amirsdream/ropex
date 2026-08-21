@@ -18,6 +18,7 @@ import {
 } from "./contracts.js";
 import { loopModeFor, toolsFor } from "./harness.js";
 import { memoryContextFor, resolveSharePolicy, SharedMemoryStore } from "./memory.js";
+import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { ensureQueue, queueSummary } from "./queue.js";
 import { WORKFLOW_STAGES } from "./workflow.js";
 import type { ClusterState, DesiredAgent } from "./types.js";
@@ -224,6 +225,23 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
       summary: queueSummary(state),
       metrics: state.metrics,
       items: state.queue,
+    });
+  }
+  if (url.pathname === API_ROUTES.metrics) {
+    if (url.searchParams.get("format") === "prometheus") {
+      res.writeHead(200, { "content-type": "text/plain; version=0.0.4; charset=utf-8" });
+      res.end(metricsPrometheus(state));
+      return;
+    }
+    return json(res, metricsSnapshot(state));
+  }
+  if (url.pathname === API_ROUTES.deliveries) {
+    return json(res, state.deliveries ?? []);
+  }
+  if (url.pathname === API_ROUTES.skills) {
+    return json(res, {
+      learned: state.skills ?? [],
+      registry: state.skillRegistry ?? [],
     });
   }
 

@@ -12,6 +12,8 @@ Watch declared `GitRepo` paths on an interval, re-parse manifests, reconcile dig
 
 `harness.profile` (`minimal` | `code` | `standard` | `creator`) should load a real `@deepseek-ai/dsh` plugin pack instead of the simulated kernel. First slice: one adapter that boots dsh headless with the matching preset, runs a single Hermes-planned tool program, and returns the trajectory. Keep Policy denylist as a permissions plugin in front. No GitHub App required for this slice — prove it in `ropex --root sandbox run`.
 
+**Partial (2026-08-21 night):** `bootDsh` + `DSH_PROFILE_PACKS` offline adapter; `backend: "live"` fails closed until `@deepseek-ai/dsh` is wired. Runtime executes through the adapter seam.
+
 ## Worktree per worker
 
 Each replica gets its own sandbox under `sandbox/worktrees/<worker-id>/` (git worktree when possible). The harness `fs` and `shell` plugins are chrooted there so a 20-replica `pr-factory` cannot clobber the same files.

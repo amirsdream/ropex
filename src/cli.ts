@@ -7,6 +7,9 @@ import { buildControlPlaneView, startControlPlaneServer } from "./api.js";
 import { enqueueTask, queueSummary } from "./queue.js";
 import { runTask } from "./runtime.js";
 import { drainQueue } from "./scheduler.js";
+import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
+import { deliveriesFor } from "./journal.js";
+import { shareSkill, skillsForAgent } from "./skills.js";
 import { parseManifests } from "./spec.js";
 import { ingestGithubWebhook, signGithubPayload } from "./webhook.js";
 import { parseInterval, watchLoop, watchOnce } from "./watch.js";
@@ -25,6 +28,9 @@ Usage:
   ropex drain [--limit N]         Claim idle workers and run pending queue
   ropex watch <path> [--once] [--interval 5s]
                                      Reconcile manifests on an interval (Flux-style)
+  ropex metrics [--prometheus]    Export cluster metrics
+  ropex journal                   Show delivery journal
+  ropex skills [share <name> --to <agent>]
   ropex scale <fleet> --replicas N
                                      Print YAML to commit (Git is source of truth)
   ropex memory                    Show shared memory stream
@@ -196,6 +202,47 @@ async function main(argv: string[]): Promise<number> {
           );
         },
       });
+      return 0;
+    }
+    case "metrics": {
+      const state = loadState(root);
+      if (rest.includes("--prometheus")) {
+        process.stdout.write(metricsPrometheus(state));
+        return 0;
+      }
+      console.log(JSON.stringify(metricsSnapshot(state), null, 2));
+      return 0;
+    }
+    case "journal": {
+      const state = loadState(root);
+      const rows = deliveriesFor(state, { limit: 30 });
+      if (!rows.length) {
+        console.log("no deliveries yet");
+        return 0;
+      }
+      for (const d of rows) {
+        console.log(`[${d.kind}] ${d.agent} ${d.repo ?? "-"}#${d.number ?? "-"}  ${d.body.slice(0, 80)}`);
+      }
+      return 0;
+    }
+    case "skills": {
+      const state = loadState(root);
+      if (rest[0] === "share") {
+        const name = rest[1];
+        const to = flag(rest, "--to");
+        if (!name || !to) return fail("usage: ropex skills share <name> --to <agent>");
+        const rec = shareSkill(state, name, to);
+        if (!rec) return fail(`skill not found: ${name}`);
+        saveState(root, state);
+        console.log(`shared ${rec.name}@v${rec.version} → ${to}`);
+        return 0;
+      }
+      console.log(`registry ${state.skillRegistry?.length ?? 0}  learned ${state.skills.length}`);
+      for (const s of state.skillRegistry ?? []) {
+        console.log(
+          `  ${s.name}@v${s.version} origin=${s.originAgent} shared=[${s.sharedWith.join(",")}]`,
+        );
+      }
       return 0;
     }
     case "scale": {
