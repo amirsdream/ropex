@@ -2,6 +2,10 @@
 
 Nightly capture. Newest first. Each entry should be one shippable idea, not a slogan.
 
+## Immutable agents + Hermes/DeepSeek workflow
+
+Ropex should orchestrate like Kubernetes: provision **immutable workers** from a content-addressed agent image (soul + skills + harness + github), and run a fixed workflow that keeps Hermes for compose/plan/learn and DeepSeek Harness for execute/deliver. First slice: image digest on workers, digest-mismatch rolls (retire+create), `composeWorkflow` stages in `runTask`. No live model required.
+
 ## Map harness profiles to live DeepSeek Harness
 
 `harness.profile` (`minimal` | `code` | `standard` | `creator`) should load a real `@deepseek-ai/dsh` plugin pack instead of the simulated kernel. First slice: one adapter that boots dsh headless with the matching preset, runs a single Hermes-planned tool program, and returns the trajectory. Keep Policy denylist as a permissions plugin in front. No GitHub App required for this slice — prove it in `ropex --root sandbox run`.

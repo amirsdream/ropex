@@ -7,3 +7,5 @@ export { createHermes } from "./hermes.js";
 export { runTask, expandWorkers } from "./runtime.js";
 export { agentsForEvent, eventToTask } from "./github.js";
 export { Kernel } from "./plugins.js";
+export { buildAgentImage, digestOf } from "./image.js";
+export { composeWorkflow, WORKFLOW_STAGES } from "./workflow.js";

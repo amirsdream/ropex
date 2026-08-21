@@ -100,8 +100,11 @@ export type Worker = {
   fleet?: string;
   replica: number;
   status: WorkerStatus;
+  /** Content-addressed agent image — workers are immutable for a given digest. */
+  imageDigest: string;
   harness: HarnessProfile;
   plugins: string[];
+  /** Image skills plus runtime-learned skills (volume-like, not part of digest). */
   skills: string[];
   model: string;
 };
@@ -170,6 +173,10 @@ export type TrajectoryStep = {
 export type RunResult = {
   task: Task;
   worker: Worker;
+  /** Image digest the workflow ran against. */
+  imageDigest: string;
+  /** Stage owners for this run (Hermes brain + DeepSeek harness). */
+  workflow: Array<{ id: string; owner: string }>;
   plan: string[];
   steps: TrajectoryStep[];
   delivery?: { kind: GithubSpec["deliver"]; body: string };

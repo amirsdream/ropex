@@ -103,7 +103,7 @@ GitHub already has auth, review, CI, and blame. Ropex uses that instead of inven
 
 ## Status
 
-Local prototype: in-memory/file reconcile, simulated tools, no live DeepSeek or Hermes process yet. Next: wire `@deepseek-ai/dsh` and `hermes-agent` as plugins, watch a real GitRepo, and speak GitHub as an app.
+Immutable workers (agent image digests) + Hermes/DeepSeek workflow stages are in the control plane. Still a local prototype: simulated tools, no live DeepSeek or Hermes process yet.
 
 ## License
 

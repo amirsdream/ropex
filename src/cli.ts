@@ -38,7 +38,7 @@ async function main(argv: string[]): Promise<number> {
       const path = rest[0];
       if (!path) return fail("diff requires a path");
       const source = resolve(root, path);
-      const { plan } = planReconcile(loadState(root), parseManifests(readManifests(source)), source);
+      const { plan } = planReconcile(loadState(root), parseManifests(readManifests(source)), source, { root });
       printPlan(plan);
       return 0;
     }
@@ -52,7 +52,7 @@ async function main(argv: string[]): Promise<number> {
       console.log(`workers ${liveCount(state.workers)} live / ${state.workers.length} known`);
       for (const w of state.workers.filter((x) => x.status !== "retired")) {
         const fleet = w.fleet ? ` fleet=${w.fleet}` : "";
-        console.log(`  ${w.id}  ${w.status}  ${w.harness}  ${w.model}${fleet}`);
+        console.log(`  ${w.id}  ${w.status}  ${w.harness}  ${w.model}  image=${w.imageDigest}${fleet}`);
       }
       if (state.skills.length) {
         console.log("learned skills:");
@@ -68,11 +68,12 @@ async function main(argv: string[]): Promise<number> {
       const worker = pickWorker(state, agent);
       if (!worker) return fail(`no live worker for agent ${agent}`);
       worker.status = "running";
-      const result = await runTask(state, worker, { id: `cli-${Date.now()}`, agent, prompt });
+      const result = await runTask(state, worker, { id: `cli-${Date.now()}`, agent, prompt }, { root });
       saveState(root, state);
       console.log(result.output);
       if (result.delivery) console.log(`deliver ${result.delivery.kind}`);
       if (result.learned) console.log(`learned skill ${result.learned.name}`);
+      console.log(`image ${result.imageDigest}  workflow ${result.workflow.map((s) => `${s.id}:${s.owner}`).join(" → ")}`);
       return 0;
     }
     case "github": {
@@ -95,9 +96,10 @@ async function main(argv: string[]): Promise<number> {
           continue;
         }
         worker.status = "running";
-        const result = await runTask(state, worker, eventToTask(agent, event));
+        const result = await runTask(state, worker, eventToTask(agent, event), { root });
         console.log(`${agent.metadata.name}: ${result.output}`);
         if (result.delivery) console.log(`  -> ${result.delivery.kind}`);
+        console.log(`  image ${result.imageDigest}`);
       }
       saveState(root, state);
       return 0;

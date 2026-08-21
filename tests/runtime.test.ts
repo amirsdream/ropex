@@ -56,5 +56,15 @@ describe("runtime", () => {
     expect(result.learned?.name).toMatch(/^learned-/);
     expect(worker.skills).toContain(result.learned?.name);
     expect(worker.status).toBe("idle");
+    expect(result.imageDigest).toBe(worker.imageDigest);
+    expect(result.workflow.map((s) => s.id)).toEqual([
+      "compose",
+      "plan",
+      "execute",
+      "deliver",
+      "learn",
+    ]);
+    expect(result.workflow.find((s) => s.id === "plan")?.owner).toBe("hermes");
+    expect(result.workflow.find((s) => s.id === "execute")?.owner).toBe("deepseek");
   });
 });

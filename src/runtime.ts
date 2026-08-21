@@ -1,20 +1,50 @@
 import { createHarness, type HarnessLoop } from "./harness.js";
 import { createHermes } from "./hermes.js";
-import type { ClusterState, DesiredAgent, Policy, RunResult, Task, TrajectoryStep, Worker } from "./types.js";
+import { buildAgentImage, type ImageResolveOptions } from "./image.js";
+import { composeWorkflow } from "./workflow.js";
+import type {
+  ClusterState,
+  DesiredAgent,
+  Policy,
+  RunResult,
+  Task,
+  TrajectoryStep,
+  Worker,
+} from "./types.js";
 
-export async function runTask(state: ClusterState, worker: Worker, task: Task): Promise<RunResult> {
+export async function runTask(
+  state: ClusterState,
+  worker: Worker,
+  task: Task,
+  opts: ImageResolveOptions = {},
+): Promise<RunResult> {
   const agent = state.desired.find((a) => a.metadata.name === worker.agent);
   if (!agent) {
     throw new Error(`desired agent missing: ${worker.agent}`);
   }
+
+  const workflow = composeWorkflow(agent, opts);
+  if (workflow.imageDigest !== worker.imageDigest) {
+    throw new Error(
+      `worker ${worker.id} image ${worker.imageDigest} drift from desired ${workflow.imageDigest}; reconcile first`,
+    );
+  }
+
   const policy = effectivePolicy(state.policies);
   const kernel = await createHarness(agent.spec, policy);
   const hermes = createHermes(agent.spec, {
     memory: state.memory.filter((m) => m.agent === worker.agent),
-    skills: [...worker.skills, ...state.skills.filter((s) => s.agent === worker.agent).map((s) => s.name)],
+    skills: [
+      ...workflow.brain.skills,
+      ...worker.skills,
+      ...state.skills.filter((s) => s.agent === worker.agent).map((s) => s.name),
+    ],
   });
 
+  // compose + plan (Hermes)
   const planned = hermes.plan(task);
+
+  // execute (DeepSeek)
   const loop = kernel.context().get<HarnessLoop>("loop");
   const observations = await loop.run(planned.calls);
 
@@ -24,6 +54,19 @@ export async function runTask(state: ClusterState, worker: Worker, task: Task): 
     observation: observations[i] ?? "",
   }));
 
+  // deliver (DeepSeek)
+  let delivery: RunResult["delivery"];
+  try {
+    const d = kernel.context().get<{
+      kind: "comment" | "pull_request" | "check";
+      send: (body: string) => { kind: "comment" | "pull_request" | "check"; body: string };
+    }>("delivery");
+    delivery = d.send(summarize(task, steps));
+  } catch {
+    delivery = undefined;
+  }
+
+  // learn (Hermes) — runtime volume; does not mutate the image digest
   const learned = hermes.learn(task, steps);
   if (learned) {
     state.skills.push(learned);
@@ -37,18 +80,12 @@ export async function runTask(state: ClusterState, worker: Worker, task: Task): 
   });
   state.memory.push(...hermes.memory.filter((m) => m.id === `${task.id}-done`));
 
-  let delivery: RunResult["delivery"];
-  try {
-    const d = kernel.context().get<{ kind: "comment" | "pull_request" | "check"; send: (body: string) => { kind: "comment" | "pull_request" | "check"; body: string } }>("delivery");
-    delivery = d.send(summarize(task, steps));
-  } catch {
-    delivery = undefined;
-  }
-
   worker.status = "idle";
   return {
     task,
     worker,
+    imageDigest: worker.imageDigest,
+    workflow: workflow.stages.map((s) => ({ id: s.id, owner: s.owner })),
     plan: planned.thoughts,
     steps,
     delivery,
@@ -57,23 +94,29 @@ export async function runTask(state: ClusterState, worker: Worker, task: Task): 
   };
 }
 
-export function workerFromDesired(agent: DesiredAgent, replica: number): Worker {
+export function workerFromDesired(
+  agent: DesiredAgent,
+  replica: number,
+  opts: ImageResolveOptions = {},
+): Worker {
+  const image = buildAgentImage(agent, opts);
   return {
     id: `${agent.metadata.name}:${replica}`,
     agent: agent.metadata.name,
     fleet: agent.derivedFrom?.fleet,
     replica,
     status: "pending",
-    harness: agent.spec.harness.profile,
-    plugins: agent.spec.harness.plugins,
-    skills: [...agent.spec.hermes.skills],
-    model: agent.spec.harness.model ?? "deepseek-v4-flash",
+    imageDigest: image.digest,
+    harness: image.harness.profile,
+    plugins: [...image.harness.plugins],
+    skills: [...image.hermes.skills],
+    model: image.harness.model ?? "deepseek-v4-flash",
   };
 }
 
-export function expandWorkers(agent: DesiredAgent): Worker[] {
+export function expandWorkers(agent: DesiredAgent, opts: ImageResolveOptions = {}): Worker[] {
   const n = agent.derivedFrom ? 1 : agent.spec.replicas;
-  return Array.from({ length: n }, (_, i) => workerFromDesired(agent, i));
+  return Array.from({ length: n }, (_, i) => workerFromDesired(agent, i, opts));
 }
 
 function effectivePolicy(policies: Policy[]): { deny: string[]; requireApproval: string[] } {

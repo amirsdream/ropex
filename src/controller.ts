@@ -1,6 +1,13 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { applyReplicaCap, collectGitRepos, collectPolicies, expandDesired, maxReplicas, parseManifests } from "./spec.js";
+import {
+  applyReplicaCap,
+  collectGitRepos,
+  collectPolicies,
+  expandDesired,
+  maxReplicas,
+  parseManifests,
+} from "./spec.js";
 import { expandWorkers } from "./runtime.js";
 import type { ClusterState, Manifest, ReconcilePlan, Worker } from "./types.js";
 
@@ -34,7 +41,16 @@ export function saveState(root: string, state: ClusterState): void {
   writeFileSync(path, `${JSON.stringify(state, null, 2)}\n`);
 }
 
-export function planReconcile(current: ClusterState, manifests: Manifest[], source: string): {
+/**
+ * Kubernetes-style reconcile: workers are immutable for a given agent image digest.
+ * Spec/code change → new digest → retire old worker + create replacement (no in-place mutate).
+ */
+export function planReconcile(
+  current: ClusterState,
+  manifests: Manifest[],
+  source: string,
+  opts: { root?: string } = {},
+): {
   next: ClusterState;
   plan: ReconcilePlan;
 } {
@@ -44,9 +60,11 @@ export function planReconcile(current: ClusterState, manifests: Manifest[], sour
   const cap = maxReplicas(policies);
   const { agents, capped } = applyReplicaCap(expanded, cap);
 
-  const desiredWorkers = agents.flatMap(expandWorkers);
+  const desiredWorkers = agents.flatMap((a) => expandWorkers(a, opts));
   const desiredIds = new Set(desiredWorkers.map((w) => w.id));
-  const currentById = new Map(current.workers.filter((w) => w.status !== "retired").map((w) => [w.id, w]));
+  const currentById = new Map(
+    current.workers.filter((w) => w.status !== "retired").map((w) => [w.id, w]),
+  );
 
   const create: Worker[] = [];
   const update: Worker[] = [];
@@ -58,15 +76,23 @@ export function planReconcile(current: ClusterState, manifests: Manifest[], sour
       create.push({ ...next, status: "running" });
       continue;
     }
-    const merged: Worker = {
+    if (prev.imageDigest !== next.imageDigest) {
+      // Immutable roll: old image retires, new image boots under the same slot id.
+      retire.push({ ...prev, status: "retired" });
+      create.push({
+        ...next,
+        status: "running",
+        // Carry learned skills across rolls (volume), not image fields.
+        skills: [...new Set([...next.skills, ...prev.skills])],
+      });
+      continue;
+    }
+    // Same image: keep identity; only lifecycle status may change.
+    update.push({
       ...prev,
-      harness: next.harness,
-      plugins: next.plugins,
-      model: next.model,
-      skills: [...new Set([...next.skills, ...prev.skills])],
-      status: prev.status === "failed" ? "failed" : "running",
-    };
-    update.push(merged);
+      status: prev.status === "failed" ? "failed" : prev.status === "idle" ? "idle" : "running",
+      skills: [...new Set([...prev.skills, ...next.skills])],
+    });
   }
   for (const prev of current.workers) {
     if (prev.status === "retired") continue;
@@ -75,12 +101,8 @@ export function planReconcile(current: ClusterState, manifests: Manifest[], sour
     }
   }
 
-  const workers = [
-    ...create,
-    ...update,
-    ...current.workers.filter((w) => w.status === "retired"),
-    ...retire,
-  ];
+  const retiredHistory = current.workers.filter((w) => w.status === "retired");
+  const workers = [...create, ...update, ...retiredHistory, ...retire];
 
   const next: ClusterState = {
     ...current,
@@ -96,13 +118,17 @@ export function planReconcile(current: ClusterState, manifests: Manifest[], sour
   return { next, plan: { create, retire, update, capped } };
 }
 
-export function applyManifestText(root: string, raw: string, source: string): {
+export function applyManifestText(
+  root: string,
+  raw: string,
+  source: string,
+): {
   state: ClusterState;
   plan: ReconcilePlan;
 } {
   const manifests = parseManifests(raw);
   const current = loadState(root);
-  const { next, plan } = planReconcile(current, manifests, source);
+  const { next, plan } = planReconcile(current, manifests, source, { root });
   saveState(root, next);
   return { state: next, plan };
 }
