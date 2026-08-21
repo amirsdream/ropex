@@ -1,0 +1,179 @@
+/**
+ * Cordis-inspired plugin kernel (DeepSeek Harness shape).
+ * Everything — model, tools, loop, permissions, session — is a plugin.
+ */
+
+export type PluginKind =
+  | "model"
+  | "tools"
+  | "loop"
+  | "permissions"
+  | "session"
+  | "delivery"
+  | "memory"
+  | "skills"
+  | "soul";
+
+export type PluginContext = {
+  get<T>(name: string): T;
+  set(name: string, value: unknown): void;
+  emit(event: string, payload: unknown): void;
+};
+
+export type Plugin = {
+  name: string;
+  kind: PluginKind;
+  apply(ctx: PluginContext): void | Promise<void>;
+};
+
+export type ToolFn = (input: Record<string, unknown>, ctx: PluginContext) => Promise<string> | string;
+
+export class Kernel {
+  private readonly services = new Map<string, unknown>();
+  private readonly plugins: Plugin[] = [];
+  private readonly listeners = new Map<string, Array<(payload: unknown) => void>>();
+
+  readonly tools = new Map<string, ToolFn>();
+
+  context(): PluginContext {
+    return {
+      get: <T>(name: string) => {
+        if (!this.services.has(name)) {
+          throw new Error(`service not registered: ${name}`);
+        }
+        return this.services.get(name) as T;
+      },
+      set: (name, value) => {
+        this.services.set(name, value);
+      },
+      emit: (event, payload) => {
+        for (const fn of this.listeners.get(event) ?? []) fn(payload);
+      },
+    };
+  }
+
+  on(event: string, fn: (payload: unknown) => void): void {
+    const list = this.listeners.get(event) ?? [];
+    list.push(fn);
+    this.listeners.set(event, list);
+  }
+
+  use(plugin: Plugin): this {
+    this.plugins.push(plugin);
+    return this;
+  }
+
+  registerTool(name: string, fn: ToolFn): void {
+    this.tools.set(name, fn);
+  }
+
+  async boot(): Promise<void> {
+    const ctx = this.context();
+    ctx.set("kernel", this);
+    ctx.set("tools", this.tools);
+    for (const plugin of this.plugins) {
+      await plugin.apply(ctx);
+    }
+  }
+
+  pluginNames(): string[] {
+    return this.plugins.map((p) => p.name);
+  }
+}
+
+export function modelPlugin(model: string): Plugin {
+  return {
+    name: `model:${model}`,
+    kind: "model",
+    apply(ctx) {
+      ctx.set("model", model);
+    },
+  };
+}
+
+export function sessionPlugin(): Plugin {
+  return {
+    name: "session",
+    kind: "session",
+    apply(ctx) {
+      ctx.set("session", { turns: [] as unknown[] });
+    },
+  };
+}
+
+export function permissionsPlugin(deny: string[], requireApproval: string[]): Plugin {
+  return {
+    name: "permissions",
+    kind: "permissions",
+    apply(ctx) {
+      ctx.set("permissions", { deny, requireApproval });
+    },
+  };
+}
+
+export function toolsPlugin(names: string[]): Plugin {
+  return {
+    name: `tools:${names.join("+")}`,
+    kind: "tools",
+    apply(ctx) {
+      const kernel = ctx.get<Kernel>("kernel");
+      for (const name of names) {
+        kernel.registerTool(name, (input) => {
+          const perms = ctx.get<{ deny: string[] }>("permissions");
+          if (perms.deny.includes(name)) {
+            return `denied: ${name}`;
+          }
+          return JSON.stringify({ ok: true, tool: name, input });
+        });
+      }
+    },
+  };
+}
+
+export type LoopMode = "tool-calls" | "code";
+
+export function loopPlugin(mode: LoopMode): Plugin {
+  return {
+    name: `loop:${mode}`,
+    kind: "loop",
+    apply(ctx) {
+      ctx.set("loop", {
+        mode,
+        async run(
+          calls: Array<{ name: string; input: Record<string, unknown> }>,
+        ): Promise<string[]> {
+          const kernel = ctx.get<Kernel>("kernel");
+          const results: string[] = [];
+          if (mode === "code") {
+            // DeepSeek Code profile: collapse a sequence into one program-shaped turn.
+            for (const call of calls) {
+              const fn = kernel.tools.get(call.name);
+              results.push(fn ? await fn(call.input, ctx) : `unknown tool: ${call.name}`);
+            }
+            return results;
+          }
+          for (const call of calls) {
+            const fn = kernel.tools.get(call.name);
+            results.push(fn ? await fn(call.input, ctx) : `unknown tool: ${call.name}`);
+          }
+          return results;
+        },
+      });
+    },
+  };
+}
+
+export function deliveryPlugin(kind: "comment" | "pull_request" | "check"): Plugin {
+  return {
+    name: `delivery:${kind}`,
+    kind: "delivery",
+    apply(ctx) {
+      ctx.set("delivery", {
+        kind,
+        send(body: string) {
+          return { kind, body };
+        },
+      });
+    },
+  };
+}

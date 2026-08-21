@@ -1,0 +1,120 @@
+apiVersion: ropex.dev/v1
+kind: GitRepo
+metadata:
+  name: github-control-plane
+spec:
+  url: https://github.com/example/ropex-config
+  path: fleets/
+  branch: main
+  interval: 30s
+---
+apiVersion: ropex.dev/v1
+kind: Policy
+metadata:
+  name: default-guardrails
+spec:
+  maxReplicas: 1000
+  permissions:
+    deny:
+      - exfiltrate
+      - prod-write
+    requireApproval:
+      - force-push
+      - delete-repo
+---
+apiVersion: ropex.dev/v1
+kind: Agent
+metadata:
+  name: triage
+  labels:
+    role: github
+spec:
+  replicas: 3
+  harness:
+    profile: minimal
+    model: deepseek-v4-flash
+    plugins:
+      - github
+      - fs
+  hermes:
+    soul: souls/triage.md
+    memory: sqlite
+    learning: true
+    skills:
+      - issue-triage
+      - label-hygiene
+  github:
+    events:
+      - issues.opened
+      - issues.labeled
+    deliver: comment
+  selector:
+    matchLabels:
+      org: acme
+---
+apiVersion: ropex.dev/v1
+kind: Agent
+metadata:
+  name: reviewer
+  labels:
+    role: github
+spec:
+  replicas: 5
+  harness:
+    profile: code
+    model: deepseek-v4-pro
+    plugins:
+      - github
+      - fs
+      - shell
+  hermes:
+    soul: souls/reviewer.md
+    memory: sqlite
+    learning: true
+    skills:
+      - pr-review
+      - test-gaps
+  github:
+    events:
+      - pull_request.opened
+      - pull_request.synchronize
+    deliver: comment
+  selector:
+    matchLabels:
+      org: acme
+---
+apiVersion: ropex.dev/v1
+kind: Fleet
+metadata:
+  name: pr-factory
+  labels:
+    role: implement
+spec:
+  replicas: 20
+  template:
+    metadata:
+      labels:
+        role: implement
+    spec:
+      harness:
+        profile: standard
+        model: deepseek-v4-pro
+        plugins:
+          - github
+          - fs
+          - shell
+          - subagent
+      hermes:
+        soul: souls/builder.md
+        memory: sqlite
+        learning: true
+        skills:
+          - implement-issue
+          - open-pr
+      github:
+        events:
+          - issues.labeled
+        deliver: pull_request
+      selector:
+        matchLabels:
+          org: acme

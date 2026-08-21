@@ -1,0 +1,31 @@
+{
+  "name": "ropex",
+  "version": "0.1.0",
+  "description": "GitOps control plane for agent fleets. DeepSeek Harness + Hermes Agent, derived from git.",
+  "type": "module",
+  "bin": {
+    "ropex": "./dist/cli.js"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
