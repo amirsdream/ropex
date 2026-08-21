@@ -40,3 +40,4 @@ export {
   signGithubPayload,
   parseGithubWebhook,
 } from "./webhook.js";
+export { watchOnce, watchLoop, parseInterval, readManifestTree } from "./watch.js";

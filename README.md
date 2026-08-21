@@ -69,6 +69,7 @@ npx tsx src/cli.ts run --agent triage "summarize open bugs"
 npx tsx src/cli.ts memory
 npx tsx src/cli.ts webhook simulate issues.opened --repo acme/app --title "login is broken" --secret test
 npx tsx src/cli.ts queue
+npx tsx src/cli.ts watch fleets/examples --once
 npx tsx src/cli.ts ui
 ```
 

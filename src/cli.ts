@@ -9,6 +9,7 @@ import { runTask } from "./runtime.js";
 import { drainQueue } from "./scheduler.js";
 import { parseManifests } from "./spec.js";
 import { ingestGithubWebhook, signGithubPayload } from "./webhook.js";
+import { parseInterval, watchLoop, watchOnce } from "./watch.js";
 import type { GithubEvent, ReconcilePlan } from "./types.js";
 
 const HELP = `ropex — GitOps control plane for agent fleets
@@ -22,6 +23,8 @@ Usage:
   ropex webhook simulate <event> --repo <org/name> [--title t] [--secret s]
   ropex queue                     Show work queue + metrics
   ropex drain [--limit N]         Claim idle workers and run pending queue
+  ropex watch <path> [--once] [--interval 5s]
+                                     Reconcile manifests on an interval (Flux-style)
   ropex scale <fleet> --replicas N
                                      Print YAML to commit (Git is source of truth)
   ropex memory                    Show shared memory stream
@@ -167,6 +170,32 @@ async function main(argv: string[]): Promise<number> {
       saveState(root, state);
       console.log(`drained ${results.length}  remaining ${queueSummary(state).pending}`);
       for (const r of results) console.log(`  ${r.worker.id}: ${r.output}`);
+      return 0;
+    }
+    case "watch": {
+      const path = rest.find((a) => !a.startsWith("--")) ?? rest[0];
+      if (!path) return fail("watch requires a path");
+      const once = rest.includes("--once");
+      const intervalRaw = flag(rest, "--interval") ?? "5s";
+      const source = resolve(root, path);
+      if (once) {
+        const result = watchOnce(root, source);
+        printPlan(result.plan);
+        console.log(result.changed ? "drift reconciled" : "no create/retire drift");
+        return 0;
+      }
+      const intervalMs = parseInterval(intervalRaw);
+      console.log(`watching ${source} every ${intervalMs}ms  (ctrl-c to stop)`);
+      await watchLoop({
+        root,
+        path: source,
+        intervalMs,
+        onTick: (result, tick) => {
+          console.log(
+            `#${tick} rev=${result.state.revision} create=${result.plan.create.length} retire=${result.plan.retire.length}${result.changed ? "  CHANGED" : ""}`,
+          );
+        },
+      });
       return 0;
     }
     case "scale": {

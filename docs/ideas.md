@@ -6,6 +6,8 @@ Nightly capture. Newest first. Each entry should be one shippable idea, not a sl
 
 Watch declared `GitRepo` paths on an interval, re-parse manifests, reconcile digests, and write state — Flux-style. First slice: `ropex watch --once` / `--interval 5s` over local paths (no remote clone). Prove drift detection: edit YAML → retire+create.
 
+**Shipped (2026-08-21 night):** `watchOnce` / `watchLoop` / `ropex watch` for local manifest trees; digest roll + scale drift covered in tests. Remote clone still open.
+
 ## Map harness profiles to live DeepSeek Harness
 
 `harness.profile` (`minimal` | `code` | `standard` | `creator`) should load a real `@deepseek-ai/dsh` plugin pack instead of the simulated kernel. First slice: one adapter that boots dsh headless with the matching preset, runs a single Hermes-planned tool program, and returns the trajectory. Keep Policy denylist as a permissions plugin in front. No GitHub App required for this slice — prove it in `ropex --root sandbox run`.
