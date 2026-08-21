@@ -205,6 +205,13 @@ GitHub webhooks (HMAC-verified), `github simulate`, and CLI enqueue into `Cluste
 
 `bootDsh(spec)` loads a **profile pack** (`minimal` | `code` | `standard` | `creator`) and runs Hermes plans through it. `backend: "simulated"` today; `backend: "live"` is reserved for `@deepseek-ai/dsh`.
 
+## Parallel drain + GitRepo sync
+
+- `ropex drain --concurrency N` runs claimed tasks in parallel batches.
+- `ropex sync` reconciles declared `GitRepo` local paths (clone still open).
+- `ropex replay <id>` re-appends a delivery with `[replay]`.
+- `ropex demo` runs apply → HMAC webhook → concurrent drain offline.
+
 ## What is still simulated
 
 Tools, delivery, memory backend, GitRepo watch, live `@deepseek-ai/dsh`, and live Hermes. The contracts above are the seams those live adapters plug into.
