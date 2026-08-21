@@ -18,17 +18,41 @@ Coding agents today are single-player. You open a chat, one model loops on one r
 
 Ropex is the missing control plane that multiplies those two runtimes across GitHub the way Fleet/Flux multiplied Kubernetes across clusters.
 
-```
-git (desired)          GitHub (work)
-   │                      │
-   │  Agent / Fleet YAML  │  issues, PRs, checks
-   ▼                      ▼
-        Ropex controller
-        derive N workers
-                 │
-                 ▼
-     worker = Hermes brain
-            + DeepSeek harness
+```mermaid
+flowchart TB
+  subgraph git["Git — desired state"]
+    M["Agent / Fleet / Policy YAML"]
+  end
+
+  subgraph gh["GitHub — work queue"]
+    E["issues · PRs · checks"]
+  end
+
+  subgraph cp["Ropex control plane"]
+    C["Controller\nexpand · cap · reconcile"]
+    S[".ropex/state.json"]
+    C --> S
+  end
+
+  subgraph workers["Immutable workers"]
+    W1["triage:0\nimage=a1b2…"]
+    W2["builder:3\nimage=c3d4…"]
+    W3["… N replicas"]
+  end
+
+  subgraph wf["Per-task workflow"]
+    direction LR
+    H1["compose\nHermes"] --> H2["plan\nHermes"]
+    H2 --> D1["execute\nDeepSeek"]
+    D1 --> D2["deliver\nDeepSeek"]
+    D2 --> H3["learn\nHermes"]
+  end
+
+  M --> C
+  E --> C
+  C -->|"stamp imageDigest"| workers
+  workers --> wf
+  wf -->|"comment / check / PR"| E
 ```
 
 Scale is a git commit: change `spec.replicas` from `20` to `2000`. The controller creates workers. Policy caps blast radius. No dashboard required.
@@ -101,10 +125,14 @@ Neither is a wrapper slogan. `src/plugins.ts` is a Cordis-shaped kernel. `src/he
 
 GitHub already has auth, review, CI, and blame. Ropex uses that instead of inventing another agent console.
 
+See [architecture](./docs/architecture.md) for the Kubernetes analogy, image digests, and workflow ownership.
+
 ## Status
 
 Immutable workers (agent image digests) + Hermes/DeepSeek workflow stages are in the control plane. Still a local prototype: simulated tools, no live DeepSeek or Hermes process yet.
 
 ## License
 
-MIT
+[AGPL-3.0-only](./LICENSE) — GNU Affero General Public License v3.
+
+If you run a modified Ropex as a network service, you must offer the corresponding source to its users.
