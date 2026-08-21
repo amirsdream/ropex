@@ -10,7 +10,7 @@
     ".": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && mkdir -p dist/ui && cp -r src/ui/. dist/ui/",
     "dev": "tsx src/cli.ts",
     "test": "vitest run",
     "test:watch": "vitest"

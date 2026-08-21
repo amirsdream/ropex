@@ -1,18 +1,20 @@
 /**
- * Hermes-shaped brain: soul, memory, skills, closed learning loop.
+ * Hermes-shaped brain: soul, memory port, skills, closed learning loop.
  * Plans work; the DeepSeek harness executes it.
+ * Implements HermesContract so UI and runtime share one interface.
  */
 
-import type { AgentSpec, LearnedSkill, MemoryFact, Task, TrajectoryStep } from "./types.js";
+import type { HermesContract, HermesPlan, MemoryPort } from "./contracts.js";
+import { createMemoryPort, memoryContextFor, SharedMemoryStore } from "./memory.js";
+import type {
+  AgentSpec,
+  LearnedSkill,
+  Task,
+  TrajectoryStep,
+  Worker,
+} from "./types.js";
 
-export type HermesBrain = {
-  soul: string;
-  skills: string[];
-  memory: MemoryFact[];
-  plan(task: Task): { thoughts: string[]; calls: Array<{ name: string; input: Record<string, unknown> }> };
-  remember(fact: MemoryFact): void;
-  learn(task: Task, steps: TrajectoryStep[]): LearnedSkill | undefined;
-};
+export type HermesBrain = HermesContract;
 
 const DEFAULT_SOUL = [
   "You are a Ropex worker.",
@@ -21,29 +23,59 @@ const DEFAULT_SOUL = [
   "After hard tasks, persist a reusable skill.",
 ].join(" ");
 
-export function createHermes(spec: AgentSpec, existing?: { memory?: MemoryFact[]; skills?: string[] }): HermesBrain {
-  const memory = [...(existing?.memory ?? [])];
-  const skills = [...new Set([...spec.hermes.skills, ...(existing?.skills ?? [])])];
+export type HermesCreateOptions = {
+  store?: SharedMemoryStore;
+  worker?: Pick<Worker, "id" | "agent" | "fleet">;
+  skills?: string[];
+};
+
+export function createHermes(spec: AgentSpec, options: HermesCreateOptions = {}): HermesBrain {
+  const worker = options.worker ?? {
+    id: `${"agent"}:0`,
+    agent: "agent",
+    fleet: undefined,
+  };
+  // Prefer real agent name from caller when worker.agent is set by runtime.
+  const ctx = memoryContextFor(
+    { id: worker.id, agent: worker.agent, fleet: worker.fleet },
+    spec.hermes,
+  );
+  const store = options.store ?? new SharedMemoryStore([]);
+  const port: MemoryPort = createMemoryPort(store, ctx);
+  const skills = [...new Set([...spec.hermes.skills, ...(options.skills ?? [])])];
   const soul = spec.hermes.soul ?? DEFAULT_SOUL;
 
   return {
     soul,
     skills,
-    memory,
+    get memory() {
+      return port.snapshot();
+    },
+    port,
     plan(task) {
+      const memHints = port.query({ limit: 3 }).map((m) => `memory[${m.scope}]: ${m.text.slice(0, 60)}`);
       const thoughts = [
         `soul: ${soul.slice(0, 80)}`,
         `skills: ${skills.join(", ") || "none"}`,
+        `share: read=${ctx.policy.read.join("+") || "∅"} write=${ctx.policy.write}`,
         `task: ${task.prompt}`,
+        ...memHints,
       ];
       if (task.event) {
         thoughts.push(`github ${task.event.type} on ${task.event.repo}`);
       }
       const calls = planCalls(task, skills);
-      return { thoughts, calls };
+      return { thoughts, calls } satisfies HermesPlan;
     },
     remember(fact) {
-      memory.push(fact);
+      if (typeof fact === "string") {
+        return port.remember(fact);
+      }
+      return port.remember(fact.text, {
+        id: fact.id,
+        scope: fact.scope,
+        tags: fact.tags,
+      });
     },
     learn(task, steps) {
       if (!spec.hermes.learning) return undefined;
@@ -57,7 +89,7 @@ export function createHermes(spec: AgentSpec, existing?: { memory?: MemoryFact[]
         agent: task.agent,
         fromTask: task.prompt,
         at: new Date().toISOString(),
-      };
+      } satisfies LearnedSkill;
     },
   };
 }
@@ -96,3 +128,5 @@ function slugify(text: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 }
+
+export type { HermesPlan };

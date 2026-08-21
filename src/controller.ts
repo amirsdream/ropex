@@ -9,7 +9,8 @@ import {
   parseManifests,
 } from "./spec.js";
 import { expandWorkers } from "./runtime.js";
-import type { ClusterState, Manifest, ReconcilePlan, Worker } from "./types.js";
+import { normalizeFact } from "./memory.js";
+import type { ClusterState, Manifest, ReconcilePlan, SharedMemoryFact, Worker } from "./types.js";
 
 export const STATE_FILE = ".ropex/state.json";
 
@@ -29,7 +30,11 @@ export function emptyState(source = ""): ClusterState {
 export function loadState(root: string): ClusterState {
   try {
     const raw = readFileSync(join(root, STATE_FILE), "utf8");
-    return JSON.parse(raw) as ClusterState;
+    const state = JSON.parse(raw) as ClusterState;
+    state.memory = (state.memory ?? []).map((f) =>
+      normalizeFact(f as SharedMemoryFact),
+    );
+    return state;
   } catch {
     return emptyState();
   }

@@ -1,6 +1,7 @@
 import { createHarness, type HarnessLoop } from "./harness.js";
 import { createHermes } from "./hermes.js";
 import { buildAgentImage, type ImageResolveOptions } from "./image.js";
+import { SharedMemoryStore } from "./memory.js";
 import { composeWorkflow } from "./workflow.js";
 import type {
   ClusterState,
@@ -31,14 +32,20 @@ export async function runTask(
   }
 
   const policy = effectivePolicy(state.policies);
-  const kernel = await createHarness(agent.spec, policy);
+  const store = SharedMemoryStore.fromState(state);
   const hermes = createHermes(agent.spec, {
-    memory: state.memory.filter((m) => m.agent === worker.agent),
+    store,
+    worker,
     skills: [
       ...workflow.brain.skills,
       ...worker.skills,
       ...state.skills.filter((s) => s.agent === worker.agent).map((s) => s.name),
     ],
+  });
+  const kernel = await createHarness(agent.spec, {
+    ...policy,
+    hermes,
+    memory: hermes.port,
   });
 
   // compose + plan (Hermes)
@@ -77,8 +84,11 @@ export async function runTask(
     agent: worker.agent,
     text: task.prompt,
     at: new Date().toISOString(),
+    scope: hermes.port.context.policy.write,
+    sourceWorker: worker.id,
+    fleet: worker.fleet,
+    tags: ["task-complete"],
   });
-  state.memory.push(...hermes.memory.filter((m) => m.id === `${task.id}-done`));
 
   worker.status = "idle";
   return {
