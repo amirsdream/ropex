@@ -31,6 +31,7 @@ import { pruneAffinity } from "./affinity.js";
 import { DSH_PROFILE_PACKS, liveDshScaffold } from "./dsh.js";
 import { liveHermesScaffold } from "./hermes.js";
 import { rateLimitReport } from "./ratelimit.js";
+import { drainQueue, drainStatus, setDrainConcurrency } from "./scheduler.js";
 import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { ensureQueue, queueSummary } from "./queue.js";
@@ -370,6 +371,7 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
         rows: r.rows,
       };
     })(),
+    drain: drainStatus(state),
   };
 }
 
@@ -607,6 +609,62 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
   }
   if (url.pathname === API_ROUTES.ratelimits) {
     return json(res, rateLimitReport(state));
+  }
+  if (url.pathname === API_ROUTES.drain) {
+    if (req.method === "POST") {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      let body: { concurrency?: number; limit?: number } = {};
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as {
+          concurrency?: number;
+          limit?: number;
+        };
+      } catch {
+        return json(res, { error: "invalid json" }, 400);
+      }
+      if (body.concurrency !== undefined) {
+        setDrainConcurrency(state, Number(body.concurrency));
+      }
+      const before = drainStatus(state);
+      if (before.paused) {
+        opts.saveState?.(opts.root, state);
+        return json(res, { error: "queue paused — resume before drain", status: before }, 409);
+      }
+      const results = await drainQueue(state, {
+        root: opts.root,
+        concurrency: body.concurrency !== undefined ? Number(body.concurrency) : undefined,
+        limit: body.limit !== undefined ? Number(body.limit) : undefined,
+      });
+      opts.saveState?.(opts.root, state);
+      return json(res, {
+        drained: results.length,
+        status: drainStatus(state),
+        results: results.map((r) => ({
+          taskId: r.task.id,
+          agent: r.worker.agent,
+          workerId: r.worker.id,
+          output: (r.output ?? "").slice(0, 160),
+        })),
+      });
+    }
+    if (req.method === "PUT") {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      let body: { concurrency?: number } = {};
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { concurrency?: number };
+      } catch {
+        return json(res, { error: "invalid json" }, 400);
+      }
+      if (body.concurrency === undefined || !Number.isFinite(Number(body.concurrency))) {
+        return json(res, { error: "need concurrency number" }, 400);
+      }
+      setDrainConcurrency(state, Number(body.concurrency));
+      opts.saveState?.(opts.root, state);
+      return json(res, drainStatus(state));
+    }
+    return json(res, drainStatus(state));
   }
 
   // Static UI

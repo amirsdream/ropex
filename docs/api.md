@@ -23,6 +23,7 @@ Stable routes from `API_ROUTES` in `src/contracts.ts`. All JSON unless noted. Ne
 | GET | `/api/v1/clone` | Last GitRepo clone progress / fail-closed status |
 | GET | `/api/v1/affinity` | Sticky worker affinity bindings |
 | GET | `/api/v1/ratelimits` | Active webhook rate-limit buckets |
+| GET/PUT/POST | `/api/v1/drain` | Drain status / set concurrency / run drain |
 | POST | `/api/v1/approvals` | Decide pending approval (`{ id, decision }`) |
 
 Serve with `ropex ui` (static UI + these routes on one port).

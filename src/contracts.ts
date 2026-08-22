@@ -331,6 +331,15 @@ export type ControlPlaneView = {
       saturated: boolean;
     }>;
   };
+  drain: {
+    concurrency: number;
+    maxConcurrency: number;
+    paused: boolean;
+    pending: number;
+    claimed: number;
+    idleWorkers: number;
+    runningWorkers: number;
+  };
 };
 
 /** Stable API routes the UI and CLI share. */
@@ -354,4 +363,5 @@ export const API_ROUTES = {
   clone: "/api/v1/clone",
   affinity: "/api/v1/affinity",
   ratelimits: "/api/v1/ratelimits",
+  drain: "/api/v1/drain",
 } as const;

@@ -252,6 +252,8 @@ Optional `Policy.spec.budget` (`maxUnits`, `windowMs`, `scope: cluster|fleet|age
 
 `ropex fairness` / `GET /api/v1/fairness` derive claim-wait and run-duration percentiles from queue timestamps, plus idle skew (`lastTaskAt`) and claim-count CV. Prometheus: `ropex_claim_wait_*`, `ropex_run_duration_*`, `ropex_fairness_*`. Drift and fairness also appear on `GET /api/v1/view` and the control-plane UI.
 
+Preferred drain concurrency is capped (`MAX_DRAIN_CONCURRENCY=32`), stored on `state.drainConcurrency`, and exposed via `ropex drain --concurrency`, `GET/PUT/POST /api/v1/drain`, and the queue UI.
+
 ## Skill promote + workflow stage metrics
 
 `ropex skills promote <name>` shares the latest registry version with every desired agent; `versions` lists history. Trajectories persist `stages` from the run workflow; Prometheus counters `ropex_workflow_{compose,plan,execute,deliver,learn}_total`. `rateLimitReport` / `ropex ratelimits` / `GET /api/v1/ratelimits` surface active webhook windows; Prometheus `ropex_trajectories_total`, `ropex_ratelimit_*`. Trajectories and rate limits also appear on `GET /api/v1/view` and the control-plane UI.

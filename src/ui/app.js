@@ -373,6 +373,28 @@ function renderAutoscale(view) {
 
 function renderQueue(view) {
   const el = $("#queue-rail");
+  const drainEl = $("#drain-controls");
+  const d = view.drain;
+  if (drainEl && d) {
+    drainEl.innerHTML = `
+      <div class="worker-row">
+        <div>
+          <div class="worker-id">drain</div>
+          <div class="digest">pending ${d.pending} · idle ${d.idleWorkers} · running ${d.runningWorkers}${d.paused ? " · PAUSED" : ""}</div>
+        </div>
+        <div class="status status-${d.paused ? "failed" : "idle"}">c=${d.concurrency}</div>
+        <div class="digest">
+          <label>concurrency <input id="drain-concurrency" type="number" min="1" max="${d.maxConcurrency}" value="${d.concurrency}" style="width:3.5rem" /></label>
+        </div>
+        <div class="digest">
+          <button type="button" id="drain-prefer">save</button>
+          <button type="button" id="drain-run" ${d.paused ? "disabled" : ""}>drain</button>
+        </div>
+      </div>`;
+    const input = $("#drain-concurrency");
+    $("#drain-prefer")?.addEventListener("click", () => preferDrain(Number(input?.value ?? d.concurrency)));
+    $("#drain-run")?.addEventListener("click", () => runDrain(Number(input?.value ?? d.concurrency)));
+  }
   const paused = view.queuePaused
     ? `<div class="worker-row"><div><div class="worker-id">scheduler</div><div class="digest">claims blocked — ropex resume</div></div><div class="status status-failed">paused</div><div class="digest">dupes ${view.webhookDuplicates ?? 0}</div><div class="digest"></div></div>`
     : "";
@@ -400,6 +422,34 @@ function renderQueue(view) {
       </div>`,
       )
       .join("");
+}
+
+async function preferDrain(concurrency) {
+  const res = await fetch("/api/v1/drain", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ concurrency }),
+  });
+  if (!res.ok) {
+    $("#meta").textContent = `drain prefer failed: ${await res.text()}`;
+    return;
+  }
+  location.reload();
+}
+
+async function runDrain(concurrency) {
+  const res = await fetch("/api/v1/drain", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ concurrency }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    $("#meta").textContent = `drain failed: ${body.error || res.status}`;
+    return;
+  }
+  $("#meta").textContent = `drained ${body.drained ?? 0} at c=${body.status?.concurrency ?? concurrency}`;
+  location.reload();
 }
 
 function renderAffinity(view) {

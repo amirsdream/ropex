@@ -9,6 +9,7 @@ import { budgetReport } from "./budget.js";
 import { fairnessReport } from "./fairness.js";
 import { queueSummary } from "./queue.js";
 import { rateLimitReport } from "./ratelimit.js";
+import { getDrainConcurrency } from "./scheduler.js";
 import type { ClusterState } from "./types.js";
 import { ensureTrajectories, workflowStageCounts } from "./trajectory.js";
 
@@ -58,6 +59,7 @@ export type MetricsSnapshot = {
   ratelimit_buckets: number;
   ratelimit_near_limit: number;
   ratelimit_saturated: number;
+  drain_concurrency: number;
 };
 
 export function metricsSnapshot(state: ClusterState): MetricsSnapshot {
@@ -126,6 +128,7 @@ export function metricsSnapshot(state: ClusterState): MetricsSnapshot {
         ratelimit_saturated: r.rows.filter((row) => row.saturated).length,
       };
     })(),
+    drain_concurrency: getDrainConcurrency(state),
   };
 }
 
@@ -244,6 +247,9 @@ export function metricsPrometheus(state: ClusterState): string {
     "# HELP ropex_ratelimit_saturated Fully saturated rate-limit buckets.",
     "# TYPE ropex_ratelimit_saturated gauge",
     `ropex_ratelimit_saturated ${m.ratelimit_saturated}`,
+    "# HELP ropex_drain_concurrency Preferred parallel drain concurrency.",
+    "# TYPE ropex_drain_concurrency gauge",
+    `ropex_drain_concurrency ${m.drain_concurrency}`,
   ];
   return `${lines.join("\n")}\n`;
 }

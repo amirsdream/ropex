@@ -130,6 +130,12 @@ Persist Hermes→DeepSeek trajectories (JSONL export) and sliding-window rate li
 
 **Shipped (2026-08-22 night):** `rateLimitReport`, view/UI Trajectories + Rate limits panels, `/api/v1/ratelimits`, Prometheus gauges, `ropex ratelimits`.
 
+## Drain concurrency UI + preference
+
+Persist preferred parallel drain concurrency (capped at 32). `GET/PUT/POST /api/v1/drain`, queue UI controls, Prometheus `ropex_drain_concurrency`. CLI `--concurrency` updates the preference.
+
+**Shipped (2026-08-22 night):** `setDrainConcurrency`, drain API, UI controls.
+
 ## Approval workflow + fleet affinity
 
 `requireApproval` tools create durable `ApprovalRequest`s; `ropex approve` / `reject` decide them. Scheduler prefers fleet-affine idle workers.

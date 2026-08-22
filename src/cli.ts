@@ -14,7 +14,7 @@ import { gcOrphanWorktrees } from "./worktree.js";
 import { promoteMemoryFact } from "./memory.js";
 import { compactJournal } from "./journal.js";
 import { runTask } from "./runtime.js";
-import { drainQueue } from "./scheduler.js";
+import { drainQueue, setDrainConcurrency, getDrainConcurrency } from "./scheduler.js";
 import { budgetReport } from "./budget.js";
 import { planAutoscale } from "./autoscale.js";
 import { controlPlaneTick } from "./tick.js";
@@ -65,7 +65,7 @@ Usage:
   ropex compact [--keep N]        Soft-cap delivery journal
   ropex gc                        Remove orphan worker worktrees
   ropex drain [--limit N] [--concurrency N]
-                                     Claim idle workers and run pending queue
+                                     Claim idle workers; --concurrency persists preference
   ropex sync [--due]                  Sync declared GitRepos (multi-repo union)
   ropex replay <delivery-id>          Replay a delivery into the journal
   ropex demo [--root path]            End-to-end sandbox demo (no network)
@@ -411,7 +411,11 @@ async function main(argv: string[]): Promise<number> {
     case "drain": {
       const state = loadState(root);
       const limit = Number(flag(rest, "--limit") ?? "32");
-      const concurrency = Number(flag(rest, "--concurrency") ?? "1");
+      const concurrencyFlag = flag(rest, "--concurrency");
+      if (concurrencyFlag !== undefined) {
+        setDrainConcurrency(state, Number(concurrencyFlag));
+      }
+      const concurrency = getDrainConcurrency(state);
       const results = await drainQueue(state, { root, limit, concurrency });
       saveState(root, state);
       console.log(

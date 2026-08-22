@@ -50,7 +50,14 @@ export {
   DEFAULT_AGE_BOOST_MS,
   DEFAULT_AGE_BOOST_MAX,
 } from "./queue.js";
-export { drainQueue } from "./scheduler.js";
+export {
+  drainQueue,
+  drainStatus,
+  getDrainConcurrency,
+  setDrainConcurrency,
+  clampDrainConcurrency,
+  MAX_DRAIN_CONCURRENCY,
+} from "./scheduler.js";
 export {
   ingestGithubWebhook,
   verifyGithubSignature,

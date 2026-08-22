@@ -337,6 +337,8 @@ export type ClusterState = {
   webhookSeen?: string[];
   /** When true, claimPending / drain will not take new work. */
   queuePaused?: boolean;
+  /** Preferred parallel drain concurrency (bounded; default 1). */
+  drainConcurrency?: number;
   /** Sticky worker affinity hints (repo/agent → worker) with TTL. */
   affinity?: AffinityBinding[];
   lastReconcile?: string;
