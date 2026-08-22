@@ -158,6 +158,7 @@ Control plane today (local, network-free tests):
 | Event-sourced audit trail | shipped |
 | Multi-repo GitRepo sync + health UI | shipped (no remote clone yet) |
 | Worker-pool autoscaler (GitOps YAML) | shipped |
+| Control-plane tick + clone contract | shipped (remote clone stub) |
 | GitRepo local watch/sync | shipped (no remote clone yet) |
 | Live `@deepseek-ai/dsh` / Hermes process | not yet |
 

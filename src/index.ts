@@ -51,6 +51,12 @@ export { watchOnce, watchLoop, parseInterval, readManifestTree } from "./watch.j
 export { bootDsh, profilePack, DSH_PROFILE_PACKS } from "./dsh.js";
 export { recordDelivery, deliveriesFor } from "./journal.js";
 export { registerSkill, shareSkill, skillsForAgent, latestSkill } from "./skills.js";
+export { controlPlaneTick } from "./tick.js";
+export type { TickOptions, TickResult } from "./tick.js";
+export { cloneGitRepo, cloneAllGitRepos } from "./clone.js";
+export type { CloneResult, CloneOptions } from "./clone.js";
+export { simulatePolicies } from "./policy-sim.js";
+export type { PolicySimReport, PolicySimRow } from "./policy-sim.js";
 export { planAutoscale } from "./autoscale.js";
 export type { ScaleRecommendation, AutoscalePlan, AutoscaleOptions } from "./autoscale.js";
 export { recordAudit, auditsFor, exportAuditJsonl, ensureAudit, AUDIT_MAX } from "./audit.js";

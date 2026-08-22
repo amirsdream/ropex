@@ -220,6 +220,18 @@ stateDiagram-v2
 
 `ropex autoscale` / `/api/v1/autoscale` emit **replica YAML recommendations** from backlog depth, idle/running workers, and `Policy.maxReplicas`. Ropex never writes replicas into live state — commit the YAML so git stays the source of truth (same contract as `ropex scale`).
 
+## Control-plane tick
+
+`ropex tick` runs one heartbeat: reclaim expired leases → due multi-repo sync → drain → autoscale recommend. Cron-friendly; network-free.
+
+## GitRepo clone contract
+
+`ropex clone` materializes declared repos: existing `spec.path` or `file://` copy succeed; `https`/`git` fail closed until a live cloner is wired (`remote-stub`).
+
+## Policy simulation
+
+`ropex policy simulate` dry-runs admission across all desired agents (fleet report).
+
 ## Observability
 
 - **Delivery journal** — every comment/check/PR appends to `state.deliveries` (`ropex journal`).

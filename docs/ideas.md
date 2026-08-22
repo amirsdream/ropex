@@ -2,6 +2,12 @@
 
 Nightly capture. Newest first. Each entry should be one shippable idea, not a slogan.
 
+## Control-plane tick + clone contract + policy simulate
+
+Scheduled heartbeat (`tick`), fail-closed remote clone seam, fleet-wide policy simulation report.
+
+**Shipped (2026-08-22 night):** `controlPlaneTick`, `cloneGitRepo`, `simulatePolicies`, CLI commands.
+
 ## Worker-pool autoscaler stub
 
 HPA-style recommendations from backlog SLO + idle/running; capped by Policy.maxReplicas; emits GitOps YAML only.

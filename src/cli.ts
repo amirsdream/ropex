@@ -8,6 +8,9 @@ import { enqueueTask, queueSummary, deadLetters, requeueDead, reclaimExpiredLeas
 import { runTask } from "./runtime.js";
 import { drainQueue } from "./scheduler.js";
 import { planAutoscale } from "./autoscale.js";
+import { controlPlaneTick } from "./tick.js";
+import { cloneAllGitRepos } from "./clone.js";
+import { simulatePolicies } from "./policy-sim.js";
 import { healthReport } from "./health.js";
 import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
@@ -48,6 +51,7 @@ Usage:
   ropex reject <id>               Reject a gated tool
   ropex learn <trajectory-id>     Distill a skill from a stored trajectory
   ropex policy dry-run --agent <name> <prompt>
+  ropex policy simulate           Fleet-wide policy dry-run report
   ropex enqueue --agent <name> [--priority N] <prompt>
   ropex chaos [--replicas N]          Stress reconcile scale + digest rolls
   ropex watch <path> [--once] [--interval 5s]
@@ -62,6 +66,8 @@ Usage:
   ropex scale <fleet> --replicas N
                                      Print YAML to commit (Git is source of truth)
   ropex autoscale                 Recommend replica YAML from backlog SLO
+  ropex tick [--concurrency N]    Control-plane heartbeat (reclaim/sync/drain)
+  ropex clone                     Prepare GitRepo checkouts (file:// / local)
   ropex memory                    Show shared memory stream
   ropex ui [--port N]             Serve control-plane UI + /api/v1/*
   ropex help
@@ -360,7 +366,25 @@ async function main(argv: string[]): Promise<number> {
       return 0;
     }
     case "policy": {
-      if (rest[0] !== "dry-run") return fail("usage: ropex policy dry-run --agent <name> <prompt>");
+      if (rest[0] === "simulate") {
+        const state = loadState(root);
+        const report = simulatePolicies(state);
+        console.log(
+          `agents=${report.rows.length} deniedTasks=${report.deniedTasks} deniedCalls=${report.deniedCalls} approval=${report.approvalCalls}`,
+        );
+        for (const row of report.rows) {
+          const flags = [
+            row.taskDenied ? "TASK_DENY" : null,
+            row.callsDenied.length ? `deny:${row.callsDenied.join(",")}` : null,
+            row.callsNeedApproval.length ? `approval:${row.callsNeedApproval.join(",")}` : null,
+          ]
+            .filter(Boolean)
+            .join(" ");
+          console.log(`  ${row.agent}  ${flags || "ok"}  ${row.prompt}`);
+        }
+        return 0;
+      }
+      if (rest[0] !== "dry-run") return fail("usage: ropex policy dry-run|simulate …");
       const agent = flag(rest, "--agent");
       const prompt = positional(rest.slice(1)).join(" ");
       if (!agent || !prompt) return fail("policy dry-run requires --agent and a prompt");
@@ -551,6 +575,39 @@ async function main(argv: string[]): Promise<number> {
       console.log("---");
       process.stdout.write(plan.yaml);
       return 0;
+    }
+    case "tick": {
+      const state = loadState(root);
+      const concurrency = Number(flag(rest, "--concurrency") ?? "2");
+      const limit = Number(flag(rest, "--limit") ?? "32");
+      const result = await controlPlaneTick(root, state, { concurrency, limit });
+      console.log(
+        `tick reclaim=${result.reclaimed.length} drain=${result.drained.length} sync=${result.sync?.synced ? "yes" : result.sync?.skippedDue ? "due-skip" : "n/a"} autoscale=${result.autoscale?.recommendations.length ?? 0}`,
+      );
+      console.log(
+        `queue pending=${result.queue.pending} claimed=${result.queue.claimed} dead=${result.queue.dead}`,
+      );
+      if (result.autoscale?.recommendations.length) {
+        for (const r of result.autoscale.recommendations) {
+          console.log(`  scale ${r.kind}/${r.name} ${r.currentReplicas}→${r.recommendedReplicas}`);
+        }
+      }
+      return 0;
+    }
+    case "clone": {
+      const state = loadState(root);
+      if (!state.gitRepos.length) {
+        console.log("no GitRepo manifests — apply fleets first");
+        return 0;
+      }
+      const results = cloneAllGitRepos(root, state, { force: rest.includes("--force") });
+      saveState(root, state);
+      for (const r of results) {
+        console.log(
+          `${r.ok ? "ok" : "skip"} ${r.repo}  backend=${r.backend}  dest=${r.dest}${r.reason ? `  ${r.reason}` : ""}`,
+        );
+      }
+      return results.every((r) => r.ok) ? 0 : 1;
     }
     case "memory": {
       const state = loadState(root);
