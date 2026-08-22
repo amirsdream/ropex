@@ -184,6 +184,7 @@ Control plane today (local, network-free tests):
 | Trajectory + rate-limit UI / metrics | shipped |
 | Drain concurrency preference + UI | shipped |
 | Operator pause/retry + policy sim UI | shipped |
+| Hygiene API + worker pool heatmap | shipped |
 | GitRepo local watch/sync | shipped (no remote clone yet) |
 | Live `@deepseek-ai/dsh` / Hermes process | not yet |
 

@@ -32,6 +32,7 @@ import { DSH_PROFILE_PACKS, liveDshScaffold } from "./dsh.js";
 import { liveHermesScaffold } from "./hermes.js";
 import { rateLimitReport } from "./ratelimit.js";
 import { drainQueue, drainStatus, setDrainConcurrency } from "./scheduler.js";
+import { hygieneReport, runHygiene } from "./hygiene.js";
 import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { ensureQueue, queueSummary, pauseQueue, resumeQueue, requeueDead, deadLetters, isQueuePaused } from "./queue.js";
@@ -372,6 +373,16 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
       };
     })(),
     drain: drainStatus(state),
+    hygiene: (() => {
+      const h = hygieneReport(state);
+      return {
+        pool: h.pool,
+        queueDepth: h.queueDepth,
+        webhook: h.webhook,
+        leasesReclaimedTotal: h.leasesReclaimedTotal,
+        summary: h.summary,
+      };
+    })(),
   };
 }
 
@@ -736,6 +747,38 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
       return json(res, drainStatus(state));
     }
     return json(res, drainStatus(state));
+  }
+  if (url.pathname === API_ROUTES.hygiene) {
+    if (req.method === "POST") {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      let body: { action?: string } = {};
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { action?: string };
+      } catch {
+        return json(res, { error: "invalid json" }, 400);
+      }
+      const action = body.action ?? "all";
+      if (action !== "reclaim" && action !== "gc" && action !== "age" && action !== "all") {
+        return json(res, { error: "action must be reclaim|gc|age|all" }, 400);
+      }
+      try {
+        const result = runHygiene(state, action, { root: opts.root });
+        opts.saveState?.(opts.root, state);
+        return json(res, {
+          ok: true,
+          action: result.action,
+          reclaimed: result.reclaimed,
+          aged: result.aged,
+          gcRemoved: result.gc?.removed.length ?? 0,
+          gcKept: result.gc?.kept.length ?? 0,
+          report: result.report,
+        });
+      } catch (err) {
+        return json(res, { error: err instanceof Error ? err.message : String(err) }, 400);
+      }
+    }
+    return json(res, hygieneReport(state));
   }
 
   // Static UI

@@ -15,6 +15,7 @@ import { promoteMemoryFact } from "./memory.js";
 import { compactJournal } from "./journal.js";
 import { runTask } from "./runtime.js";
 import { drainQueue, setDrainConcurrency, getDrainConcurrency } from "./scheduler.js";
+import { hygieneReport, runHygiene } from "./hygiene.js";
 import { budgetReport } from "./budget.js";
 import { planAutoscale } from "./autoscale.js";
 import { controlPlaneTick } from "./tick.js";
@@ -60,6 +61,8 @@ Usage:
   ropex retry <id>|--all          Re-queue dead-letter item(s)
   ropex reclaim                   Reclaim expired claim leases
   ropex age                       Boost pending priorities by wait age
+  ropex hygiene [reclaim|gc|age|all]
+                                     Run hygiene hooks (default all)
   ropex pause                     Stop claiming new queue work
   ropex resume                    Allow claims again
   ropex compact [--keep N]        Soft-cap delivery journal
@@ -375,6 +378,33 @@ async function main(argv: string[]): Promise<number> {
       const bumped = ageQueuePriorities(state);
       saveState(root, state);
       console.log(`aged ${bumped} pending task(s)`);
+      return 0;
+    }
+    case "hygiene": {
+      const state = loadState(root);
+      const actionRaw = rest[0] ?? "all";
+      const action =
+        actionRaw === "reclaim" || actionRaw === "gc" || actionRaw === "age" || actionRaw === "all"
+          ? actionRaw
+          : null;
+      if (!action) return fail("usage: ropex hygiene [reclaim|gc|age|all]");
+      if (rest.includes("--report")) {
+        const report = hygieneReport(state);
+        console.log(
+          `pool=${report.pool.length} pending=${report.summary.pending} dead=${report.summary.dead} webhookSeen=${report.webhook.seen}/${report.webhook.cap} dupes=${report.webhook.duplicates}`,
+        );
+        for (const cell of report.pool) {
+          console.log(
+            `  ${cell.agent}  idle=${cell.idle} run=${cell.running} fail=${cell.failed} cordon=${cell.cordoned}`,
+          );
+        }
+        return 0;
+      }
+      const result = runHygiene(state, action, { root });
+      saveState(root, state);
+      console.log(
+        `hygiene ${result.action}  reclaimed=${result.reclaimed} aged=${result.aged} gcRemoved=${result.gc?.removed.length ?? 0}`,
+      );
       return 0;
     }
     case "pause": {

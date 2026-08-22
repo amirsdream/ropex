@@ -19,6 +19,7 @@ function renderPulse(view) {
     ["queue", view.queuePaused ? "paused" : "run"],
     ["traj", view.trajectories?.total ?? 0],
     ["rl", view.rateLimits?.nearLimit ?? 0],
+    ["dup", view.webhookDuplicates ?? 0],
   ];
   el.innerHTML = items
     .map(
@@ -135,6 +136,99 @@ function renderHealth(view) {
     )
     .join("");
   el.innerHTML = head + repos + (workers || `<p class="empty">No live workers to probe.</p>`);
+}
+
+function renderHygiene(view) {
+  const rail = $("#hygiene-rail");
+  const heat = $("#pool-heatmap");
+  const depth = $("#queue-depth");
+  const h = view.hygiene;
+  if (!h) {
+    if (rail) rail.innerHTML = `<p class="empty">Hygiene report unavailable.</p>`;
+    return;
+  }
+  const wh = h.webhook ?? {};
+  if (rail) {
+    rail.innerHTML = `
+      <div class="worker-row">
+        <div>
+          <div class="worker-id">webhook idempotency</div>
+          <div class="digest">seen ${wh.seen ?? 0}/${wh.cap ?? 0} · duplicates ${wh.duplicates ?? 0}</div>
+        </div>
+        <div class="status status-${(wh.duplicates ?? 0) > 0 ? "failed" : "idle"}">ingress</div>
+        <div class="digest">leases reclaimed ${h.leasesReclaimedTotal ?? 0}</div>
+        <div class="digest">dead ${h.summary?.dead ?? 0}</div>
+      </div>
+      <div class="worker-row">
+        <div>
+          <div class="worker-id">hooks</div>
+          <div class="digest">reclaim expired leases · GC orphan worktrees · age priorities</div>
+        </div>
+        <div class="status status-idle">hygiene</div>
+        <div class="digest"></div>
+        <div class="digest">
+          <button type="button" data-hygiene="reclaim">reclaim</button>
+          <button type="button" data-hygiene="age">age</button>
+          <button type="button" data-hygiene="gc">gc</button>
+          <button type="button" data-hygiene="all">all</button>
+        </div>
+      </div>`;
+    rail.querySelectorAll("[data-hygiene]").forEach((btn) => {
+      btn.addEventListener("click", () => runHygieneAction(btn.getAttribute("data-hygiene")));
+    });
+  }
+  if (heat) {
+    const cells = h.pool ?? [];
+    heat.innerHTML = cells.length
+      ? cells
+          .map((c, i) => {
+            const t = Math.max(1, c.total);
+            return `
+        <div class="heat-cell" style="animation-delay:${Math.min(i, 12) * 0.04}s">
+          <div class="agent">${escapeHtml(c.agent)}</div>
+          <div class="digest">${c.idle} idle · ${c.running} run · ${c.failed} fail</div>
+          <div class="mix" title="idle/running/failed/cordoned">
+            <span class="heat-idle" style="width:${(100 * c.idle) / t}%"></span>
+            <span class="heat-running" style="width:${(100 * c.running) / t}%"></span>
+            <span class="heat-failed" style="width:${(100 * c.failed) / t}%"></span>
+            <span class="heat-cordoned" style="width:${(100 * c.cordoned) / t}%"></span>
+          </div>
+        </div>`;
+          })
+          .join("")
+      : `<p class="empty">No live workers for heatmap.</p>`;
+  }
+  if (depth) {
+    const bars = h.queueDepth ?? [];
+    const max = Math.max(1, ...bars.map((b) => b.count));
+    depth.innerHTML = bars.length
+      ? bars
+          .map(
+            (b) => `
+      <div class="depth-row">
+        <span>${escapeHtml(b.key)}</span>
+        <div class="depth-track"><div class="depth-fill" style="width:${(100 * b.count) / max}%"></div></div>
+        <strong>${b.count}</strong>
+      </div>`,
+          )
+          .join("")
+      : `<p class="empty">Queue depth empty.</p>`;
+  }
+}
+
+async function runHygieneAction(action) {
+  const res = await fetch("/api/v1/hygiene", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    $("#meta").textContent = `hygiene failed: ${body.error || res.status}`;
+    return;
+  }
+  $("#meta").textContent = `hygiene ${body.action}: reclaim ${body.reclaimed} age ${body.aged} gc ${body.gcRemoved}`;
+  location.reload();
 }
 
 function renderDrift(view) {
@@ -848,6 +942,7 @@ async function main() {
     renderMemory(view);
     renderWorkers(view);
     renderHealth(view);
+    renderHygiene(view);
     renderDrift(view);
     renderFairness(view);
     renderBudget(view);

@@ -26,6 +26,7 @@ Stable routes from `API_ROUTES` in `src/contracts.ts`. All JSON unless noted. Ne
 | GET/PUT/POST | `/api/v1/drain` | Drain status / set concurrency / run drain |
 | POST | `/api/v1/queue` | Operator actions: `pause` \| `resume` \| `retry` |
 | GET/POST | `/api/v1/policy/simulate` | Fleet policy dry-run (optional custom prompt) |
+| GET/POST | `/api/v1/hygiene` | Pool/queue/webhook report; run reclaim\|gc\|age\|all |
 | POST | `/api/v1/approvals` | Decide pending approval (`{ id, decision }`) |
 
 Serve with `ropex ui` (static UI + these routes on one port).

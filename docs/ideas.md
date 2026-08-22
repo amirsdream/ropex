@@ -142,6 +142,12 @@ Pause/resume and DLQ retry from `POST /api/v1/queue`. Custom-prompt policy dry-r
 
 **Shipped (2026-08-22 night):** queue operator API, policy simulate API, UI wiring, diagram refresh.
 
+## Hygiene API + worker pool heatmap
+
+`hygieneReport` / `poolHeatmap` / queue-depth bars + webhook idempotency counts. `GET/POST /api/v1/hygiene` runs reclaim, GC, age. UI heatmap + depth bars + hook buttons. `ropex hygiene`.
+
+**Shipped (2026-08-22 night):** `src/hygiene.ts`, hygiene API/CLI/UI.
+
 ## Approval workflow + fleet affinity
 
 `requireApproval` tools create durable `ApprovalRequest`s; `ropex approve` / `reject` decide them. Scheduler prefers fleet-affine idle workers.

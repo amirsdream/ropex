@@ -340,6 +340,20 @@ export type ControlPlaneView = {
     idleWorkers: number;
     runningWorkers: number;
   };
+  hygiene: {
+    pool: Array<{
+      agent: string;
+      idle: number;
+      running: number;
+      failed: number;
+      cordoned: number;
+      total: number;
+    }>;
+    queueDepth: Array<{ key: string; count: number; kind: string }>;
+    webhook: { seen: number; duplicates: number; cap: number };
+    leasesReclaimedTotal: number;
+    summary: { pending: number; claimed: number; dead: number; waitingRetry: number };
+  };
 };
 
 /** Stable API routes the UI and CLI share. */
@@ -365,4 +379,5 @@ export const API_ROUTES = {
   ratelimits: "/api/v1/ratelimits",
   drain: "/api/v1/drain",
   policySim: "/api/v1/policy/simulate",
+  hygiene: "/api/v1/hygiene",
 } as const;
