@@ -25,6 +25,7 @@ import { outboundFor } from "./deliver.js";
 import { detectDrift } from "./drift.js";
 import { fairnessReport } from "./fairness.js";
 import { simulatePolicies } from "./policy-sim.js";
+import { cloneStatusReport } from "./clone.js";
 import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { ensureQueue, queueSummary } from "./queue.js";
@@ -266,6 +267,40 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
         })),
       };
     })(),
+    outbound: (() => {
+      const rows = outboundFor(state, { limit: 40 });
+      return {
+        simulated: rows.filter((r) => r.status === "simulated").length,
+        rejected: rows.filter((r) => r.status === "rejected").length,
+        recent: rows.slice(0, 20).map((r) => ({
+          id: r.id,
+          status: r.status,
+          url: r.url,
+          agent: r.agent,
+          deliveryId: r.deliveryId,
+          reason: r.reason,
+          at: r.at,
+        })),
+      };
+    })(),
+    clone: (() => {
+      const c = cloneStatusReport(state);
+      return {
+        repos: c.repos,
+        ok: c.ok,
+        blocked: c.blocked,
+        rows: c.rows.map((r) => ({
+          name: r.name,
+          path: r.path,
+          ok: r.ok,
+          reason: r.reason,
+          cloneBackend: r.cloneBackend,
+          clonePhase: r.clonePhase,
+          cloneProgressPct: r.cloneProgressPct,
+          lastClonedAt: r.lastClonedAt,
+        })),
+      };
+    })(),
   };
 }
 
@@ -461,6 +496,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
   }
   if (url.pathname === API_ROUTES.fairness) {
     return json(res, fairnessReport(state));
+  }
+  if (url.pathname === API_ROUTES.clone) {
+    return json(res, cloneStatusReport(state));
   }
 
   // Static UI

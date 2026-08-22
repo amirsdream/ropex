@@ -273,6 +273,78 @@ function renderPolicy(view) {
   el.innerHTML = head + rows;
 }
 
+function renderOutbound(view) {
+  const el = $("#outbound-rail");
+  const o = view.outbound;
+  if (!o) {
+    el.innerHTML = `<p class="empty">Outbound journal unavailable.</p>`;
+    return;
+  }
+  const head = `
+    <div class="worker-row">
+      <div>
+        <div class="worker-id">webhooks</div>
+        <div class="digest">simulated ${o.simulated} · rejected ${o.rejected}</div>
+      </div>
+      <div class="status status-${o.rejected ? "failed" : "idle"}">outbound</div>
+      <div class="digest">recent ${o.recent?.length ?? 0}</div>
+      <div class="digest"></div>
+    </div>`;
+  const rows = (o.recent ?? [])
+    .slice(0, 12)
+    .map(
+      (r, i) => `
+      <div class="worker-row" style="animation-delay:${Math.min(i, 12) * 0.03}s">
+        <div>
+          <div class="worker-id">${escapeHtml(r.agent ?? r.id)}</div>
+          <div class="digest">${escapeHtml(r.url)}</div>
+        </div>
+        <div class="status status-${r.status === "simulated" ? "idle" : "failed"}">${escapeHtml(r.status)}</div>
+        <div class="digest">${escapeHtml(r.reason ?? r.deliveryId ?? "")}</div>
+        <div class="digest">${formatTime(r.at)}</div>
+      </div>`,
+    )
+    .join("");
+  el.innerHTML =
+    head + (rows || `<p class="empty">No outbound intents. Use ropex deliver --stub.</p>`);
+}
+
+function renderClone(view) {
+  const el = $("#clone-rail");
+  const c = view.clone;
+  if (!c) {
+    el.innerHTML = `<p class="empty">Clone status unavailable.</p>`;
+    return;
+  }
+  const head = `
+    <div class="worker-row">
+      <div>
+        <div class="worker-id">gitrepos</div>
+        <div class="digest">ok ${c.ok} · blocked ${c.blocked} · total ${c.repos}</div>
+      </div>
+      <div class="status status-${c.blocked ? "failed" : "idle"}">clone</div>
+      <div class="digest">ropex clone [--dry-run]</div>
+      <div class="digest"></div>
+    </div>`;
+  const rows = (c.rows ?? [])
+    .map(
+      (r, i) => `
+      <div class="worker-row" style="animation-delay:${Math.min(i, 12) * 0.03}s">
+        <div>
+          <div class="worker-id">${escapeHtml(r.name)}</div>
+          <div class="digest">${escapeHtml(r.path)}${r.reason ? ` · ${escapeHtml(r.reason)}` : ""}</div>
+        </div>
+        <div class="status status-${r.ok ? "idle" : "failed"}">${escapeHtml(r.clonePhase ?? (r.ok ? "ok" : "failed"))}</div>
+        <div class="digest">${r.cloneProgressPct ?? "—"}% · ${escapeHtml(r.cloneBackend ?? "—")}</div>
+        <div class="digest">${r.lastClonedAt ? formatTime(r.lastClonedAt) : "never"}</div>
+      </div>`,
+    )
+    .join("");
+  el.innerHTML =
+    head +
+    (rows || `<p class="empty">No clone attempts yet. Apply GitRepos then ropex clone.</p>`);
+}
+
 function renderAutoscale(view) {
   const el = $("#autoscale-rail");
   const a = view.autoscale;
@@ -455,6 +527,8 @@ async function main() {
     renderFairness(view);
     renderBudget(view);
     renderPolicy(view);
+    renderOutbound(view);
+    renderClone(view);
     renderAutoscale(view);
     renderQueue(view);
     renderJournal(view);

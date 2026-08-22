@@ -72,8 +72,8 @@ export {
 } from "./budget.js";
 export { controlPlaneTick } from "./tick.js";
 export type { TickOptions, TickResult } from "./tick.js";
-export { cloneGitRepo, cloneAllGitRepos } from "./clone.js";
-export type { CloneResult, CloneOptions } from "./clone.js";
+export { cloneGitRepo, cloneAllGitRepos, planCloneAll, cloneStatusReport } from "./clone.js";
+export type { CloneResult, CloneOptions, ClonePhase, CloneProgressStep } from "./clone.js";
 export { simulatePolicies } from "./policy-sim.js";
 export type { PolicySimReport, PolicySimRow } from "./policy-sim.js";
 export { planAutoscale } from "./autoscale.js";

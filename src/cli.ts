@@ -84,7 +84,7 @@ Usage:
                                      Print YAML to commit (Git is source of truth)
   ropex autoscale                 Recommend replica YAML from backlog SLO
   ropex tick [--concurrency N]    Control-plane heartbeat (reclaim/sync/drain)
-  ropex clone                     Prepare GitRepo checkouts (file:// / local)
+  ropex clone [--force] [--dry-run]   Prepare GitRepo checkouts (file:// / local)
   ropex budget                    Show task-unit budget spend
   ropex memory                    Show shared memory stream
   ropex ui [--port N]             Serve control-plane UI + /api/v1/*
@@ -730,12 +730,19 @@ async function main(argv: string[]): Promise<number> {
         console.log("no GitRepo manifests — apply fleets first");
         return 0;
       }
-      const results = cloneAllGitRepos(root, state, { force: rest.includes("--force") });
-      saveState(root, state);
+      const dryRun = rest.includes("--dry-run");
+      const results = cloneAllGitRepos(root, state, {
+        force: rest.includes("--force"),
+        dryRun,
+      });
+      if (!dryRun) saveState(root, state);
       for (const r of results) {
         console.log(
-          `${r.ok ? "ok" : "skip"} ${r.repo}  backend=${r.backend}  dest=${r.dest}${r.reason ? `  ${r.reason}` : ""}`,
+          `${r.ok ? "ok" : "skip"} ${r.repo}  ${r.progressPct}% phase=${r.phase} backend=${r.backend}  dest=${r.dest}${r.reason ? `  ${r.reason}` : ""}`,
         );
+        for (const s of r.steps) {
+          console.log(`    [${s.pct}%] ${s.phase}: ${s.detail}`);
+        }
       }
       return results.every((r) => r.ok) ? 0 : 1;
     }

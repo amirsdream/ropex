@@ -258,6 +258,34 @@ export type ControlPlaneView = {
       callsNeedApproval: string[];
     }>;
   };
+  outbound: {
+    simulated: number;
+    rejected: number;
+    recent: Array<{
+      id: string;
+      status: string;
+      url: string;
+      agent?: string;
+      deliveryId?: string;
+      reason?: string;
+      at: string;
+    }>;
+  };
+  clone: {
+    repos: number;
+    ok: number;
+    blocked: number;
+    rows: Array<{
+      name: string;
+      path: string;
+      ok: boolean;
+      reason?: string;
+      cloneBackend?: string;
+      clonePhase?: string;
+      cloneProgressPct?: number;
+      lastClonedAt?: string;
+    }>;
+  };
 };
 
 /** Stable API routes the UI and CLI share. */
@@ -278,4 +306,5 @@ export const API_ROUTES = {
   outbound: "/api/v1/outbound",
   drift: "/api/v1/drift",
   fairness: "/api/v1/fairness",
+  clone: "/api/v1/clone",
 } as const;

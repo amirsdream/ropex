@@ -1,15 +1,31 @@
 /**
  * GitRepo clone contract — seam for remote materialization without network in tests.
  * file:// and existing local paths succeed; https/git remotes fail closed until wired.
+ * Progress phases make the fail-closed remote path observable for UI / tick / CLI.
  */
 
 import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { recordAudit } from "./audit.js";
-import type { ClusterState, GitRepo } from "./types.js";
+import type { ClusterState, GitRepo, GitRepoSyncStatus } from "./types.js";
 import { resolveGitRepoPath } from "./gitrepo.js";
 
 export type CloneBackend = "local-copy" | "remote-stub";
+
+export type ClonePhase =
+  | "resolve"
+  | "local-present"
+  | "copy"
+  | "remote-blocked"
+  | "done"
+  | "failed";
+
+export type CloneProgressStep = {
+  phase: ClonePhase;
+  at: string;
+  detail: string;
+  pct: number;
+};
 
 export type CloneResult = {
   repo: string;
@@ -18,6 +34,12 @@ export type CloneResult = {
   ok: boolean;
   backend: CloneBackend;
   reason?: string;
+  /** Final phase reached. */
+  phase: ClonePhase;
+  /** 0–100 progress (100 only when ok). */
+  progressPct: number;
+  /** Ordered phase log for this attempt. */
+  steps: CloneProgressStep[];
 };
 
 export type CloneOptions = {
@@ -25,6 +47,8 @@ export type CloneOptions = {
   destRoot?: string;
   /** When true, refresh an existing dest by replacing it (default false). */
   force?: boolean;
+  /** When true, only plan phases — do not copy or mutate filesystem. */
+  dryRun?: boolean;
 };
 
 function parseFileUrl(url: string): string | null {
@@ -36,6 +60,20 @@ function parseFileUrl(url: string): string | null {
 
 function isRemoteUrl(url: string): boolean {
   return /^(https?|git|ssh):/i.test(url) || url.includes("github.com:") || url.startsWith("git@");
+}
+
+function step(phase: ClonePhase, detail: string, pct: number): CloneProgressStep {
+  return { phase, at: new Date().toISOString(), detail, pct };
+}
+
+function finish(
+  base: Omit<CloneResult, "phase" | "progressPct" | "steps"> & {
+    phase: ClonePhase;
+    progressPct: number;
+    steps: CloneProgressStep[];
+  },
+): CloneResult {
+  return base;
 }
 
 /**
@@ -53,69 +91,137 @@ export function cloneGitRepo(
   const dest = join(destRoot, repo.metadata.name);
   const url = repo.spec.url;
   const localPath = resolveGitRepoPath(root, repo);
+  const steps: CloneProgressStep[] = [
+    step("resolve", `resolve ${repo.metadata.name} → ${url}`, 5),
+  ];
 
   if (existsSync(localPath)) {
-    return {
+    steps.push(step("local-present", `spec.path present: ${localPath}`, 80));
+    steps.push(step("done", "already local", 100));
+    return finish({
       repo: repo.metadata.name,
       url,
       dest: localPath,
       ok: true,
       backend: "local-copy",
       reason: "spec.path already present",
-    };
+      phase: "done",
+      progressPct: 100,
+      steps,
+    });
   }
 
   const filePath = parseFileUrl(url);
   if (filePath) {
     const src = resolve(filePath);
     if (!existsSync(src)) {
-      return {
+      steps.push(step("failed", `file:// source missing: ${src}`, 20));
+      return finish({
         repo: repo.metadata.name,
         url,
         dest,
         ok: false,
         backend: "local-copy",
         reason: `file:// source missing: ${src}`,
-      };
+        phase: "failed",
+        progressPct: 20,
+        steps,
+      });
     }
-    if (existsSync(dest) && opts.force) {
-      rmSync(dest, { recursive: true, force: true });
+    steps.push(step("copy", opts.dryRun ? `would copy ${src} → ${dest}` : `copy ${src} → ${dest}`, 60));
+    if (!opts.dryRun) {
+      if (existsSync(dest) && opts.force) {
+        rmSync(dest, { recursive: true, force: true });
+      }
+      if (!existsSync(dest)) {
+        mkdirSync(dirname(dest), { recursive: true });
+        cpSync(src, dest, { recursive: true });
+      }
     }
-    if (!existsSync(dest)) {
-      mkdirSync(dirname(dest), { recursive: true });
-      cpSync(src, dest, { recursive: true });
-    }
-    return {
+    steps.push(step("done", opts.dryRun ? "dry-run ok" : "copy complete", 100));
+    return finish({
       repo: repo.metadata.name,
       url,
       dest,
       ok: true,
       backend: "local-copy",
-    };
+      reason: opts.dryRun ? "dry-run (no filesystem write)" : undefined,
+      phase: "done",
+      progressPct: 100,
+      steps,
+    });
   }
 
   if (isRemoteUrl(url)) {
-    return {
+    steps.push(
+      step(
+        "remote-blocked",
+        "remote clone not wired (https/git); use file:// or local spec.path",
+        40,
+      ),
+    );
+    steps.push(step("failed", "fail-closed remote", 40));
+    return finish({
       repo: repo.metadata.name,
       url,
       dest,
       ok: false,
       backend: "remote-stub",
       reason: "remote clone not wired (https/git); use file:// or local spec.path",
-    };
+      phase: "failed",
+      progressPct: 40,
+      steps,
+    });
   }
 
-  return {
+  steps.push(step("failed", `unsupported url scheme: ${url}`, 10));
+  return finish({
     repo: repo.metadata.name,
     url,
     dest,
     ok: false,
     backend: "remote-stub",
     reason: `unsupported url scheme: ${url}`,
-  };
+    phase: "failed",
+    progressPct: 10,
+    steps,
+  });
 }
 
-/** Clone / prepare every declared GitRepo; records audit events on the state. */
+/** Dry-run clone progress for all repos without mutating the filesystem. */
+export function planCloneAll(
+  root: string,
+  state: ClusterState,
+  opts: Omit<CloneOptions, "dryRun"> = {},
+): CloneResult[] {
+  return (state.gitRepos ?? []).map((repo) =>
+    cloneGitRepo(root, repo, { ...opts, dryRun: true }),
+  );
+}
+
+function upsertCloneStatus(state: ClusterState, result: CloneResult, path: string): void {
+  if (!state.gitRepoStatus) state.gitRepoStatus = [];
+  const now = new Date().toISOString();
+  const row: GitRepoSyncStatus = {
+    name: result.repo,
+    path,
+    ok: result.ok,
+    reason: result.reason,
+    cloneBackend: result.backend,
+    clonePhase: result.phase,
+    cloneProgressPct: result.progressPct,
+    lastClonedAt: now,
+    lastSyncedAt: result.ok ? now : undefined,
+  };
+  const idx = state.gitRepoStatus.findIndex((s) => s.name === result.repo);
+  if (idx >= 0) {
+    state.gitRepoStatus[idx] = { ...state.gitRepoStatus[idx], ...row };
+  } else {
+    state.gitRepoStatus.push(row);
+  }
+}
+
+/** Clone / prepare every declared GitRepo; records audit + clone progress on state. */
 export function cloneAllGitRepos(
   root: string,
   state: ClusterState,
@@ -125,11 +231,38 @@ export function cloneAllGitRepos(
   for (const repo of state.gitRepos ?? []) {
     const r = cloneGitRepo(root, repo, opts);
     results.push(r);
+    upsertCloneStatus(state, r, resolveGitRepoPath(root, repo));
     recordAudit(state, {
       kind: "sync",
-      message: r.ok ? `clone ok ${r.repo}` : `clone skipped ${r.repo}: ${r.reason}`,
-      meta: { url: r.url, dest: r.dest, ok: r.ok, backend: r.backend },
+      message: r.ok
+        ? `clone ok ${r.repo} phase=${r.phase} ${r.progressPct}%`
+        : `clone skipped ${r.repo}: ${r.reason}`,
+      meta: {
+        url: r.url,
+        dest: r.dest,
+        ok: r.ok,
+        backend: r.backend,
+        phase: r.phase,
+        progressPct: r.progressPct,
+        dryRun: Boolean(opts.dryRun),
+      },
     });
   }
   return results;
+}
+
+/** Summarize last clone progress from gitRepoStatus (for UI / API). */
+export function cloneStatusReport(state: ClusterState): {
+  repos: number;
+  ok: number;
+  blocked: number;
+  rows: GitRepoSyncStatus[];
+} {
+  const rows = state.gitRepoStatus ?? [];
+  return {
+    repos: rows.length,
+    ok: rows.filter((r) => r.ok).length,
+    blocked: rows.filter((r) => r.cloneBackend === "remote-stub" || r.clonePhase === "failed").length,
+    rows: [...rows],
+  };
 }

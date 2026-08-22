@@ -169,6 +169,7 @@ Control plane today (local, network-free tests):
 | Skill promote / versions CLI | shipped |
 | Workflow stage trajectory metrics | shipped |
 | Chaos invariants + budget/policy UI | shipped |
+| Clone progress + outbound UI | shipped |
 | GitRepo local watch/sync | shipped (no remote clone yet) |
 | Live `@deepseek-ai/dsh` / Hermes process | not yet |
 

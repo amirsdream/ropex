@@ -20,5 +20,6 @@ Stable routes from `API_ROUTES` in `src/contracts.ts`. All JSON unless noted. Ne
 | GET | `/api/v1/budget` | Policy.budget spend windows |
 | GET | `/api/v1/drift` | Live vs desired config drift report |
 | GET | `/api/v1/fairness` | Queue latency + LRU fairness report |
+| GET | `/api/v1/clone` | Last GitRepo clone progress / fail-closed status |
 
 Serve with `ropex ui` (static UI + these routes on one port).

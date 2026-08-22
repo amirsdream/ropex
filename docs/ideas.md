@@ -32,6 +32,12 @@ Stronger chaos invariants (replica sum, digest/label/placement, drift agreement)
 
 **Shipped (2026-08-22 night):** `assertChaosInvariants` expansion, budget/policy UI rails.
 
+## Clone progress + outbound UI
+
+Clone attempts emit phase logs (`resolve`→`done`/`failed`) with progress %; remote stays fail-closed; `--dry-run` plans without writes; status on `gitRepoStatus` + `/api/v1/clone`. Outbound stub journal on the control-plane view/UI.
+
+**Shipped (2026-08-22 night):** `planCloneAll`, `cloneStatusReport`, outbound/clone UI rails.
+
 ## Canary digest rolls + state snapshot
 
 Rolling canary strategy limits digest retire/create per agent; scheduler skips holdouts. Snapshot exports cluster checkpoints.

@@ -256,6 +256,10 @@ Optional `Policy.spec.budget` (`maxUnits`, `windowMs`, `scope: cluster|fleet|age
 
 `ropex skills promote <name>` shares the latest registry version with every desired agent; `versions` lists history. Trajectories persist `stages` from the run workflow; Prometheus counters `ropex_workflow_{compose,plan,execute,deliver,learn}_total`.
 
+## Clone progress
+
+`ropex clone [--dry-run] [--force]` walks resolve → local-present/copy → done, or remote-blocked → failed (https/git fail closed). Progress stamps land on `gitRepoStatus` (`clonePhase`, `cloneProgressPct`). `GET /api/v1/clone` and the UI Clone section surface them.
+
 ## Observability
 
 - **Delivery journal** — every comment/check/PR appends to `state.deliveries` (`ropex journal`).

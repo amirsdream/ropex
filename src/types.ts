@@ -343,6 +343,13 @@ export type GitRepoSyncStatus = {
   lastSyncedAt?: string;
   ok: boolean;
   reason?: string;
+  /** Last clone attempt backend (local-copy | remote-stub). */
+  cloneBackend?: string;
+  /** Last clone phase reached (resolve → done/failed). */
+  clonePhase?: string;
+  /** 0–100 progress from last clone / plan. */
+  cloneProgressPct?: number;
+  lastClonedAt?: string;
 };
 
 export type ReconcilePlan = {
