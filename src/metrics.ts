@@ -30,6 +30,7 @@ export type MetricsSnapshot = {
   skills_registry: number;
   deliveries: number;
   revision: number;
+  audit_events: number;
   backlog_oldest_age_ms: number;
   backlog_slo_breached: number;
 };
@@ -61,6 +62,7 @@ export function metricsSnapshot(state: ClusterState): MetricsSnapshot {
     skills_registry: state.skillRegistry?.length ?? 0,
     deliveries: state.deliveries?.length ?? 0,
     revision: state.revision,
+    audit_events: state.audit?.length ?? 0,
     backlog_oldest_age_ms: health.backlog.oldestPendingAgeMs ?? 0,
     backlog_slo_breached: health.backlog.breached ? 1 : 0,
   };
@@ -112,6 +114,9 @@ export function metricsPrometheus(state: ClusterState): string {
     "# HELP ropex_cluster_revision Control-plane revision.",
     "# TYPE ropex_cluster_revision gauge",
     `ropex_cluster_revision ${m.revision}`,
+    "# HELP ropex_audit_events Audit trail depth.",
+    "# TYPE ropex_audit_events gauge",
+    `ropex_audit_events ${m.audit_events}`,
     "# HELP ropex_backlog_oldest_age_ms Age of oldest pending task (ms).",
     "# TYPE ropex_backlog_oldest_age_ms gauge",
     `ropex_backlog_oldest_age_ms ${m.backlog_oldest_age_ms}`,

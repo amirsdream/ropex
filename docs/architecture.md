@@ -215,6 +215,7 @@ stateDiagram-v2
 ## Observability
 
 - **Delivery journal** — every comment/check/PR appends to `state.deliveries` (`ropex journal`).
+- **Audit trail** — event-sourced control-plane log (`state.audit`): reconcile, enqueue, claim, complete, retry, dead, reclaim, webhook, approval, sync. Cap 5k. `ropex audit [--kind] [--jsonl]`, `/api/v1/audit`.
 - **Skill registry** — versioned skills with `shareSkill` across agents (`ropex skills`).
 - **Metrics** — JSON or Prometheus text (`ropex metrics --prometheus`, `/api/v1/metrics`), including backlog age and unhealthy worker gauges.
 - **Health / SLO** — `ropex health` and `/api/v1/health` probe live workers (digest, worktree, stuck claim) and evaluate backlog depth/age SLOs. Unhealthy or breached → HTTP 503 / exit 1.
@@ -254,7 +255,7 @@ Shipped end-to-end offline:
 | Brain / kernel | Hermes compose/plan/learn, `bootDsh` profile packs |
 | Governance | `admission`, `approval`, `policy` dry-run |
 | Memory / skills | scoped `SharedMemoryStore`, versioned `skillRegistry` |
-| Observability | journal, trajectories, metrics, **health/SLO** |
+| Observability | journal, trajectories, metrics, health/SLO, **audit** |
 | Surfaces | CLI, `/api/v1/*`, `ropex ui` |
 
 Still open for live adapters: remote GitRepo clone, `@deepseek-ai/dsh`, Hermes process.

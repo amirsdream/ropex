@@ -151,6 +151,28 @@ function renderApprovals(view) {
     .join("");
 }
 
+function renderAudit(view) {
+  const el = $("#audit-stream");
+  if (!view.audit?.length) {
+    el.innerHTML = `<p class="empty">No audit events yet. Apply, enqueue, or drain to write the trail.</p>`;
+    return;
+  }
+  el.innerHTML = view.audit
+    .map(
+      (e, i) => `
+      <article class="mem-item" style="animation-delay:${Math.min(i, 12) * 0.04}s">
+        <div class="mem-meta">
+          <span class="scope">${escapeHtml(e.kind)}</span>
+          ${e.agent ? `<span>${escapeHtml(e.agent)}</span>` : ""}
+          ${e.taskId ? `<span>${escapeHtml(e.taskId)}</span>` : ""}
+          <span>${formatTime(e.at)}</span>
+        </div>
+        <p class="mem-text">${escapeHtml(e.message)}</p>
+      </article>`,
+    )
+    .join("");
+}
+
 function renderSurfaces(view) {
   $("#hermes-list").innerHTML = view.hermes
     .map(
@@ -218,6 +240,7 @@ async function main() {
     renderQueue(view);
     renderJournal(view);
     renderApprovals(view);
+    renderAudit(view);
     renderSurfaces(view);
   } catch (err) {
     $("#tagline").textContent = "Control plane unreachable";

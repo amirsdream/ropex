@@ -19,6 +19,7 @@ import {
 import { loopModeFor, toolsFor } from "./harness.js";
 import { memoryContextFor, resolveSharePolicy, SharedMemoryStore } from "./memory.js";
 import { healthReport } from "./health.js";
+import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { ensureQueue, queueSummary } from "./queue.js";
 import { trajectoriesFor, exportTrajectoriesJsonl } from "./trajectory.js";
@@ -151,6 +152,14 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
         taskId: a.taskId,
         reason: a.reason,
       })),
+    audit: auditsFor(state, { limit: 40 }).map((e) => ({
+      id: e.id,
+      at: e.at,
+      kind: e.kind,
+      message: e.message,
+      agent: e.agent,
+      taskId: e.taskId,
+    })),
   };
 }
 
@@ -304,6 +313,26 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
 
   if (url.pathname === API_ROUTES.approvals) {
     return json(res, state.approvals ?? []);
+  }
+  if (url.pathname === API_ROUTES.audit) {
+    if (url.searchParams.get("format") === "jsonl") {
+      res.writeHead(200, { "content-type": "application/x-ndjson; charset=utf-8" });
+      res.end(
+        exportAuditJsonl(state, {
+          kind: (url.searchParams.get("kind") as import("./types.js").AuditKind) ?? undefined,
+          limit: url.searchParams.get("limit") ? Number(url.searchParams.get("limit")) : 500,
+        }),
+      );
+      return;
+    }
+    return json(
+      res,
+      auditsFor(state, {
+        kind: (url.searchParams.get("kind") as import("./types.js").AuditKind) ?? undefined,
+        agent: url.searchParams.get("agent") ?? undefined,
+        limit: url.searchParams.get("limit") ? Number(url.searchParams.get("limit")) : 100,
+      }),
+    );
   }
 
   // Static UI

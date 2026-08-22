@@ -10,6 +10,7 @@ import {
 } from "./spec.js";
 import { expandWorkers, runTask } from "./runtime.js";
 import { normalizeFact } from "./memory.js";
+import { ensureAudit, recordAudit } from "./audit.js";
 import { emptyMetrics, ensureQueue } from "./queue.js";
 import { ensureJournal } from "./journal.js";
 import { ensureSkillRegistry } from "./skills.js";
@@ -38,6 +39,7 @@ export function emptyState(source = ""): ClusterState {
     approvals: [],
     queue: [],
     metrics: emptyMetrics(),
+    audit: [],
   };
 }
 
@@ -54,6 +56,7 @@ export function loadState(root: string): ClusterState {
     ensureTrajectories(state);
     ensureRateLimits(state);
     ensureApprovals(state);
+    ensureAudit(state);
     return state;
   } catch {
     return emptyState();
@@ -158,8 +161,21 @@ export function planReconcile(
     trajectories: current.trajectories ?? [],
     rateLimits: current.rateLimits ?? [],
     approvals: current.approvals ?? [],
+    audit: current.audit ?? [],
     lastReconcile: new Date().toISOString(),
   };
+
+  recordAudit(next, {
+    kind: "reconcile",
+    message: `create=${create.length} retire=${retire.length} update=${update.length} capped=${capped.length}`,
+    meta: {
+      create: create.length,
+      retire: retire.length,
+      update: update.length,
+      capped: capped.length,
+      source,
+    },
+  });
 
   return { next, plan };
 }

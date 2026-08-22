@@ -196,6 +196,7 @@ export type ControlPlaneView = {
     backlogSloBreached: boolean;
   };
   approvals: Array<{ id: string; status: string; tool: string; agent: string; taskId: string; reason: string }>;
+  audit: Array<{ id: string; at: string; kind: string; message: string; agent?: string; taskId?: string }>;
 };
 
 /** Stable API routes the UI and CLI share. */
@@ -210,4 +211,5 @@ export const API_ROUTES = {
   trajectories: "/api/v1/trajectories",
   approvals: "/api/v1/approvals",
   health: "/api/v1/health",
+  audit: "/api/v1/audit",
 } as const;

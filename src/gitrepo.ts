@@ -5,6 +5,7 @@
 
 import { existsSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
+import { recordAudit } from "./audit.js";
 import type { ClusterState, GitRepo } from "./types.js";
 import { watchOnce, type WatchOnceResult } from "./watch.js";
 
@@ -42,6 +43,11 @@ export function syncGitRepos(
         const watch = watchOnce(root, fallback, opts);
         // Merge gitRepos from watch into result state is already persisted via watchOnce
         results.push({ repo: repo.metadata.name, path: fallback, ok: true, watch });
+        recordAudit(state, {
+          kind: "sync",
+          message: `synced ${repo.metadata.name} via fleets fallback`,
+          meta: { path: fallback, create: watch.plan.create.length, retire: watch.plan.retire.length },
+        });
         continue;
       }
       results.push({
@@ -50,10 +56,25 @@ export function syncGitRepos(
         ok: false,
         reason: `path missing (remote clone not wired): ${path}`,
       });
+      recordAudit(state, {
+        kind: "sync",
+        message: `sync skipped ${repo.metadata.name}: path missing`,
+        meta: { path, ok: false },
+      });
       continue;
     }
     const watch = watchOnce(root, path, opts);
     results.push({ repo: repo.metadata.name, path, ok: true, watch });
+    recordAudit(state, {
+      kind: "sync",
+      message: `synced ${repo.metadata.name}`,
+      meta: {
+        path,
+        create: watch.plan.create.length,
+        retire: watch.plan.retire.length,
+        changed: watch.changed,
+      },
+    });
   }
   return results;
 }

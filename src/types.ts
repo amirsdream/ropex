@@ -217,6 +217,32 @@ export type ApprovalRequest = {
   decidedAt?: string;
 };
 
+/** Append-only control-plane audit event (event-sourced trail). */
+export type AuditKind =
+  | "reconcile"
+  | "enqueue"
+  | "claim"
+  | "complete"
+  | "retry"
+  | "dead"
+  | "reclaim"
+  | "webhook"
+  | "approval"
+  | "sync"
+  | "info";
+
+export type AuditEvent = {
+  id: string;
+  at: string;
+  kind: AuditKind;
+  message: string;
+  agent?: string;
+  workerId?: string;
+  taskId?: string;
+  revision?: number;
+  meta?: Record<string, string | number | boolean | null>;
+};
+
 export type ClusterState = {
   revision: number;
   source: string;
@@ -240,6 +266,8 @@ export type ClusterState = {
   /** Durable work queue (webhook / simulate / CLI). */
   queue: QueuedTask[];
   metrics: ClusterMetrics;
+  /** Append-only control-plane audit trail. */
+  audit: AuditEvent[];
   lastReconcile?: string;
 };
 

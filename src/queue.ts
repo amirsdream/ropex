@@ -5,6 +5,7 @@
  */
 
 import { admitTask } from "./admission.js";
+import { recordAudit } from "./audit.js";
 import type { ClusterMetrics, ClusterState, QueuedTask, Task, Worker } from "./types.js";
 
 /** Default max claim attempts before dead-letter. */
@@ -64,6 +65,21 @@ export function enqueueTask(
   state.metrics.lastEventAt = item.enqueuedAt;
   if (decision.status === "deny") {
     state.metrics.tasksFailed += 1;
+    recordAudit(state, {
+      kind: "dead",
+      message: `enqueue denied: ${decision.reason}`,
+      agent: task.agent,
+      taskId: task.id,
+      meta: { source, denied: true },
+    });
+  } else {
+    recordAudit(state, {
+      kind: "enqueue",
+      message: `enqueued via ${source}`,
+      agent: task.agent,
+      taskId: task.id,
+      meta: { source, priority: item.priority },
+    });
   }
   return item;
 }
@@ -157,6 +173,14 @@ export function claimPending(
     item.attempts += 1;
     worker.status = "running";
     claimed.push({ queueId: item.id, workerId: worker.id, task: item.task });
+    recordAudit(state, {
+      kind: "claim",
+      message: `claimed by ${worker.id}`,
+      agent: item.task.agent,
+      workerId: worker.id,
+      taskId: item.id,
+      meta: { attempt: item.attempts, leaseMs },
+    });
   }
 
   return {
@@ -211,11 +235,19 @@ export function completeQueued(
     state.metrics.tasksCompleted += 1;
     state.metrics.lastDrainAt = item.finishedAt;
     if (opts.releaseWorker !== false) releaseWorker(state, workerId);
+    recordAudit(state, {
+      kind: "complete",
+      message: "task completed",
+      agent: item.task.agent,
+      workerId,
+      taskId: item.id,
+    });
     return item;
   }
 
   if (error) item.error = error;
 
+  const isLease = error === "lease expired";
   if (item.attempts > 0 && item.attempts < maxAttempts) {
     item.status = "pending";
     item.workerId = undefined;
@@ -227,6 +259,14 @@ export function completeQueued(
     state.metrics.tasksRetried = (state.metrics.tasksRetried ?? 0) + 1;
     state.metrics.lastDrainAt = new Date(now).toISOString();
     if (opts.releaseWorker !== false) releaseWorker(state, workerId);
+    recordAudit(state, {
+      kind: isLease ? "reclaim" : "retry",
+      message: isLease ? "lease expired → retry" : `retry after failure: ${error ?? "unknown"}`,
+      agent: item.task.agent,
+      workerId,
+      taskId: item.id,
+      meta: { attempt: item.attempts, nextRetryAt: item.nextRetryAt },
+    });
     return item;
   }
 
@@ -239,6 +279,14 @@ export function completeQueued(
   state.metrics.tasksDead = (state.metrics.tasksDead ?? 0) + 1;
   state.metrics.lastDrainAt = item.finishedAt;
   if (opts.releaseWorker !== false) releaseWorker(state, workerId);
+  recordAudit(state, {
+    kind: "dead",
+    message: isLease ? "lease expired → dead" : `dead-letter: ${error ?? "unknown"}`,
+    agent: item.task.agent,
+    workerId,
+    taskId: item.id,
+    meta: { attempt: item.attempts },
+  });
   return item;
 }
 

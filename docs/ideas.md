@@ -2,6 +2,12 @@
 
 Nightly capture. Newest first. Each entry should be one shippable idea, not a slogan.
 
+## Event-sourced audit log
+
+Append-only `state.audit` for reconcile / queue / lease / webhook / approval / sync. Soft-capped at 5k. CLI + API + UI panel.
+
+**Shipped (2026-08-22 night):** `src/audit.ts`, `ropex audit`, `/api/v1/audit`, UI Audit section.
+
 ## Claim leases + reclaim
 
 Claims carry `leaseExpiresAt`; heartbeats extend; expired leases reclaim into retry/DLQ without burning workers.

@@ -4,6 +4,7 @@
  */
 
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { recordAudit } from "./audit.js";
 import { agentsForEvent, eventToTask } from "./github.js";
 import { enqueueTask } from "./queue.js";
 import { checkRateLimit, type RateLimitOptions } from "./ratelimit.js";
@@ -142,6 +143,17 @@ export function ingestGithubWebhook(
     }
     enqueued.push(enqueueTask(state, task, "webhook"));
   }
+
+  recordAudit(state, {
+    kind: "webhook",
+    message: `${event.type} → ${enqueued.length} task(s)`,
+    meta: {
+      event: event.type,
+      repo: event.repo,
+      enqueued: enqueued.length,
+      delivery: headers["x-github-delivery"] ?? null,
+    },
+  });
 
   return { ok: true, event, enqueued, remaining: rl.remaining };
 }

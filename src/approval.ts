@@ -2,6 +2,7 @@
  * Approval workflow — Policy.requireApproval tools pause until approve/reject.
  */
 
+import { recordAudit } from "./audit.js";
 import type { ApprovalRequest, ClusterState } from "./types.js";
 
 export function ensureApprovals(state: ClusterState): void {
@@ -73,6 +74,14 @@ export function decideApproval(
   if (!rec || rec.status !== "pending") return undefined;
   rec.status = decision;
   rec.decidedAt = new Date().toISOString();
+  recordAudit(state, {
+    kind: "approval",
+    message: `${decision} ${rec.tool}`,
+    agent: rec.agent,
+    workerId: rec.workerId,
+    taskId: rec.taskId,
+    meta: { approvalId: rec.id, tool: rec.tool, decision },
+  });
   return rec;
 }
 

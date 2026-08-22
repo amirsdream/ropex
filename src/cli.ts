@@ -8,6 +8,7 @@ import { enqueueTask, queueSummary, deadLetters, requeueDead, reclaimExpiredLeas
 import { runTask } from "./runtime.js";
 import { drainQueue } from "./scheduler.js";
 import { healthReport } from "./health.js";
+import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { deliveriesFor, replayDelivery } from "./journal.js";
 import { shareSkill } from "./skills.js";
@@ -21,7 +22,7 @@ import { runReconcileChaos, assertChaosInvariants } from "./chaos.js";
 import { parseManifests } from "./spec.js";
 import { ingestGithubWebhook, signGithubPayload } from "./webhook.js";
 import { parseInterval, watchLoop, watchOnce } from "./watch.js";
-import type { GithubEvent, ReconcilePlan } from "./types.js";
+import type { AuditKind, GithubEvent, ReconcilePlan } from "./types.js";
 
 const HELP = `ropex — GitOps control plane for agent fleets
 
@@ -52,6 +53,7 @@ Usage:
                                      Reconcile manifests on an interval (Flux-style)
   ropex metrics [--prometheus]    Export cluster metrics
   ropex health                    Worker probes + backlog SLO
+  ropex audit [--kind k] [--jsonl]  Control-plane event trail
   ropex journal                   Show delivery journal
   ropex skills [share <name> --to <agent>]
   ropex fanout --agent <name> <prompt>
@@ -435,6 +437,25 @@ async function main(argv: string[]): Promise<number> {
       const report = healthReport(state);
       console.log(JSON.stringify(report, null, 2));
       return report.ok ? 0 : 1;
+    }
+    case "audit": {
+      const state = loadState(root);
+      const kind = flag(rest, "--kind") as AuditKind | undefined;
+      if (rest.includes("--jsonl")) {
+        process.stdout.write(exportAuditJsonl(state, { kind, limit: 500 }));
+        return 0;
+      }
+      const rows = auditsFor(state, { kind, limit: 40 });
+      if (!rows.length) {
+        console.log("no audit events yet");
+        return 0;
+      }
+      for (const e of rows) {
+        console.log(
+          `[${e.kind}] ${e.at}  ${e.agent ?? "-"}  ${e.taskId ?? "-"}  ${e.message}`,
+        );
+      }
+      return 0;
     }
     case "journal": {
       const state = loadState(root);
