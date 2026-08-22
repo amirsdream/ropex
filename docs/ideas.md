@@ -2,6 +2,12 @@
 
 Nightly capture. Newest first. Each entry should be one shippable idea, not a slogan.
 
+## Claim leases + reclaim
+
+Claims carry `leaseExpiresAt`; heartbeats extend; expired leases reclaim into retry/DLQ without burning workers.
+
+**Shipped (2026-08-22 night):** `heartbeatClaim`, `reclaimExpiredLeases`, `ropex reclaim`, drain auto-reclaim.
+
 ## Dead-letter + retry queue
 
 Failed claims retry with exponential backoff (`nextRetryAt`), then `dead`. Workers release to idle on transient failure. `ropex retry` resurrects DLQ items.

@@ -154,6 +154,7 @@ Control plane today (local, network-free tests):
 | Journal, skills, metrics, trajectories | shipped |
 | Worker health probes + backlog SLO | shipped |
 | Dead-letter + retry queue | shipped |
+| Claim leases + reclaim | shipped |
 | GitRepo local watch/sync | shipped (no remote clone yet) |
 | Live `@deepseek-ai/dsh` / Hermes process | not yet |
 

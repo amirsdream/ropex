@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { applyManifestText, loadState, planReconcile, saveState } from "./controller.js";
 import { agentsForEvent, eventToTask, pickWorker } from "./github.js";
 import { buildControlPlaneView, startControlPlaneServer } from "./api.js";
-import { enqueueTask, queueSummary, deadLetters, requeueDead } from "./queue.js";
+import { enqueueTask, queueSummary, deadLetters, requeueDead, reclaimExpiredLeases } from "./queue.js";
 import { runTask } from "./runtime.js";
 import { drainQueue } from "./scheduler.js";
 import { healthReport } from "./health.js";
@@ -34,6 +34,7 @@ Usage:
   ropex webhook simulate <event> --repo <org/name> [--title t] [--secret s]
   ropex queue                     Show work queue + metrics
   ropex retry <id>|--all          Re-queue dead-letter item(s)
+  ropex reclaim                   Reclaim expired claim leases
   ropex drain [--limit N] [--concurrency N]
                                      Claim idle workers and run pending queue
   ropex sync                          Sync declared GitRepo paths (local stub)
@@ -188,15 +189,16 @@ async function main(argv: string[]): Promise<number> {
       const state = loadState(root);
       const q = queueSummary(state);
       console.log(
-        `pending=${q.pending} claimed=${q.claimed} done=${q.done} failed=${q.failed} dead=${q.dead} waitingRetry=${q.waitingRetry}`,
+        `pending=${q.pending} claimed=${q.claimed} done=${q.done} failed=${q.failed} dead=${q.dead} waitingRetry=${q.waitingRetry} leaseExpired=${q.leaseExpired}`,
       );
       console.log(
-        `metrics completed=${state.metrics.tasksCompleted} failed=${state.metrics.tasksFailed} retried=${state.metrics.tasksRetried ?? 0} dead=${state.metrics.tasksDead ?? 0} enqueued=${state.metrics.tasksEnqueued}`,
+        `metrics completed=${state.metrics.tasksCompleted} failed=${state.metrics.tasksFailed} retried=${state.metrics.tasksRetried ?? 0} dead=${state.metrics.tasksDead ?? 0} leasesReclaimed=${state.metrics.leasesReclaimed ?? 0} enqueued=${state.metrics.tasksEnqueued}`,
       );
       for (const item of state.queue.slice(-20)) {
         const retry = item.nextRetryAt ? ` retry@${item.nextRetryAt}` : "";
+        const lease = item.leaseExpiresAt ? ` lease@${item.leaseExpiresAt}` : "";
         console.log(
-          `  [${item.status}] a${item.attempts} ${item.source} ${item.task.agent}  ${item.task.prompt}${retry}${item.error ? `  err=${item.error}` : ""}`,
+          `  [${item.status}] a${item.attempts} ${item.source} ${item.task.agent}  ${item.task.prompt}${retry}${lease}${item.error ? `  err=${item.error}` : ""}`,
         );
       }
       return 0;
@@ -218,6 +220,16 @@ async function main(argv: string[]): Promise<number> {
       saveState(root, state);
       console.log(`requeued ${n} dead-letter item(s)`);
       return n ? 0 : 1;
+    }
+    case "reclaim": {
+      const state = loadState(root);
+      const { reclaimed } = reclaimExpiredLeases(state);
+      saveState(root, state);
+      console.log(`reclaimed ${reclaimed.length} expired lease(s)`);
+      for (const item of reclaimed) {
+        console.log(`  [${item.status}] ${item.id}  ${item.error ?? ""}`);
+      }
+      return 0;
     }
     case "drain": {
       const state = loadState(root);

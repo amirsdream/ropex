@@ -9,9 +9,18 @@ import type { ClusterMetrics, ClusterState, QueuedTask, Task, Worker } from "./t
 
 /** Default max claim attempts before dead-letter. */
 export const DEFAULT_MAX_ATTEMPTS = 3;
+/** Default claim lease duration (5 minutes). */
+export const DEFAULT_LEASE_MS = 5 * 60_000;
 
 export function emptyMetrics(): ClusterMetrics {
-  return { tasksCompleted: 0, tasksFailed: 0, tasksEnqueued: 0, tasksRetried: 0, tasksDead: 0 };
+  return {
+    tasksCompleted: 0,
+    tasksFailed: 0,
+    tasksEnqueued: 0,
+    tasksRetried: 0,
+    tasksDead: 0,
+    leasesReclaimed: 0,
+  };
 }
 
 export function ensureQueue(state: ClusterState): ClusterState {
@@ -19,6 +28,7 @@ export function ensureQueue(state: ClusterState): ClusterState {
   if (!state.metrics) state.metrics = emptyMetrics();
   if (state.metrics.tasksRetried === undefined) state.metrics.tasksRetried = 0;
   if (state.metrics.tasksDead === undefined) state.metrics.tasksDead = 0;
+  if (state.metrics.leasesReclaimed === undefined) state.metrics.leasesReclaimed = 0;
   return state;
 }
 
@@ -105,15 +115,20 @@ function isClaimablePending(item: QueuedTask, now: number): boolean {
 
 /**
  * Claim up to `limit` pending queue items onto idle workers.
- * Skips items waiting on `nextRetryAt`. Does not execute — caller runs `runTask` then `completeQueued`.
+ * Reclaims expired leases first. Skips items waiting on `nextRetryAt`.
  */
 export function claimPending(
   state: ClusterState,
   limit = 32,
-  opts: { preferFleet?: string; now?: number } = {},
+  opts: { preferFleet?: string; now?: number; leaseMs?: number; maxAttempts?: number } = {},
 ): DrainResult {
   ensureQueue(state);
   const now = opts.now ?? Date.now();
+  reclaimExpiredLeases(state, {
+    now,
+    maxAttempts: opts.maxAttempts,
+  });
+  const leaseMs = opts.leaseMs ?? DEFAULT_LEASE_MS;
   const claimed: DrainResult["claimed"] = [];
   const pending = state.queue
     .filter((q) => isClaimablePending(q, now))
@@ -136,6 +151,8 @@ export function claimPending(
     item.status = "claimed";
     item.workerId = worker.id;
     item.claimedAt = new Date(now).toISOString();
+    item.heartbeatAt = item.claimedAt;
+    item.leaseExpiresAt = new Date(now + leaseMs).toISOString();
     item.nextRetryAt = undefined;
     item.attempts += 1;
     worker.status = "running";
@@ -189,6 +206,8 @@ export function completeQueued(
     item.finishedAt = new Date(now).toISOString();
     item.error = undefined;
     item.nextRetryAt = undefined;
+    item.leaseExpiresAt = undefined;
+    item.heartbeatAt = undefined;
     state.metrics.tasksCompleted += 1;
     state.metrics.lastDrainAt = item.finishedAt;
     if (opts.releaseWorker !== false) releaseWorker(state, workerId);
@@ -201,6 +220,8 @@ export function completeQueued(
     item.status = "pending";
     item.workerId = undefined;
     item.claimedAt = undefined;
+    item.leaseExpiresAt = undefined;
+    item.heartbeatAt = undefined;
     item.finishedAt = undefined;
     item.nextRetryAt = new Date(now + retryBackoffMs(item.attempts)).toISOString();
     state.metrics.tasksRetried = (state.metrics.tasksRetried ?? 0) + 1;
@@ -212,11 +233,66 @@ export function completeQueued(
   item.status = "dead";
   item.finishedAt = new Date(now).toISOString();
   item.nextRetryAt = undefined;
+  item.leaseExpiresAt = undefined;
+  item.heartbeatAt = undefined;
   state.metrics.tasksFailed += 1;
   state.metrics.tasksDead = (state.metrics.tasksDead ?? 0) + 1;
   state.metrics.lastDrainAt = item.finishedAt;
   if (opts.releaseWorker !== false) releaseWorker(state, workerId);
   return item;
+}
+
+/** Extend a claim lease (worker heartbeat). */
+export function heartbeatClaim(
+  state: ClusterState,
+  queueId: string,
+  opts: { now?: number; leaseMs?: number } = {},
+): QueuedTask | undefined {
+  ensureQueue(state);
+  const item = state.queue.find((q) => q.id === queueId && q.status === "claimed");
+  if (!item) return undefined;
+  const now = opts.now ?? Date.now();
+  const leaseMs = opts.leaseMs ?? DEFAULT_LEASE_MS;
+  item.heartbeatAt = new Date(now).toISOString();
+  item.leaseExpiresAt = new Date(now + leaseMs).toISOString();
+  return item;
+}
+
+export type ReclaimResult = {
+  reclaimed: QueuedTask[];
+};
+
+/**
+ * Release claimed items whose lease expired — counts as a soft failure (retry / dead).
+ */
+export function reclaimExpiredLeases(
+  state: ClusterState,
+  opts: { now?: number; maxAttempts?: number } = {},
+): ReclaimResult {
+  ensureQueue(state);
+  const now = opts.now ?? Date.now();
+  const expiredIds: string[] = [];
+  for (const item of state.queue) {
+    if (item.status !== "claimed") continue;
+    const exp = item.leaseExpiresAt ? Date.parse(item.leaseExpiresAt) : NaN;
+    // Legacy claims without lease: treat claimedAt + default lease as expiry.
+    const fallback = item.claimedAt ? Date.parse(item.claimedAt) + DEFAULT_LEASE_MS : NaN;
+    const deadline = Number.isFinite(exp) ? exp : fallback;
+    if (!Number.isFinite(deadline) || deadline > now) continue;
+    expiredIds.push(item.id);
+  }
+  const reclaimed: QueuedTask[] = [];
+  for (const id of expiredIds) {
+    const updated = completeQueued(state, id, false, "lease expired", {
+      now,
+      maxAttempts: opts.maxAttempts,
+    });
+    if (updated) {
+      state.metrics.leasesReclaimed = (state.metrics.leasesReclaimed ?? 0) + 1;
+      reclaimed.push(updated);
+    }
+  }
+  return { reclaimed };
 }
 
 /** Re-queue a dead-letter item for another attempt cycle. */
@@ -231,6 +307,8 @@ export function requeueDead(
   item.status = "pending";
   item.workerId = undefined;
   item.claimedAt = undefined;
+  item.leaseExpiresAt = undefined;
+  item.heartbeatAt = undefined;
   item.finishedAt = undefined;
   item.nextRetryAt = undefined;
   item.error = undefined;
@@ -250,10 +328,19 @@ export function queueSummary(state: ClusterState): {
   failed: number;
   dead: number;
   waitingRetry: number;
+  leaseExpired: number;
 } {
   ensureQueue(state);
   const now = Date.now();
-  const counts = { pending: 0, claimed: 0, done: 0, failed: 0, dead: 0, waitingRetry: 0 };
+  const counts = {
+    pending: 0,
+    claimed: 0,
+    done: 0,
+    failed: 0,
+    dead: 0,
+    waitingRetry: 0,
+    leaseExpired: 0,
+  };
   for (const q of state.queue) {
     if (q.status === "dead") counts.dead += 1;
     else if (q.status === "pending" || q.status === "claimed" || q.status === "done" || q.status === "failed") {
@@ -261,6 +348,9 @@ export function queueSummary(state: ClusterState): {
     }
     if (q.status === "pending" && q.nextRetryAt && Date.parse(q.nextRetryAt) > now) {
       counts.waitingRetry += 1;
+    }
+    if (q.status === "claimed" && q.leaseExpiresAt && Date.parse(q.leaseExpiresAt) <= now) {
+      counts.leaseExpired += 1;
     }
   }
   return counts;

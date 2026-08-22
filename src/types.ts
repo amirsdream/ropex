@@ -275,6 +275,10 @@ export type QueuedTask = {
   workerId?: string;
   /** Set when a worker claims the item (stuck-probe input). */
   claimedAt?: string;
+  /** Lease deadline — expired claims are reclaimed. */
+  leaseExpiresAt?: string;
+  /** Last heartbeat that extended the lease. */
+  heartbeatAt?: string;
   attempts: number;
   source: "cli" | "github" | "webhook";
   /** Higher runs first (default 0). */
@@ -293,6 +297,8 @@ export type ClusterMetrics = {
   tasksRetried?: number;
   /** Tasks that exhausted retries (dead-letter). */
   tasksDead?: number;
+  /** Claimed tasks reclaimed after lease expiry. */
+  leasesReclaimed?: number;
   lastEventAt?: string;
   lastDrainAt?: string;
 };

@@ -35,7 +35,10 @@ export {
   requeueDead,
   deadLetters,
   retryBackoffMs,
+  heartbeatClaim,
+  reclaimExpiredLeases,
   DEFAULT_MAX_ATTEMPTS,
+  DEFAULT_LEASE_MS,
 } from "./queue.js";
 export { drainQueue } from "./scheduler.js";
 export {

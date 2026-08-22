@@ -24,6 +24,7 @@ export type MetricsSnapshot = {
   tasks_enqueued: number;
   tasks_retried: number;
   tasks_dead: number;
+  leases_reclaimed: number;
   memory_facts: number;
   skills_learned: number;
   skills_registry: number;
@@ -54,6 +55,7 @@ export function metricsSnapshot(state: ClusterState): MetricsSnapshot {
     tasks_enqueued: state.metrics?.tasksEnqueued ?? 0,
     tasks_retried: state.metrics?.tasksRetried ?? 0,
     tasks_dead: state.metrics?.tasksDead ?? 0,
+    leases_reclaimed: state.metrics?.leasesReclaimed ?? 0,
     memory_facts: state.memory?.length ?? 0,
     skills_learned: state.skills?.length ?? 0,
     skills_registry: state.skillRegistry?.length ?? 0,
@@ -98,6 +100,9 @@ export function metricsPrometheus(state: ClusterState): string {
     "# HELP ropex_tasks_dead_total Tasks exhausted retries.",
     "# TYPE ropex_tasks_dead_total counter",
     `ropex_tasks_dead_total ${m.tasks_dead}`,
+    "# HELP ropex_leases_reclaimed_total Expired claim leases reclaimed.",
+    "# TYPE ropex_leases_reclaimed_total counter",
+    `ropex_leases_reclaimed_total ${m.leases_reclaimed}`,
     "# HELP ropex_memory_facts Shared memory facts.",
     "# TYPE ropex_memory_facts gauge",
     `ropex_memory_facts ${m.memory_facts}`,

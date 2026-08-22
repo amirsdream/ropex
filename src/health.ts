@@ -70,18 +70,28 @@ export function probeWorker(
     checks.push({ name: "not-failed", ok: false, detail: "failed" });
   } else if (worker.status === "running") {
     const claim = claimedForWorker(state, worker.id);
-    const started = claim?.claimedAt ?? claim?.enqueuedAt;
-    if (started) {
-      const age = now - Date.parse(started);
-      const ok = Number.isFinite(age) && age <= maxRunning;
+    const leaseEnd = claim?.leaseExpiresAt ? Date.parse(claim.leaseExpiresAt) : NaN;
+    if (Number.isFinite(leaseEnd) && leaseEnd < now) {
       checks.push({
         name: "not-stuck",
-        ok,
-        detail: ok ? `running ${Math.round(age / 1000)}s` : `stuck ${Math.round(age / 1000)}s > ${maxRunning / 1000}s`,
+        ok: false,
+        detail: `lease expired ${Math.round((now - leaseEnd) / 1000)}s ago`,
       });
     } else {
-      // Running without a claim — orphaned; treat as unhealthy.
-      checks.push({ name: "not-stuck", ok: false, detail: "running without claim" });
+      const started = claim?.heartbeatAt ?? claim?.claimedAt ?? claim?.enqueuedAt;
+      if (started) {
+        const age = now - Date.parse(started);
+        const ok = Number.isFinite(age) && age <= maxRunning;
+        checks.push({
+          name: "not-stuck",
+          ok,
+          detail: ok
+            ? `running ${Math.round(age / 1000)}s`
+            : `stuck ${Math.round(age / 1000)}s > ${maxRunning / 1000}s`,
+        });
+      } else {
+        checks.push({ name: "not-stuck", ok: false, detail: "running without claim" });
+      }
     }
   } else {
     checks.push({

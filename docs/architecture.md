@@ -193,12 +193,16 @@ GitHub webhooks (HMAC-verified), `github simulate`, and CLI enqueue into `Cluste
 
 Failures **retry** with exponential backoff (`nextRetryAt`, default 3 attempts), then land in the **dead-letter** lane (`status: dead`). `ropex retry <id>|--all` re-queues DLQ items. Transient task errors release the worker back to `idle` so capacity is not burned.
 
+**Claim leases:** each claim gets `leaseExpiresAt` (default 5m). `heartbeatClaim` extends it while work runs; `reclaimExpiredLeases` / `ropex reclaim` (also auto on drain) treats expiry as a soft failure → retry/DLQ.
+
 ```mermaid
 stateDiagram-v2
   [*] --> pending: enqueue
-  pending --> claimed: claimPending
+  pending --> claimed: claimPending + lease
+  claimed --> claimed: heartbeatClaim
   claimed --> done: ok
   claimed --> pending: fail + attempts < max
+  claimed --> pending: lease expired
   claimed --> dead: fail + attempts >= max
   dead --> pending: requeueDead
   pending --> pending: waiting nextRetryAt
