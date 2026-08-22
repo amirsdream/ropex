@@ -19,7 +19,7 @@ This repo is a GitOps control plane for agent fleets.
 | Spec / reconcile | `spec.ts`, `controller.ts`, `image.ts`, `worktree.ts`, `watch.ts`, `gitrepo.ts`, `clone.ts`, `tick.ts` |
 | Brain / execute | `hermes.ts`, `dsh.ts`, `harness.ts`, `plugins.ts`, `workflow.ts`, `runtime.ts` |
 | Memory / skills | `memory.ts`, `skills.ts`, `contracts.ts` |
-| Queue / scale | `queue.ts`, `scheduler.ts`, `fanout.ts`, `admission.ts`, `approval.ts`, `autoscale.ts` |
+| Queue / scale | `queue.ts`, `scheduler.ts`, `fanout.ts`, `admission.ts`, `approval.ts`, `autoscale.ts`, `budget.ts` |
 | Ingress / audit | `webhook.ts`, `ratelimit.ts`, `journal.ts`, `trajectory.ts`, `metrics.ts`, `health.ts`, `audit.ts` |
 | Surfaces | `api.ts`, `ui/`, `cli.ts`, `demo.ts` |
 

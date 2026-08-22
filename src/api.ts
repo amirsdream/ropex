@@ -20,6 +20,7 @@ import { loopModeFor, toolsFor } from "./harness.js";
 import { memoryContextFor, resolveSharePolicy, SharedMemoryStore } from "./memory.js";
 import { healthReport } from "./health.js";
 import { planAutoscale } from "./autoscale.js";
+import { budgetReport } from "./budget.js";
 import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { ensureQueue, queueSummary } from "./queue.js";
@@ -379,6 +380,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
   if (url.pathname === API_ROUTES.autoscale) {
     const plan = planAutoscale(state);
     return json(res, plan);
+  }
+  if (url.pathname === API_ROUTES.budget) {
+    return json(res, { budgets: budgetReport(state), ledgers: state.budgets ?? [] });
   }
 
   // Static UI

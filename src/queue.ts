@@ -6,6 +6,7 @@
 
 import { admitTask } from "./admission.js";
 import { recordAudit } from "./audit.js";
+import { chargeBudget } from "./budget.js";
 import type { ClusterMetrics, ClusterState, QueuedTask, Task, Worker } from "./types.js";
 
 /** Default max claim attempts before dead-letter. */
@@ -235,6 +236,7 @@ export function completeQueued(
     state.metrics.tasksCompleted += 1;
     state.metrics.lastDrainAt = item.finishedAt;
     if (opts.releaseWorker !== false) releaseWorker(state, workerId);
+    chargeBudget(state, item.task, { now, workerId });
     recordAudit(state, {
       kind: "complete",
       message: "task completed",

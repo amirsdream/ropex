@@ -7,6 +7,7 @@ import { buildControlPlaneView, startControlPlaneServer } from "./api.js";
 import { enqueueTask, queueSummary, deadLetters, requeueDead, reclaimExpiredLeases } from "./queue.js";
 import { runTask } from "./runtime.js";
 import { drainQueue } from "./scheduler.js";
+import { budgetReport } from "./budget.js";
 import { planAutoscale } from "./autoscale.js";
 import { controlPlaneTick } from "./tick.js";
 import { cloneAllGitRepos } from "./clone.js";
@@ -68,6 +69,7 @@ Usage:
   ropex autoscale                 Recommend replica YAML from backlog SLO
   ropex tick [--concurrency N]    Control-plane heartbeat (reclaim/sync/drain)
   ropex clone                     Prepare GitRepo checkouts (file:// / local)
+  ropex budget                    Show task-unit budget spend
   ropex memory                    Show shared memory stream
   ropex ui [--port N]             Serve control-plane UI + /api/v1/*
   ropex help
@@ -608,6 +610,20 @@ async function main(argv: string[]): Promise<number> {
         );
       }
       return results.every((r) => r.ok) ? 0 : 1;
+    }
+    case "budget": {
+      const state = loadState(root);
+      const rows = budgetReport(state);
+      if (!rows.length) {
+        console.log("no Policy.budget configured");
+        return 0;
+      }
+      for (const r of rows) {
+        console.log(
+          `${r.key}  ${r.spent}/${r.limit}  remaining=${r.remaining}  windowMs=${r.windowMs}${r.exhausted ? "  EXHAUSTED" : ""}`,
+        );
+      }
+      return rows.some((r) => r.exhausted) ? 1 : 0;
     }
     case "memory": {
       const state = loadState(root);

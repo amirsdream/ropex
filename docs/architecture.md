@@ -232,6 +232,10 @@ stateDiagram-v2
 
 `ropex policy simulate` dry-runs admission across all desired agents (fleet report).
 
+## Budget accounting
+
+Optional `Policy.spec.budget` (`maxUnits`, `windowMs`, `scope: cluster|fleet|agent`) tracks abstract task units (weighted by harness profile). Exhausted budgets deny enqueue. `ropex budget`, `/api/v1/budget`, Prometheus `budget_spent` / `budget_limit`.
+
 ## Observability
 
 - **Delivery journal** — every comment/check/PR appends to `state.deliveries` (`ropex journal`).

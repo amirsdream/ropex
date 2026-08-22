@@ -17,6 +17,7 @@ import { ensureSkillRegistry } from "./skills.js";
 import { ensureTrajectories } from "./trajectory.js";
 import { ensureRateLimits } from "./ratelimit.js";
 import { ensureApprovals } from "./approval.js";
+import { ensureBudgets } from "./budget.js";
 import { applyWorktrees } from "./worktree.js";
 import type { ClusterState, Manifest, ReconcilePlan, SharedMemoryFact, Worker } from "./types.js";
 
@@ -41,6 +42,7 @@ export function emptyState(source = ""): ClusterState {
     metrics: emptyMetrics(),
     audit: [],
     gitRepoStatus: [],
+    budgets: [],
   };
 }
 
@@ -59,6 +61,7 @@ export function loadState(root: string): ClusterState {
     ensureApprovals(state);
     ensureAudit(state);
     if (!state.gitRepoStatus) state.gitRepoStatus = [];
+    ensureBudgets(state);
     return state;
   } catch {
     return emptyState();
@@ -165,6 +168,7 @@ export function planReconcile(
     approvals: current.approvals ?? [],
     audit: current.audit ?? [],
     gitRepoStatus: current.gitRepoStatus ?? [],
+    budgets: current.budgets ?? [],
     lastReconcile: new Date().toISOString(),
   };
 

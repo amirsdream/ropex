@@ -2,6 +2,12 @@
 
 Nightly capture. Newest first. Each entry should be one shippable idea, not a slogan.
 
+## Per-fleet cost/budget accounting
+
+Policy.budget rolling windows charge profile-weighted task units; exhaust → deny enqueue.
+
+**Shipped (2026-08-22 night):** `src/budget.ts`, admitTask gate, `ropex budget`, metrics/API.
+
 ## Control-plane tick + clone contract + policy simulate
 
 Scheduled heartbeat (`tick`), fail-closed remote clone seam, fleet-wide policy simulation report.

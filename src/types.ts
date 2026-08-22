@@ -102,6 +102,18 @@ export type Policy = {
       deny: string[];
       requireApproval: string[];
     };
+    /**
+     * Optional task-unit budget. When set, enqueue/spend is gated per scope.
+     * Units are abstract (1 ≈ one minimal task); profile weights apply on charge.
+     */
+    budget?: {
+      /** Max units in the rolling window (required when budget is set). */
+      maxUnits: number;
+      /** Window length in ms (default 1h). */
+      windowMs?: number;
+      /** Scope for the ledger key (default cluster). */
+      scope?: "cluster" | "fleet" | "agent";
+    };
   };
 };
 
@@ -270,7 +282,16 @@ export type ClusterState = {
   audit: AuditEvent[];
   /** Last sync status per declared GitRepo (multi-repo). */
   gitRepoStatus: GitRepoSyncStatus[];
+  /** Rolling task-unit spend for Policy.budget. */
+  budgets: BudgetLedger[];
   lastReconcile?: string;
+};
+
+/** Rolling window spend counter for budget admission. */
+export type BudgetLedger = {
+  key: string;
+  windowStartedAt: string;
+  units: number;
 };
 
 /** Per-GitRepo sync stamp for interval-aware multi-repo sync. */

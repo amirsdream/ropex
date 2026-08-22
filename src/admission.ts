@@ -4,6 +4,7 @@
  */
 
 import { isToolApproved } from "./approval.js";
+import { admitBudget } from "./budget.js";
 import type { ClusterState, Policy, Task } from "./types.js";
 
 export type AdmissionDecision =
@@ -83,6 +84,10 @@ export function admitCalls(
 
 /** Block enqueue of tasks that only target denied delivery surfaces (soft check). */
 export function admitTask(state: ClusterState, task: Task): AdmissionDecision {
+  const budget = admitBudget(state, task);
+  if (budget.status === "deny") {
+    return { status: "deny", reason: budget.reason };
+  }
   const perms = effectivePermissions(state.policies);
   for (const tool of perms.deny) {
     if (new RegExp(`\\b${escapeReg(tool)}\\b`, "i").test(task.prompt)) {

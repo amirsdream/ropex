@@ -234,4 +234,5 @@ export const API_ROUTES = {
   health: "/api/v1/health",
   audit: "/api/v1/audit",
   autoscale: "/api/v1/autoscale",
+  budget: "/api/v1/budget",
 } as const;

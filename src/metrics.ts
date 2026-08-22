@@ -5,6 +5,7 @@
 
 import { healthReport } from "./health.js";
 import { planAutoscale } from "./autoscale.js";
+import { budgetReport } from "./budget.js";
 import { queueSummary } from "./queue.js";
 import type { ClusterState } from "./types.js";
 
@@ -33,6 +34,8 @@ export type MetricsSnapshot = {
   revision: number;
   audit_events: number;
   autoscale_recommendations: number;
+  budget_spent: number;
+  budget_limit: number;
   backlog_oldest_age_ms: number;
   backlog_slo_breached: number;
 };
@@ -66,6 +69,14 @@ export function metricsSnapshot(state: ClusterState): MetricsSnapshot {
     revision: state.revision,
     audit_events: state.audit?.length ?? 0,
     autoscale_recommendations: planAutoscale(state).recommendations.length,
+    budget_spent: (() => {
+      const rows = budgetReport(state);
+      return rows.reduce((n, r) => n + r.spent, 0);
+    })(),
+    budget_limit: (() => {
+      const rows = budgetReport(state);
+      return rows.reduce((n, r) => n + r.limit, 0);
+    })(),
     backlog_oldest_age_ms: health.backlog.oldestPendingAgeMs ?? 0,
     backlog_slo_breached: health.backlog.breached ? 1 : 0,
   };
@@ -123,6 +134,12 @@ export function metricsPrometheus(state: ClusterState): string {
     "# HELP ropex_autoscale_recommendations Pending GitOps scale recommendations.",
     "# TYPE ropex_autoscale_recommendations gauge",
     `ropex_autoscale_recommendations ${m.autoscale_recommendations}`,
+    "# HELP ropex_budget_spent Task units spent in active budget windows.",
+    "# TYPE ropex_budget_spent gauge",
+    `ropex_budget_spent ${m.budget_spent}`,
+    "# HELP ropex_budget_limit Task unit budget limit (sum of active scopes).",
+    "# TYPE ropex_budget_limit gauge",
+    `ropex_budget_limit ${m.budget_limit}`,
     "# HELP ropex_backlog_oldest_age_ms Age of oldest pending task (ms).",
     "# TYPE ropex_backlog_oldest_age_ms gauge",
     `ropex_backlog_oldest_age_ms ${m.backlog_oldest_age_ms}`,
