@@ -24,7 +24,8 @@
       </p>
       <div class="cta-row">
         <a class="cta" href="#memory">Memory stream</a>
-        <a class="cta cta-ghost" href="#workers">Workers</a>
+        <a class="cta cta-ghost" href="#health">Health</a>
+        <a class="cta cta-ghost" href="#drift">Drift</a>
       </div>
       <dl class="pulse" id="pulse" aria-label="Cluster pulse"></dl>
     </header>
@@ -46,6 +47,123 @@
         <h2>Workers</h2>
         <p class="section-lede">Immutable image digests. Learned skills ride as volume.</p>
         <div class="worker-rail" id="worker-rail"></div>
+      </section>
+
+      <section id="health" class="section">
+        <h2>Health</h2>
+        <p class="section-lede">Worker probes and backlog SLO — the control plane pulse.</p>
+        <div id="health-panel" class="worker-rail"></div>
+      </section>
+
+      <section id="hygiene" class="section">
+        <h2>Hygiene + pool</h2>
+        <p class="section-lede">Worker heatmap, queue depth, webhook idempotency, reclaim / GC / age.</p>
+        <div id="hygiene-rail" class="worker-rail"></div>
+        <div id="pool-heatmap" class="heatmap" aria-label="Worker pool heatmap"></div>
+        <div id="queue-depth" class="depth-bars" aria-label="Queue depth bars"></div>
+      </section>
+
+      <section id="drift" class="section">
+        <h2>Drift</h2>
+        <p class="section-lede">Live workers vs desired digests, replicas, labels, and taints.</p>
+        <div id="drift-rail" class="worker-rail"></div>
+      </section>
+
+      <section id="fairness" class="section">
+        <h2>Fairness</h2>
+        <p class="section-lede">Claim-wait latency and LRU skew across the worker pool.</p>
+        <div id="fairness-rail" class="worker-rail"></div>
+      </section>
+
+      <section id="budget" class="section">
+        <h2>Budget</h2>
+        <p class="section-lede">Policy task-unit spend windows — exhausted scopes deny enqueue.</p>
+        <div id="budget-rail" class="worker-rail"></div>
+      </section>
+
+      <section id="canary" class="section">
+        <h2>Canary</h2>
+        <p class="section-lede">Live digest coverage vs desired agent images during rolls.</p>
+        <div id="canary-rail" class="worker-rail"></div>
+      </section>
+
+      <section id="skills" class="section">
+        <h2>Skills</h2>
+        <p class="section-lede">Registry versions and fleet promote coverage.</p>
+        <div id="skills-rail" class="worker-rail"></div>
+      </section>
+
+      <section id="policy" class="section">
+        <h2>Policy simulate</h2>
+        <p class="section-lede">Fleet-wide dry-run of admission and approval gates.</p>
+        <div id="policy-rail" class="worker-rail"></div>
+      </section>
+
+      <section id="outbound" class="section">
+        <h2>Outbound</h2>
+        <p class="section-lede">Stubbed webhook POSTs — live HTTPS fails closed.</p>
+        <div id="outbound-rail" class="worker-rail"></div>
+      </section>
+
+      <section id="clone" class="section">
+        <h2>Clone</h2>
+        <p class="section-lede">GitRepo materialization progress — remote stays fail-closed.</p>
+        <div id="clone-rail" class="worker-rail"></div>
+      </section>
+
+      <section id="autoscale" class="section">
+        <h2>Autoscale</h2>
+        <p class="section-lede">GitOps replica recommendations from backlog — commit the YAML.</p>
+        <div id="autoscale-rail" class="worker-rail"></div>
+      </section>
+
+      <section id="queue" class="section">
+        <h2>Queue</h2>
+        <p class="section-lede">Webhook and CLI work waiting for idle workers. Drain with bounded concurrency.</p>
+        <div id="drain-controls" class="worker-rail"></div>
+        <div class="worker-rail" id="queue-rail"></div>
+      </section>
+
+      <section id="affinity" class="section">
+        <h2>Affinity</h2>
+        <p class="section-lede">Sticky worker bindings for agent:repo until TTL expiry.</p>
+        <div id="affinity-rail" class="worker-rail"></div>
+      </section>
+
+      <section id="dsh" class="section">
+        <h2>DeepSeek harness</h2>
+        <p class="section-lede">Profile packs today; live @deepseek-ai/dsh scaffold stays fail-closed.</p>
+        <div id="dsh-rail" class="worker-rail"></div>
+      </section>
+
+      <section id="journal" class="section">
+        <h2>Deliveries</h2>
+        <p class="section-lede">Append-only journal of comments, checks, and pull requests.</p>
+        <div class="memory-stream" id="journal-stream"></div>
+      </section>
+
+      <section id="approvals" class="section">
+        <h2>Approvals</h2>
+        <p class="section-lede">Policy-gated tools waiting for approve or reject.</p>
+        <div class="worker-rail" id="approvals-rail"></div>
+      </section>
+
+      <section id="trajectories" class="section">
+        <h2>Trajectories</h2>
+        <p class="section-lede">Recent Hermes→DeepSeek runs for export and learning.</p>
+        <div class="worker-rail" id="trajectories-rail"></div>
+      </section>
+
+      <section id="ratelimits" class="section">
+        <h2>Rate limits</h2>
+        <p class="section-lede">Sliding-window webhook buckets — saturated keys deny ingest.</p>
+        <div class="worker-rail" id="ratelimits-rail"></div>
+      </section>
+
+      <section id="audit" class="section">
+        <h2>Audit</h2>
+        <p class="section-lede">Event-sourced control-plane trail — reconcile, queue, leases.</p>
+        <div class="memory-stream" id="audit-stream"></div>
       </section>
 
       <section id="surfaces" class="section surfaces">

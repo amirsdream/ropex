@@ -21,23 +21,28 @@ Ropex is the missing control plane that multiplies those two runtimes across Git
 ```mermaid
 flowchart TB
   subgraph git["Git — desired state"]
-    M["Agent / Fleet / Policy YAML"]
+    M["Agent / Fleet / Policy / GitRepo YAML"]
   end
 
   subgraph gh["GitHub — work queue"]
     E["issues · PRs · checks"]
+    WH["HMAC webhook + rate limit"]
   end
 
   subgraph cp["Ropex control plane"]
-    C["Controller\nexpand · cap · reconcile"]
+    C["Controller\nexpand · cap · reconcile · canary"]
+    Q["Queue\npause · DLQ · age · affinity"]
+    T["Tick\nreclaim · drain · sync · GC"]
     S[".ropex/state.json"]
     C --> S
+    Q --> S
+    T --> S
   end
 
   subgraph workers["Immutable workers"]
     W1["triage:0\nimage=a1b2…"]
     W2["builder:3\nimage=c3d4…"]
-    W3["… N replicas"]
+    W3["… N replicas\nplacement · cordon"]
   end
 
   subgraph wf["Per-task workflow"]
@@ -49,28 +54,35 @@ flowchart TB
   end
 
   M --> C
-  E --> C
+  E --> WH --> Q
   C -->|"stamp imageDigest"| workers
+  Q -->|"claim idle"| workers
+  T -->|"bounded drain"| workers
   workers --> wf
   wf -->|"comment / check / PR"| E
 ```
 
-Scale is a git commit: change `spec.replicas` from `20` to `2000`. The controller creates workers. Policy caps blast radius. No dashboard required.
+Scale is a git commit: change `spec.replicas` from `20` to `2000`. The controller creates workers. Policy caps blast radius. Operators pause, drain, and retry from CLI or `ropex ui`.
 
 ## Quick start
 
 ```sh
 npm install
 npm test
+npx tsx src/cli.ts demo --root /tmp/ropex-demo
 npx tsx src/cli.ts apply fleets/examples
 npx tsx src/cli.ts status
-npx tsx src/cli.ts github simulate issues.opened --repo acme/app --title "login is broken"
-npx tsx src/cli.ts run --agent triage "summarize open bugs"
-npx tsx src/cli.ts memory
+npx tsx src/cli.ts webhook simulate issues.opened --repo acme/app --title "login is broken" --secret test
+npx tsx src/cli.ts drain --concurrency 2
+npx tsx src/cli.ts metrics --prometheus
+npx tsx src/cli.ts health
+npx tsx src/cli.ts trajectories --jsonl
 npx tsx src/cli.ts ui
 ```
 
 `apply` reads YAML, expands fleets, applies policy, and writes `.ropex/state.json`. That local store is a stand-in for a real cluster; the contract is the same.
+
+Soul / skills / harness edits change the **agent image digest** → reconcile retires the old worker and boots a new one (hot-reload via immutable roll, not in-place mutate).
 
 ## Manifests
 
@@ -136,7 +148,48 @@ See [architecture](./docs/architecture.md) for the Kubernetes analogy, image dig
 
 ## Status
 
-Immutable workers (agent image digests) + Hermes/DeepSeek workflow stages + scoped memory sharing + control-plane UI are in the tree. Still a local prototype: simulated tools, no live DeepSeek or Hermes process yet.
+Control plane today (local, network-free tests):
+
+| Capability | Status |
+| --- | --- |
+| Immutable workers + image digests | shipped |
+| Hermes plan / learn + DeepSeek execute / deliver | shipped |
+| Scoped shared memory + contracts + UI | shipped |
+| Worktrees, fair queue, concurrent drain | shipped |
+| HMAC webhooks + rate limit | shipped |
+| Policy admission + fan-out | shipped |
+| Journal, skills, metrics, trajectories | shipped |
+| Worker health probes + backlog SLO | shipped |
+| Dead-letter + retry queue | shipped |
+| Claim leases + reclaim | shipped |
+| Event-sourced audit trail | shipped |
+| Multi-repo GitRepo sync + health UI | shipped (no remote clone yet) |
+| Worker-pool autoscaler (GitOps YAML) | shipped |
+| Control-plane tick + clone contract | shipped (remote clone stub) |
+| Policy budget / cost accounting | shipped |
+| Canary digest rolls + snapshots | shipped |
+| Outbound webhook stub + cordon/evict | shipped |
+| Placement require/prefer + taints | shipped |
+| Config drift detector | shipped |
+| Queue latency + fairness metrics | shipped |
+| Drift + fairness UI panels | shipped |
+| Skill promote / versions CLI | shipped |
+| Workflow stage trajectory metrics | shipped |
+| Chaos invariants + budget/policy UI | shipped |
+| Clone progress + outbound UI | shipped |
+| Worktree GC + webhook idempotency + priority aging | shipped |
+| Queue pause/resume + sticky affinity + tick hooks | shipped |
+| Pause/affinity/dsh UI + live scaffold docs | shipped |
+| Snapshot restore + hermes seam + approval UI | shipped |
+| Trajectory + rate-limit UI / metrics | shipped |
+| Drain concurrency preference + UI | shipped |
+| Operator pause/retry + policy sim UI | shipped |
+| Hygiene API + worker pool heatmap | shipped |
+| Skills promote UI + canary + budget alerts | shipped |
+| GitRepo local watch/sync | shipped (no remote clone yet) |
+| Live `@deepseek-ai/dsh` / Hermes process | not yet |
+
+See [architecture](./docs/architecture.md), [API](./docs/api.md), and [ideas](./docs/ideas.md).
 
 ## License
 

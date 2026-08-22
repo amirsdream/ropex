@@ -130,3 +130,34 @@ function slugify(text: string): string {
 }
 
 export type { HermesPlan };
+
+/** Checklist for wiring a live hermes-agent process (network-free until wired). */
+export type LiveHermesScaffold = {
+  liveReady: boolean;
+  packageName: string;
+  summary: string;
+  steps: string[];
+  env: string[];
+};
+
+/**
+ * Describe how to attach a real hermes-agent runtime without importing it.
+ * createHermes() stays the offline brain; live is a future process/RPC seam.
+ */
+export function liveHermesScaffold(): LiveHermesScaffold {
+  return {
+    liveReady: false,
+    packageName: "hermes-agent",
+    summary:
+      "Live hermes-agent not wired — createHermes() is the offline brain; process/RPC seam TBD.",
+    steps: [
+      "Optional peer: hermes-agent (never required by tests).",
+      "Implement createLiveHermes(spec) returning HermesContract over RPC/stdio.",
+      "Load SOUL.md from hermes.soul path into the live process identity.",
+      "Bridge MemoryPort to SharedMemoryStore (same scopes as offline).",
+      "Keep createHermes() as the default for CI and network-free demos.",
+      "Prove plan→learn loop parity with simulated brain in sandbox.",
+    ],
+    env: ["ROPEX_HERMES_BACKEND=simulated|live", "HERMES_AGENT_BIN=(live only)"],
+  };
+}

@@ -8,8 +8,19 @@ import {
   maxReplicas,
   parseManifests,
 } from "./spec.js";
-import { expandWorkers } from "./runtime.js";
+import { expandWorkers, runTask } from "./runtime.js";
 import { normalizeFact } from "./memory.js";
+import { ensureAudit, recordAudit } from "./audit.js";
+import { emptyMetrics, ensureQueue } from "./queue.js";
+import { ensureJournal } from "./journal.js";
+import { ensureOutbound } from "./deliver.js";
+import { ensureSkillRegistry } from "./skills.js";
+import { ensureTrajectories } from "./trajectory.js";
+import { ensureRateLimits } from "./ratelimit.js";
+import { ensureApprovals } from "./approval.js";
+import { ensureBudgets } from "./budget.js";
+import { applyWorktrees } from "./worktree.js";
+import { selectCanaryRolls, type RolloutOptions } from "./canary.js";
 import type { ClusterState, Manifest, ReconcilePlan, SharedMemoryFact, Worker } from "./types.js";
 
 export const STATE_FILE = ".ropex/state.json";
@@ -24,6 +35,17 @@ export function emptyState(source = ""): ClusterState {
     policies: [],
     memory: [],
     skills: [],
+    skillRegistry: [],
+    deliveries: [],
+    outbound: [],
+    trajectories: [],
+    rateLimits: [],
+    approvals: [],
+    queue: [],
+    metrics: emptyMetrics(),
+    audit: [],
+    gitRepoStatus: [],
+    budgets: [],
   };
 }
 
@@ -34,6 +56,16 @@ export function loadState(root: string): ClusterState {
     state.memory = (state.memory ?? []).map((f) =>
       normalizeFact(f as SharedMemoryFact),
     );
+    ensureQueue(state);
+    ensureJournal(state);
+    ensureOutbound(state);
+    ensureSkillRegistry(state);
+    ensureTrajectories(state);
+    ensureRateLimits(state);
+    ensureApprovals(state);
+    ensureAudit(state);
+    if (!state.gitRepoStatus) state.gitRepoStatus = [];
+    ensureBudgets(state);
     return state;
   } catch {
     return emptyState();
@@ -49,15 +81,17 @@ export function saveState(root: string, state: ClusterState): void {
 /**
  * Kubernetes-style reconcile: workers are immutable for a given agent image digest.
  * Spec/code change → new digest → retire old worker + create replacement (no in-place mutate).
+ * With `rollout.strategy: "canary"`, only `canaryCount` mismatch slots per agent roll each pass.
  */
 export function planReconcile(
   current: ClusterState,
   manifests: Manifest[],
   source: string,
-  opts: { root?: string } = {},
+  opts: { root?: string; rollout?: RolloutOptions } = {},
 ): {
   next: ClusterState;
   plan: ReconcilePlan;
+  canaryHeld: number;
 } {
   const policies = collectPolicies(manifests);
   const gitRepos = collectGitRepos(manifests);
@@ -74,31 +108,57 @@ export function planReconcile(
   const create: Worker[] = [];
   const update: Worker[] = [];
   const retire: Worker[] = [];
+  const mismatches: Array<{ prev: Worker; next: Worker }> = [];
 
   for (const next of desiredWorkers) {
     const prev = currentById.get(next.id);
     if (!prev) {
-      create.push({ ...next, status: "running" });
+      create.push({ ...next, status: "idle" });
       continue;
     }
     if (prev.imageDigest !== next.imageDigest) {
-      // Immutable roll: old image retires, new image boots under the same slot id.
-      retire.push({ ...prev, status: "retired" });
-      create.push({
-        ...next,
-        status: "running",
-        // Carry learned skills across rolls (volume), not image fields.
-        skills: [...new Set([...next.skills, ...prev.skills])],
-      });
+      mismatches.push({ prev, next });
       continue;
     }
     // Same image: keep identity; only lifecycle status may change.
     update.push({
       ...prev,
-      status: prev.status === "failed" ? "failed" : prev.status === "idle" ? "idle" : "running",
+      status:
+        prev.status === "failed"
+          ? "failed"
+          : prev.status === "running"
+            ? "running"
+            : prev.status === "idle"
+              ? "idle"
+              : "idle",
       skills: [...new Set([...prev.skills, ...next.skills])],
+      worktree: prev.worktree,
+      lastTaskAt: prev.lastTaskAt,
+      labels: next.labels ? { ...next.labels } : prev.labels,
+      taints: next.taints ? next.taints.map((t) => ({ ...t })) : prev.taints,
+      cordoned: prev.cordoned,
     });
   }
+
+  const { roll, hold } = selectCanaryRolls(mismatches, opts.rollout);
+  for (const m of roll) {
+    retire.push({ ...m.prev, status: "retired" });
+    create.push({
+      ...m.next,
+      status: "idle",
+      skills: [...new Set([...m.next.skills, ...m.prev.skills])],
+    });
+  }
+  for (const m of hold) {
+    // Keep old digest until a later canary pass; still counts as live capacity.
+    update.push({
+      ...m.prev,
+      skills: [...new Set([...m.prev.skills, ...m.next.skills])],
+      worktree: m.prev.worktree,
+      lastTaskAt: m.prev.lastTaskAt,
+    });
+  }
+
   for (const prev of current.workers) {
     if (prev.status === "retired") continue;
     if (!desiredIds.has(prev.id)) {
@@ -109,6 +169,11 @@ export function planReconcile(
   const retiredHistory = current.workers.filter((w) => w.status === "retired");
   const workers = [...create, ...update, ...retiredHistory, ...retire];
 
+  const plan: ReconcilePlan = { create, retire, update, capped };
+  if (opts.root) {
+    applyWorktrees(opts.root, plan);
+  }
+
   const next: ClusterState = {
     ...current,
     revision: current.revision + 1,
@@ -117,23 +182,53 @@ export function planReconcile(
     workers,
     gitRepos,
     policies,
+    queue: current.queue ?? [],
+    metrics: current.metrics ?? emptyMetrics(),
+    skillRegistry: current.skillRegistry ?? [],
+    deliveries: current.deliveries ?? [],
+    outbound: current.outbound ?? [],
+    trajectories: current.trajectories ?? [],
+    rateLimits: current.rateLimits ?? [],
+    approvals: current.approvals ?? [],
+    audit: current.audit ?? [],
+    gitRepoStatus: current.gitRepoStatus ?? [],
+    budgets: current.budgets ?? [],
     lastReconcile: new Date().toISOString(),
   };
 
-  return { next, plan: { create, retire, update, capped } };
+  recordAudit(next, {
+    kind: "reconcile",
+    message: `create=${create.length} retire=${retire.length} update=${update.length} capped=${capped.length} canaryHeld=${hold.length}`,
+    meta: {
+      create: create.length,
+      retire: retire.length,
+      update: update.length,
+      capped: capped.length,
+      canaryHeld: hold.length,
+      strategy: opts.rollout?.strategy ?? "recreate",
+      source,
+    },
+  });
+
+  return { next, plan, canaryHeld: hold.length };
 }
 
 export function applyManifestText(
   root: string,
   raw: string,
   source: string,
+  opts: { rollout?: RolloutOptions } = {},
 ): {
   state: ClusterState;
   plan: ReconcilePlan;
+  canaryHeld: number;
 } {
   const manifests = parseManifests(raw);
   const current = loadState(root);
-  const { next, plan } = planReconcile(current, manifests, source, { root });
+  const { next, plan, canaryHeld } = planReconcile(current, manifests, source, {
+    root,
+    rollout: opts.rollout,
+  });
   saveState(root, next);
-  return { state: next, plan };
+  return { state: next, plan, canaryHeld };
 }

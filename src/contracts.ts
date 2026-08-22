@@ -119,6 +119,7 @@ export type WorkerView = {
   plugins: string[];
   skills: string[];
   memoryReadable: number;
+  worktree?: string;
 };
 
 export type FleetView = {
@@ -163,6 +164,8 @@ export type ControlPlaneView = {
     fleets: number;
     memoryFacts: number;
     skills: number;
+    queuePending: number;
+    tasksCompleted: number;
   };
   workers: WorkerView[];
   fleets: FleetView[];
@@ -171,6 +174,214 @@ export type ControlPlaneView = {
   harness: HarnessSurfaceView[];
   skills: LearnedSkill[];
   workflow: Array<{ id: string; owner: string; purpose: string }>;
+  queue: Array<{
+    id: string;
+    status: string;
+    agent: string;
+    source: string;
+    prompt: string;
+    priority?: number;
+    attempts?: number;
+    nextRetryAt?: string;
+    error?: string;
+  }>;
+  deliveries: Array<{ id: string; kind: string; agent: string; body: string; at: string; repo?: string }>;
+  metrics: {
+    tasksCompleted: number;
+    tasksFailed: number;
+    queuePending: number;
+    workersIdle: number;
+    deliveries: number;
+    workersUnhealthy: number;
+    backlogSloBreached: boolean;
+  };
+  approvals: Array<{ id: string; status: string; tool: string; agent: string; taskId: string; reason: string }>;
+  audit: Array<{ id: string; at: string; kind: string; message: string; agent?: string; taskId?: string }>;
+  health: {
+    ok: boolean;
+    unhealthy: number;
+    backlogBreached: boolean;
+    backlogPending: number;
+    oldestPendingAgeMs: number | null;
+    workers: Array<{ id: string; status: string; healthy: boolean; detail: string }>;
+  };
+  gitRepos: Array<{ name: string; path: string; ok: boolean; lastSyncedAt?: string; reason?: string }>;
+  autoscale: {
+    backlogBreached: boolean;
+    policyCap: number;
+    recommendations: Array<{
+      kind: string;
+      name: string;
+      currentReplicas: number;
+      recommendedReplicas: number;
+      delta: number;
+      reason: string;
+    }>;
+  };
+  drift: {
+    ok: boolean;
+    liveWorkers: number;
+    desiredWorkers: number;
+    summary: Record<string, number>;
+    findings: Array<{ kind: string; detail: string; workerId?: string; agent?: string }>;
+  };
+  fairness: {
+    claimWaitP50Ms: number;
+    claimWaitP95Ms: number;
+    claimWaitMaxMs: number;
+    runDurationP50Ms: number;
+    runDurationP95Ms: number;
+    maxIdleSkewMs: number;
+    claimCountCv: number;
+    pendingByAgent: Record<string, number>;
+    topWorkers: Array<{ workerId: string; agent: string; claims: number; idleSkewMs: number }>;
+  };
+  budget: {
+    rows: Array<{
+      key: string;
+      scope: string;
+      spent: number;
+      limit: number;
+      remaining: number;
+      exhausted: boolean;
+      level?: string;
+      remainingPct?: number;
+    }>;
+    alerts: number;
+  };
+  canary: {
+    ok: boolean;
+    matched: number;
+    mismatched: number;
+    total: number;
+    pctMatched: number;
+    agents: Array<{
+      agent: string;
+      desiredDigest: string;
+      matched: number;
+      mismatched: number;
+      total: number;
+      pctMatched: number;
+    }>;
+  };
+  skillCatalog: Array<{
+    name: string;
+    version: number;
+    originAgent: string;
+    sharedWith: string[];
+    summary: string;
+    at: string;
+    versions: number;
+    coverage: number;
+  }>;
+  policySim: {
+    deniedTasks: number;
+    deniedCalls: number;
+    approvalCalls: number;
+    rows: Array<{
+      agent: string;
+      prompt: string;
+      taskDenied: boolean;
+      callsDenied: string[];
+      callsNeedApproval: string[];
+    }>;
+  };
+  outbound: {
+    simulated: number;
+    rejected: number;
+    recent: Array<{
+      id: string;
+      status: string;
+      url: string;
+      agent?: string;
+      deliveryId?: string;
+      reason?: string;
+      at: string;
+    }>;
+  };
+  clone: {
+    repos: number;
+    ok: number;
+    blocked: number;
+    rows: Array<{
+      name: string;
+      path: string;
+      ok: boolean;
+      reason?: string;
+      cloneBackend?: string;
+      clonePhase?: string;
+      cloneProgressPct?: number;
+      lastClonedAt?: string;
+    }>;
+  };
+  queuePaused: boolean;
+  webhookDuplicates: number;
+  affinity: {
+    active: number;
+    bindings: Array<{ key: string; workerId: string; agent: string; expiresAt: string }>;
+  };
+  dsh: {
+    backend: "simulated" | "live";
+    profiles: Array<{ profile: string; loop: string; plugins: string[]; description: string }>;
+    liveReady: boolean;
+    scaffoldHint: string;
+  };
+  hermesLive: {
+    liveReady: boolean;
+    scaffoldHint: string;
+    steps: string[];
+  };
+  trajectories: {
+    total: number;
+    recent: Array<{
+      id: string;
+      at: string;
+      agent: string;
+      workerId: string;
+      taskId: string;
+      steps: number;
+      stages: string[];
+      output: string;
+    }>;
+  };
+  rateLimits: {
+    limit: number;
+    windowMs: number;
+    buckets: number;
+    nearLimit: number;
+    rows: Array<{
+      key: string;
+      count: number;
+      remaining: number;
+      limit: number;
+      windowMs: number;
+      windowStartedAt: string;
+      saturated: boolean;
+    }>;
+  };
+  drain: {
+    concurrency: number;
+    maxConcurrency: number;
+    paused: boolean;
+    pending: number;
+    claimed: number;
+    idleWorkers: number;
+    runningWorkers: number;
+  };
+  hygiene: {
+    pool: Array<{
+      agent: string;
+      idle: number;
+      running: number;
+      failed: number;
+      cordoned: number;
+      total: number;
+    }>;
+    queueDepth: Array<{ key: string; count: number; kind: string }>;
+    webhook: { seen: number; duplicates: number; cap: number };
+    leasesReclaimedTotal: number;
+    summary: { pending: number; claimed: number; dead: number; waitingRetry: number };
+  };
 };
 
 /** Stable API routes the UI and CLI share. */
@@ -178,5 +389,24 @@ export const API_ROUTES = {
   view: "/api/v1/view",
   memory: "/api/v1/memory",
   workers: "/api/v1/workers",
+  queue: "/api/v1/queue",
+  metrics: "/api/v1/metrics",
+  deliveries: "/api/v1/deliveries",
+  skills: "/api/v1/skills",
+  canary: "/api/v1/canary",
+  trajectories: "/api/v1/trajectories",
+  approvals: "/api/v1/approvals",
   health: "/api/v1/health",
+  audit: "/api/v1/audit",
+  autoscale: "/api/v1/autoscale",
+  budget: "/api/v1/budget",
+  outbound: "/api/v1/outbound",
+  drift: "/api/v1/drift",
+  fairness: "/api/v1/fairness",
+  clone: "/api/v1/clone",
+  affinity: "/api/v1/affinity",
+  ratelimits: "/api/v1/ratelimits",
+  drain: "/api/v1/drain",
+  policySim: "/api/v1/policy/simulate",
+  hygiene: "/api/v1/hygiene",
 } as const;

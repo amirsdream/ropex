@@ -1,8 +1,14 @@
-import { createHarness, type HarnessLoop } from "./harness.js";
+import { admitCalls } from "./admission.js";
+import { requestApprovals } from "./approval.js";
+import { bootDsh } from "./dsh.js";
 import { createHermes } from "./hermes.js";
 import { buildAgentImage, type ImageResolveOptions } from "./image.js";
+import { recordDelivery } from "./journal.js";
 import { SharedMemoryStore } from "./memory.js";
+import { registerSkill, skillsForAgent } from "./skills.js";
+import { recordTrajectory } from "./trajectory.js";
 import { composeWorkflow } from "./workflow.js";
+import { ensureWorktree } from "./worktree.js";
 import type {
   ClusterState,
   DesiredAgent,
@@ -13,11 +19,16 @@ import type {
   Worker,
 } from "./types.js";
 
+export type RunTaskOptions = ImageResolveOptions & {
+  /** Override worktree root (defaults to opts.root or cwd). */
+  worktreeRoot?: string;
+};
+
 export async function runTask(
   state: ClusterState,
   worker: Worker,
   task: Task,
-  opts: ImageResolveOptions = {},
+  opts: RunTaskOptions = {},
 ): Promise<RunResult> {
   const agent = state.desired.find((a) => a.metadata.name === worker.agent);
   if (!agent) {
@@ -31,40 +42,77 @@ export async function runTask(
     );
   }
 
+  const root = opts.worktreeRoot ?? opts.root ?? process.cwd();
+  const worktree = worker.worktree ?? ensureWorktree(root, worker);
+  worker.worktree = worktree;
+
   const policy = effectivePolicy(state.policies);
   const store = SharedMemoryStore.fromState(state);
+  const registrySkills = skillsForAgent(state, worker.agent).map((s) => s.name);
   const hermes = createHermes(agent.spec, {
     store,
     worker,
     skills: [
       ...workflow.brain.skills,
       ...worker.skills,
+      ...registrySkills,
       ...state.skills.filter((s) => s.agent === worker.agent).map((s) => s.name),
     ],
   });
-  const kernel = await createHarness(agent.spec, {
+
+  // DeepSeek adapter (simulated profile pack; live stub until @deepseek-ai/dsh)
+  const dsh = await bootDsh(agent.spec, {
     ...policy,
     hermes,
     memory: hermes.port,
+    cwd: worktree,
+    backend: "simulated",
   });
 
   // compose + plan (Hermes)
   const planned = hermes.plan(task);
 
-  // execute (DeepSeek)
-  const loop = kernel.context().get<HarnessLoop>("loop");
-  const observations = await loop.run(planned.calls);
+  // policy admission — deny fails closed; approval-gated tools pause for approve/reject
+  const admission = admitCalls(state.policies, planned.calls, state, {
+    taskId: task.id,
+    agent: worker.agent,
+  });
+  if (admission.needsApproval.length) {
+    requestApprovals(state, {
+      taskId: task.id,
+      agent: worker.agent,
+      workerId: worker.id,
+      tools: admission.needsApproval.map((n) => ({
+        name: n.name,
+        reason: n.reason,
+        input: n.input,
+      })),
+    });
+  }
+  const { steps: execSteps } = await dsh.execute({
+    thoughts: planned.thoughts,
+    calls: admission.allowed,
+  });
 
-  const steps: TrajectoryStep[] = planned.calls.map((call, i) => ({
-    thought: planned.thoughts[Math.min(i, planned.thoughts.length - 1)] ?? "",
-    calls: [{ plugin: "tools", name: call.name, input: call.input }],
-    observation: observations[i] ?? "",
-  }));
+  const gatedSteps: TrajectoryStep[] = [
+    ...admission.denied.map((d) => ({
+      thought: "policy admission",
+      calls: [{ plugin: "admission", name: d.name, input: { status: "deny" } }],
+      observation: d.reason,
+    })),
+    ...admission.needsApproval.map((d) => ({
+      thought: "policy admission",
+      calls: [{ plugin: "admission", name: d.name, input: { status: "approval" } }],
+      observation: d.reason,
+    })),
+    ...execSteps,
+  ];
+  const steps = gatedSteps;
 
   // deliver (DeepSeek)
   let delivery: RunResult["delivery"];
   try {
-    const d = kernel.context().get<{
+    const d = dsh.kernel.context().get<{
       kind: "comment" | "pull_request" | "check";
       send: (body: string) => { kind: "comment" | "pull_request" | "check"; body: string };
     }>("delivery");
@@ -78,6 +126,7 @@ export async function runTask(
   if (learned) {
     state.skills.push(learned);
     worker.skills = [...new Set([...worker.skills, learned.name])];
+    registerSkill(state, learned, `via ${dsh.pack.profile} pack`);
   }
   hermes.remember({
     id: `${task.id}-done`,
@@ -90,8 +139,7 @@ export async function runTask(
     tags: ["task-complete"],
   });
 
-  worker.status = "idle";
-  return {
+  const result: RunResult = {
     task,
     worker,
     imageDigest: worker.imageDigest,
@@ -101,7 +149,14 @@ export async function runTask(
     delivery,
     learned,
     output: summarize(task, steps),
+    worktree,
   };
+  recordDelivery(state, result);
+  recordTrajectory(state, result);
+
+  worker.status = "idle";
+  worker.lastTaskAt = new Date().toISOString();
+  return result;
 }
 
 export function workerFromDesired(
@@ -110,6 +165,8 @@ export function workerFromDesired(
   opts: ImageResolveOptions = {},
 ): Worker {
   const image = buildAgentImage(agent, opts);
+  const labels = agent.metadata.labels ? { ...agent.metadata.labels } : undefined;
+  const taints = agent.spec.placement?.taints?.map((t) => ({ ...t }));
   return {
     id: `${agent.metadata.name}:${replica}`,
     agent: agent.metadata.name,
@@ -121,6 +178,8 @@ export function workerFromDesired(
     plugins: [...image.harness.plugins],
     skills: [...image.hermes.skills],
     model: image.harness.model ?? "deepseek-v4-flash",
+    labels,
+    taints: taints?.length ? taints : undefined,
   };
 }
 

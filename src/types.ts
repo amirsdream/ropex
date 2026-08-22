@@ -51,12 +51,28 @@ export type GithubSpec = {
   deliver: "comment" | "pull_request" | "check";
 };
 
+export type PlacementSpec = {
+  /** Hard: worker labels must include these. */
+  require?: Record<string, string>;
+  /** Soft: prefer workers whose labels match. */
+  prefer?: Record<string, string>;
+  /**
+   * Taints on the agent/worker slot (NoSchedule = tasks without matching
+   * toleration cannot claim this worker).
+   */
+  taints?: Array<{ key: string; effect: "NoSchedule" }>;
+  /** Task/event must tolerate these keys (Exists) or key=value. */
+  tolerations?: Array<{ key: string; operator: "Exists" | "Equal"; value?: string }>;
+};
+
 export type AgentSpec = {
   harness: HarnessSpec;
   hermes: HermesSpec;
   github?: GithubSpec;
   replicas: number;
   selector?: LabelSelector;
+  /** Scheduling constraints for claim / placement. */
+  placement?: PlacementSpec;
 };
 
 export type Agent = {
@@ -102,6 +118,18 @@ export type Policy = {
       deny: string[];
       requireApproval: string[];
     };
+    /**
+     * Optional task-unit budget. When set, enqueue/spend is gated per scope.
+     * Units are abstract (1 ≈ one minimal task); profile weights apply on charge.
+     */
+    budget?: {
+      /** Max units in the rolling window (required when budget is set). */
+      maxUnits: number;
+      /** Window length in ms (default 1h). */
+      windowMs?: number;
+      /** Scope for the ledger key (default cluster). */
+      scope?: "cluster" | "fleet" | "agent";
+    };
   };
 };
 
@@ -126,6 +154,16 @@ export type Worker = {
   /** Image skills plus runtime-learned skills (volume-like, not part of digest). */
   skills: string[];
   model: string;
+  /** Isolated sandbox path for fs/shell (sandbox/worktrees/<id>). */
+  worktree?: string;
+  /** Last task finish time — fair scheduling prefers least-recently-used. */
+  lastTaskAt?: string;
+  /** When true, scheduler will not claim this worker (drain/cordon). */
+  cordoned?: boolean;
+  /** Scheduling labels (from agent metadata / fleet template). */
+  labels?: Record<string, string>;
+  /** NoSchedule taints inherited from Agent.spec.placement.taints. */
+  taints?: Array<{ key: string; effect: "NoSchedule" }>;
 };
 
 export type MemoryFact = {
@@ -151,6 +189,116 @@ export type LearnedSkill = {
   at: string;
 };
 
+/** Cluster-wide skill catalog entry (versioned, shareable across agents). */
+export type SkillRecord = {
+  name: string;
+  version: number;
+  /** Owning agent that first learned it; may be shared to others. */
+  originAgent: string;
+  fromTask: string;
+  at: string;
+  /** Agents allowed to load this skill (empty = origin only). */
+  sharedWith: string[];
+  /** Short recipe / description distilled from the trajectory. */
+  summary: string;
+};
+
+/** Append-only delivery audit log (git-native delivery trail). */
+export type DeliveryRecord = {
+  id: string;
+  at: string;
+  kind: "comment" | "pull_request" | "check";
+  body: string;
+  workerId: string;
+  agent: string;
+  taskId: string;
+  imageDigest: string;
+  repo?: string;
+  number?: number;
+};
+
+/** Outbound webhook POST intent (network fail-closed until live transport). */
+export type OutboundDelivery = {
+  id: string;
+  at: string;
+  url: string;
+  method: "POST";
+  headers: Record<string, string>;
+  body: string;
+  /** simulated = recorded locally; rejected = live transport not wired / bad URL. */
+  status: "simulated" | "rejected";
+  reason?: string;
+  deliveryId?: string;
+  agent?: string;
+  taskId?: string;
+};
+
+/** Persisted Hermes→DeepSeek trajectory for learning / export. */
+export type TrajectoryRecord = {
+  id: string;
+  at: string;
+  taskId: string;
+  agent: string;
+  workerId: string;
+  imageDigest: string;
+  plan: string[];
+  steps: TrajectoryStep[];
+  output: string;
+  /** Workflow stage ids completed for this run (compose→learn). */
+  stages?: Array<"compose" | "plan" | "execute" | "deliver" | "learn">;
+};
+
+/** Sliding-window webhook rate-limit counters (per delivery key / repo). */
+export type RateLimitBucket = {
+  key: string;
+  windowStartedAt: string;
+  count: number;
+  /** Cap applied when this window was opened (defaults assumed if absent). */
+  limit?: number;
+  /** Window length in ms when opened. */
+  windowMs?: number;
+};
+
+/** Human/agent approval for Policy.requireApproval tools. */
+export type ApprovalRequest = {
+  id: string;
+  at: string;
+  status: "pending" | "approved" | "rejected";
+  tool: string;
+  taskId: string;
+  agent: string;
+  workerId: string;
+  reason: string;
+  input?: Record<string, unknown>;
+  decidedAt?: string;
+};
+
+/** Append-only control-plane audit event (event-sourced trail). */
+export type AuditKind =
+  | "reconcile"
+  | "enqueue"
+  | "claim"
+  | "complete"
+  | "retry"
+  | "dead"
+  | "reclaim"
+  | "webhook"
+  | "approval"
+  | "sync"
+  | "info";
+
+export type AuditEvent = {
+  id: string;
+  at: string;
+  kind: AuditKind;
+  message: string;
+  agent?: string;
+  workerId?: string;
+  taskId?: string;
+  revision?: number;
+  meta?: Record<string, string | number | boolean | null>;
+};
+
 export type ClusterState = {
   revision: number;
   source: string;
@@ -161,7 +309,70 @@ export type ClusterState = {
   /** Cluster memory bus (scoped facts). Legacy flat MemoryFact rows are upgraded on load. */
   memory: SharedMemoryFact[];
   skills: LearnedSkill[];
+  /** Versioned skill registry (superset of learned skills). */
+  skillRegistry: SkillRecord[];
+  /** Append-only delivery journal. */
+  deliveries: DeliveryRecord[];
+  /** Intended outbound HTTP deliveries (stub until live GitHub App). */
+  outbound: OutboundDelivery[];
+  /** Hermes/DeepSeek trajectories for export and learning. */
+  trajectories: TrajectoryRecord[];
+  /** Webhook rate-limit buckets. */
+  rateLimits: RateLimitBucket[];
+  /** Pending/decided approvals for gated tools. */
+  approvals: ApprovalRequest[];
+  /** Durable work queue (webhook / simulate / CLI). */
+  queue: QueuedTask[];
+  metrics: ClusterMetrics;
+  /** Append-only control-plane audit trail. */
+  audit: AuditEvent[];
+  /** Last sync status per declared GitRepo (multi-repo). */
+  gitRepoStatus: GitRepoSyncStatus[];
+  /** Rolling task-unit spend for Policy.budget. */
+  budgets: BudgetLedger[];
+  /**
+   * Seen GitHub webhook delivery IDs (x-github-delivery) for idempotent ingest.
+   * Soft-capped; oldest dropped first.
+   */
+  webhookSeen?: string[];
+  /** When true, claimPending / drain will not take new work. */
+  queuePaused?: boolean;
+  /** Preferred parallel drain concurrency (bounded; default 1). */
+  drainConcurrency?: number;
+  /** Sticky worker affinity hints (repo/agent → worker) with TTL. */
+  affinity?: AffinityBinding[];
   lastReconcile?: string;
+};
+
+/** Sticky scheduling hint — prefer the same worker for a key until expiry. */
+export type AffinityBinding = {
+  key: string;
+  workerId: string;
+  agent: string;
+  expiresAt: string;
+};
+
+/** Rolling window spend counter for budget admission. */
+export type BudgetLedger = {
+  key: string;
+  windowStartedAt: string;
+  units: number;
+};
+
+/** Per-GitRepo sync stamp for interval-aware multi-repo sync. */
+export type GitRepoSyncStatus = {
+  name: string;
+  path: string;
+  lastSyncedAt?: string;
+  ok: boolean;
+  reason?: string;
+  /** Last clone attempt backend (local-copy | remote-stub). */
+  cloneBackend?: string;
+  /** Last clone phase reached (resolve → done/failed). */
+  clonePhase?: string;
+  /** 0–100 progress from last clone / plan. */
+  cloneProgressPct?: number;
+  lastClonedAt?: string;
 };
 
 export type ReconcilePlan = {
@@ -185,6 +396,45 @@ export type Task = {
   agent: string;
   prompt: string;
   event?: GithubEvent;
+};
+
+/** Work-queue item — GitHub webhook / CLI / simulate all land here. */
+export type QueuedTask = {
+  id: string;
+  task: Task;
+  enqueuedAt: string;
+  status: "pending" | "claimed" | "done" | "failed" | "dead";
+  workerId?: string;
+  /** Set when a worker claims the item (stuck-probe input). */
+  claimedAt?: string;
+  /** Lease deadline — expired claims are reclaimed. */
+  leaseExpiresAt?: string;
+  /** Last heartbeat that extended the lease. */
+  heartbeatAt?: string;
+  attempts: number;
+  source: "cli" | "github" | "webhook";
+  /** Higher runs first (default 0). */
+  priority: number;
+  error?: string;
+  finishedAt?: string;
+  /** Earliest time a pending retry may be claimed again. */
+  nextRetryAt?: string;
+};
+
+export type ClusterMetrics = {
+  tasksCompleted: number;
+  tasksFailed: number;
+  tasksEnqueued: number;
+  /** Soft failures that were re-queued for another attempt. */
+  tasksRetried?: number;
+  /** Tasks that exhausted retries (dead-letter). */
+  tasksDead?: number;
+  /** Claimed tasks reclaimed after lease expiry. */
+  leasesReclaimed?: number;
+  /** Webhook deliveries skipped as duplicates. */
+  webhookDuplicates?: number;
+  lastEventAt?: string;
+  lastDrainAt?: string;
 };
 
 export type ToolCall = {
@@ -211,4 +461,6 @@ export type RunResult = {
   delivery?: { kind: GithubSpec["deliver"]; body: string };
   learned?: LearnedSkill;
   output: string;
+  /** Worktree cwd used for fs/shell isolation. */
+  worktree?: string;
 };

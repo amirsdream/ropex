@@ -25,7 +25,7 @@ export type ImageResolveOptions = {
 
 /** Canonical payload that defines an agent image (order-stable). */
 export function agentImagePayload(agent: DesiredAgent, soulText: string): string {
-  return JSON.stringify({
+  const base: Record<string, unknown> = {
     apiVersion: agent.apiVersion,
     name: agent.metadata.name,
     labels: agent.metadata.labels ?? {},
@@ -54,7 +54,16 @@ export function agentImagePayload(agent: DesiredAgent, soulText: string): string
         }
       : null,
     selector: agent.spec.selector?.matchLabels ?? null,
-  });
+  };
+  if (agent.spec.placement) {
+    base.placement = {
+      require: agent.spec.placement.require ?? null,
+      prefer: agent.spec.placement.prefer ?? null,
+      taints: agent.spec.placement.taints ?? null,
+      tolerations: agent.spec.placement.tolerations ?? null,
+    };
+  }
+  return JSON.stringify(base);
 }
 
 export function digestOf(payload: string): string {

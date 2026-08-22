@@ -49,6 +49,8 @@ export type CreateHarnessOptions = {
   hermes?: HermesContract;
   /** Shared memory port (defaults to hermes.port when present). */
   memory?: MemoryPort;
+  /** Worker worktree cwd — fs/shell tools are chrooted here. */
+  cwd?: string;
 };
 
 export async function createHarness(
@@ -67,7 +69,7 @@ export async function createHarness(
     .use(modelPlugin(model))
     .use(sessionPlugin())
     .use(permissionsPlugin(opts.deny ?? [], opts.requireApproval ?? []))
-    .use(toolsPlugin(tools))
+    .use(toolsPlugin(tools, { cwd: opts.cwd }))
     .use(loopPlugin(loopModeFor(spec.harness.profile)));
 
   if (opts.hermes) {
