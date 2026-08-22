@@ -236,6 +236,10 @@ stateDiagram-v2
 
 Optional `Policy.spec.budget` (`maxUnits`, `windowMs`, `scope: cluster|fleet|agent`) tracks abstract task units (weighted by harness profile). Exhausted budgets deny enqueue. `ropex budget`, `/api/v1/budget`, Prometheus `budget_spent` / `budget_limit`.
 
+## Canary digest rolls
+
+`ropex apply --canary [--canary-count N]` rolls only N mismatch slots per agent per reconcile (default 1). Holdouts keep the old digest; the scheduler prefers digest-matching idle workers. Re-apply to continue the rollout. `ropex snapshot` checkpoints `.ropex/state.json`.
+
 ## Observability
 
 - **Delivery journal** — every comment/check/PR appends to `state.deliveries` (`ropex journal`).

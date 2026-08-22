@@ -160,6 +160,7 @@ Control plane today (local, network-free tests):
 | Worker-pool autoscaler (GitOps YAML) | shipped |
 | Control-plane tick + clone contract | shipped (remote clone stub) |
 | Policy budget / cost accounting | shipped |
+| Canary digest rolls + snapshots | shipped |
 | GitRepo local watch/sync | shipped (no remote clone yet) |
 | Live `@deepseek-ai/dsh` / Hermes process | not yet |
 

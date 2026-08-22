@@ -2,6 +2,12 @@
 
 Nightly capture. Newest first. Each entry should be one shippable idea, not a slogan.
 
+## Canary digest rolls + state snapshot
+
+Rolling canary strategy limits digest retire/create per agent; scheduler skips holdouts. Snapshot exports cluster checkpoints.
+
+**Shipped (2026-08-22 night):** `selectCanaryRolls`, `apply --canary`, `ropex snapshot`.
+
 ## Per-fleet cost/budget accounting
 
 Policy.budget rolling windows charge profile-weighted task units; exhaust → deny enqueue.

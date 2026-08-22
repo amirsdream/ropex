@@ -51,6 +51,9 @@ export { watchOnce, watchLoop, parseInterval, readManifestTree } from "./watch.j
 export { bootDsh, profilePack, DSH_PROFILE_PACKS } from "./dsh.js";
 export { recordDelivery, deliveriesFor } from "./journal.js";
 export { registerSkill, shareSkill, skillsForAgent, latestSkill } from "./skills.js";
+export { selectCanaryRolls } from "./canary.js";
+export type { RolloutOptions, RolloutStrategy } from "./canary.js";
+export { exportSnapshot, writeSnapshot, snapshotMeta } from "./snapshot.js";
 export {
   budgetStatus,
   budgetReport,

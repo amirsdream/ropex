@@ -7,15 +7,30 @@ import {
 } from "../src/health.ts";
 import { metricsPrometheus, metricsSnapshot } from "../src/metrics.ts";
 import { claimPending, enqueueTask } from "../src/queue.ts";
+import { buildAgentImage } from "../src/image.ts";
 import type { DesiredAgent, Worker } from "../src/types.ts";
 
+function builderDesired(): DesiredAgent {
+  return {
+    apiVersion: "ropex.dev/v1",
+    kind: "Agent",
+    metadata: { name: "builder" },
+    spec: {
+      replicas: 1,
+      harness: { profile: "code", plugins: ["github"] },
+      hermes: { memory: "none", learning: false, skills: [] },
+    },
+  } as DesiredAgent;
+}
+
 function idleWorker(overrides: Partial<Worker> = {}): Worker {
+  const desired = builderDesired();
   return {
     id: "builder:0",
     agent: "builder",
     replica: 0,
     status: "idle",
-    imageDigest: "abcdef0123456789",
+    imageDigest: buildAgentImage(desired).digest,
     harness: "code",
     plugins: ["github"],
     skills: [],
@@ -41,18 +56,7 @@ describe("worker health probes", () => {
     const state = emptyState();
     const worker = idleWorker({ status: "running" });
     state.workers = [worker];
-    state.desired = [
-      {
-        apiVersion: "ropex.dev/v1",
-        kind: "Agent",
-        metadata: { name: "builder" },
-        spec: {
-          replicas: 1,
-          harness: { profile: "code", plugins: ["github"] },
-          hermes: { memory: "none", learning: false, skills: [] },
-        },
-      } as DesiredAgent,
-    ];
+    state.desired = [builderDesired()];
     const now = Date.parse("2026-08-22T00:30:00.000Z");
     state.queue = [
       {
@@ -76,18 +80,7 @@ describe("worker health probes", () => {
     const state = emptyState();
     const worker = idleWorker();
     state.workers = [worker];
-    state.desired = [
-      {
-        apiVersion: "ropex.dev/v1",
-        kind: "Agent",
-        metadata: { name: "builder" },
-        spec: {
-          replicas: 1,
-          harness: { profile: "code", plugins: ["github"] },
-          hermes: { memory: "none", learning: false, skills: [] },
-        },
-      } as DesiredAgent,
-    ];
+    state.desired = [builderDesired()];
     enqueueTask(state, { id: "t-claim", agent: "builder", prompt: "go" });
     const { claimed } = claimPending(state, 1);
     expect(claimed).toHaveLength(1);

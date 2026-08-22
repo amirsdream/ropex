@@ -19,6 +19,7 @@ import { ensureRateLimits } from "./ratelimit.js";
 import { ensureApprovals } from "./approval.js";
 import { ensureBudgets } from "./budget.js";
 import { applyWorktrees } from "./worktree.js";
+import { selectCanaryRolls, type RolloutOptions } from "./canary.js";
 import type { ClusterState, Manifest, ReconcilePlan, SharedMemoryFact, Worker } from "./types.js";
 
 export const STATE_FILE = ".ropex/state.json";
@@ -77,15 +78,17 @@ export function saveState(root: string, state: ClusterState): void {
 /**
  * Kubernetes-style reconcile: workers are immutable for a given agent image digest.
  * Spec/code change → new digest → retire old worker + create replacement (no in-place mutate).
+ * With `rollout.strategy: "canary"`, only `canaryCount` mismatch slots per agent roll each pass.
  */
 export function planReconcile(
   current: ClusterState,
   manifests: Manifest[],
   source: string,
-  opts: { root?: string } = {},
+  opts: { root?: string; rollout?: RolloutOptions } = {},
 ): {
   next: ClusterState;
   plan: ReconcilePlan;
+  canaryHeld: number;
 } {
   const policies = collectPolicies(manifests);
   const gitRepos = collectGitRepos(manifests);
@@ -102,6 +105,7 @@ export function planReconcile(
   const create: Worker[] = [];
   const update: Worker[] = [];
   const retire: Worker[] = [];
+  const mismatches: Array<{ prev: Worker; next: Worker }> = [];
 
   for (const next of desiredWorkers) {
     const prev = currentById.get(next.id);
@@ -110,14 +114,7 @@ export function planReconcile(
       continue;
     }
     if (prev.imageDigest !== next.imageDigest) {
-      // Immutable roll: old image retires, new image boots under the same slot id.
-      retire.push({ ...prev, status: "retired" });
-      create.push({
-        ...next,
-        status: "idle",
-        // Carry learned skills across rolls (volume), not image fields.
-        skills: [...new Set([...next.skills, ...prev.skills])],
-      });
+      mismatches.push({ prev, next });
       continue;
     }
     // Same image: keep identity; only lifecycle status may change.
@@ -136,6 +133,26 @@ export function planReconcile(
       lastTaskAt: prev.lastTaskAt,
     });
   }
+
+  const { roll, hold } = selectCanaryRolls(mismatches, opts.rollout);
+  for (const m of roll) {
+    retire.push({ ...m.prev, status: "retired" });
+    create.push({
+      ...m.next,
+      status: "idle",
+      skills: [...new Set([...m.next.skills, ...m.prev.skills])],
+    });
+  }
+  for (const m of hold) {
+    // Keep old digest until a later canary pass; still counts as live capacity.
+    update.push({
+      ...m.prev,
+      skills: [...new Set([...m.prev.skills, ...m.next.skills])],
+      worktree: m.prev.worktree,
+      lastTaskAt: m.prev.lastTaskAt,
+    });
+  }
+
   for (const prev of current.workers) {
     if (prev.status === "retired") continue;
     if (!desiredIds.has(prev.id)) {
@@ -174,30 +191,37 @@ export function planReconcile(
 
   recordAudit(next, {
     kind: "reconcile",
-    message: `create=${create.length} retire=${retire.length} update=${update.length} capped=${capped.length}`,
+    message: `create=${create.length} retire=${retire.length} update=${update.length} capped=${capped.length} canaryHeld=${hold.length}`,
     meta: {
       create: create.length,
       retire: retire.length,
       update: update.length,
       capped: capped.length,
+      canaryHeld: hold.length,
+      strategy: opts.rollout?.strategy ?? "recreate",
       source,
     },
   });
 
-  return { next, plan };
+  return { next, plan, canaryHeld: hold.length };
 }
 
 export function applyManifestText(
   root: string,
   raw: string,
   source: string,
+  opts: { rollout?: RolloutOptions } = {},
 ): {
   state: ClusterState;
   plan: ReconcilePlan;
+  canaryHeld: number;
 } {
   const manifests = parseManifests(raw);
   const current = loadState(root);
-  const { next, plan } = planReconcile(current, manifests, source, { root });
+  const { next, plan, canaryHeld } = planReconcile(current, manifests, source, {
+    root,
+    rollout: opts.rollout,
+  });
   saveState(root, next);
-  return { state: next, plan };
+  return { state: next, plan, canaryHeld };
 }

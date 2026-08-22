@@ -2,6 +2,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { applyManifestText, loadState, planReconcile, saveState } from "./controller.js";
+import { writeSnapshot } from "./snapshot.js";
 import { agentsForEvent, eventToTask, pickWorker } from "./github.js";
 import { buildControlPlaneView, startControlPlaneServer } from "./api.js";
 import { enqueueTask, queueSummary, deadLetters, requeueDead, reclaimExpiredLeases } from "./queue.js";
@@ -32,8 +33,10 @@ import type { AuditKind, GithubEvent, ReconcilePlan } from "./types.js";
 const HELP = `ropex — GitOps control plane for agent fleets
 
 Usage:
-  ropex apply <path>              Reconcile YAML (file or directory) into workers
-  ropex diff <path>               Show create/retire without writing state
+  ropex apply <path> [--canary] [--canary-count N]
+                                     Reconcile YAML (file or directory) into workers
+  ropex diff <path> [--canary]        Show create/retire without writing state
+  ropex snapshot                  Export cluster state checkpoint
   ropex status                    List derived workers
   ropex run --agent <name> <task> Execute one task on a live worker
   ropex github simulate <event> --repo <org/name> [--title t]
@@ -84,8 +87,13 @@ async function main(argv: string[]): Promise<number> {
       const path = rest[0];
       if (!path) return fail("apply requires a path");
       const source = resolve(root, path);
-      const { plan } = applyManifestText(root, readManifests(source), source);
+      const canary = rest.includes("--canary");
+      const canaryCount = Number(flag(rest, "--canary-count") ?? "1");
+      const { plan, canaryHeld } = applyManifestText(root, readManifests(source), source, {
+        rollout: canary ? { strategy: "canary", canaryCount } : undefined,
+      });
       printPlan(plan);
+      if (canary) console.log(`canary held=${canaryHeld} (re-apply to continue rollout)`);
       console.log(`reconciled ${source}`);
       return 0;
     }
@@ -93,8 +101,22 @@ async function main(argv: string[]): Promise<number> {
       const path = rest[0];
       if (!path) return fail("diff requires a path");
       const source = resolve(root, path);
-      const { plan } = planReconcile(loadState(root), parseManifests(readManifests(source)), source, { root });
+      const canary = rest.includes("--canary");
+      const canaryCount = Number(flag(rest, "--canary-count") ?? "1");
+      const { plan, canaryHeld } = planReconcile(
+        loadState(root),
+        parseManifests(readManifests(source)),
+        source,
+        { root, rollout: canary ? { strategy: "canary", canaryCount } : undefined },
+      );
       printPlan(plan);
+      if (canary) console.log(`canary held=${canaryHeld}`);
+      return 0;
+    }
+    case "snapshot": {
+      const state = loadState(root);
+      const out = writeSnapshot(root, state);
+      console.log(`snapshot ${out.path}  rev=${out.meta.revision} live=${out.meta.workersLive}`);
       return 0;
     }
     case "status": {

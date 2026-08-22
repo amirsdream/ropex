@@ -8,15 +8,30 @@ import {
   reclaimExpiredLeases,
 } from "../src/queue.ts";
 import { metricsPrometheus, metricsSnapshot } from "../src/metrics.ts";
+import { buildAgentImage } from "../src/image.ts";
 import type { DesiredAgent, Worker } from "../src/types.ts";
 
+function builderDesired(): DesiredAgent {
+  return {
+    apiVersion: "ropex.dev/v1",
+    kind: "Agent",
+    metadata: { name: "builder" },
+    spec: {
+      replicas: 1,
+      harness: { profile: "code", plugins: ["github"] },
+      hermes: { memory: "none", learning: false, skills: [] },
+    },
+  } as DesiredAgent;
+}
+
 function worker(overrides: Partial<Worker> = {}): Worker {
+  const desired = builderDesired();
   return {
     id: "builder:0",
     agent: "builder",
     replica: 0,
     status: "idle",
-    imageDigest: "abcdef0123456789",
+    imageDigest: buildAgentImage(desired).digest,
     harness: "code",
     plugins: ["github"],
     skills: [],
@@ -27,18 +42,7 @@ function worker(overrides: Partial<Worker> = {}): Worker {
 
 function withAgent() {
   const state = emptyState();
-  state.desired = [
-    {
-      apiVersion: "ropex.dev/v1",
-      kind: "Agent",
-      metadata: { name: "builder" },
-      spec: {
-        replicas: 1,
-        harness: { profile: "code", plugins: ["github"] },
-        hermes: { memory: "none", learning: false, skills: [] },
-      },
-    } as DesiredAgent,
-  ];
+  state.desired = [builderDesired()];
   state.workers = [worker()];
   return state;
 }

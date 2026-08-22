@@ -4,6 +4,7 @@
  * Failed claims retry with backoff, then land in the dead-letter lane.
  */
 
+import { buildAgentImage } from "./image.js";
 import { admitTask } from "./admission.js";
 import { recordAudit } from "./audit.js";
 import { chargeBudget } from "./budget.js";
@@ -85,16 +86,26 @@ export function enqueueTask(
   return item;
 }
 
-/** Idle workers only, least-recently-used first, with optional fleet affinity. */
+/** Idle workers only, least-recently-used first, with optional fleet affinity.
+ * Prefers workers whose imageDigest matches the desired agent image (canary-safe).
+ */
 export function pickIdleWorker(
   state: ClusterState,
   agentName: string,
   opts: { preferFleet?: string } = {},
 ): Worker | undefined {
+  const agent = state.desired.find((a) => a.metadata.name === agentName);
+  const desiredDigest = agent ? buildAgentImage(agent).digest : undefined;
   const idle = state.workers.filter(
     (w) => w.agent === agentName && (w.status === "idle" || w.status === "running" || w.status === "pending"),
   );
   const ranked = [...idle].sort((a, b) => {
+    // Prefer digest match so canary holdouts (old digest) are not claimed first.
+    if (desiredDigest) {
+      const aMatch = a.imageDigest === desiredDigest ? 0 : 1;
+      const bMatch = b.imageDigest === desiredDigest ? 0 : 1;
+      if (aMatch !== bMatch) return aMatch - bMatch;
+    }
     const aIdle = a.status === "idle" || a.status === "pending" ? 0 : 1;
     const bIdle = b.status === "idle" || b.status === "pending" ? 0 : 1;
     if (aIdle !== bIdle) return aIdle - bIdle;
@@ -109,7 +120,11 @@ export function pickIdleWorker(
     if (at !== bt) return at < bt ? -1 : 1;
     return a.replica - b.replica;
   });
-  return ranked.find((w) => w.status === "idle" || w.status === "pending");
+  // Prefer digest-matching idle workers (canary holdouts stay unclaimed).
+  // If none match, do not fall back to stale digests — wait for canary promotion.
+  const candidates = ranked.filter((w) => w.status === "idle" || w.status === "pending");
+  if (!desiredDigest) return candidates[0];
+  return candidates.find((w) => w.imageDigest === desiredDigest);
 }
 
 export type DrainResult = {
