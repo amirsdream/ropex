@@ -21,7 +21,7 @@ import { healthReport } from "./health.js";
 import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { deliveriesFor, replayDelivery } from "./journal.js";
-import { shareSkill } from "./skills.js";
+import { shareSkill, promoteSkill, skillVersions } from "./skills.js";
 import { fanOutTask } from "./fanout.js";
 import { syncGitRepos, syncDueGitRepos, syncMultiRepo } from "./gitrepo.js";
 import { runSandboxDemo } from "./demo.js";
@@ -75,6 +75,9 @@ Usage:
   ropex audit [--kind k] [--jsonl]  Control-plane event trail
   ropex journal                   Show delivery journal
   ropex skills [share <name> --to <agent>]
+                                     List registry; share one skill to an agent
+  ropex skills promote <name>         Share latest skill with all desired agents
+  ropex skills versions <name>        List registered versions of a skill
   ropex fanout --agent <name> <prompt>
                                      Shard a task across idle replicas
   ropex scale <fleet> --replicas N
@@ -619,6 +622,29 @@ async function main(argv: string[]): Promise<number> {
         if (!rec) return fail(`skill not found: ${name}`);
         saveState(root, state);
         console.log(`shared ${rec.name}@v${rec.version} → ${to}`);
+        return 0;
+      }
+      if (rest[0] === "promote") {
+        const name = rest[1];
+        if (!name) return fail("usage: ropex skills promote <name>");
+        const rec = promoteSkill(state, name);
+        if (!rec) return fail(`skill not found: ${name}`);
+        saveState(root, state);
+        console.log(
+          `promoted ${rec.name}@v${rec.version} → [${rec.sharedWith.join(",") || "none"}]`,
+        );
+        return 0;
+      }
+      if (rest[0] === "versions") {
+        const name = rest[1];
+        if (!name) return fail("usage: ropex skills versions <name>");
+        const rows = skillVersions(state, name);
+        if (!rows.length) return fail(`skill not found: ${name}`);
+        for (const s of rows) {
+          console.log(
+            `${s.name}@v${s.version} origin=${s.originAgent} shared=[${s.sharedWith.join(",")}] ${s.at}`,
+          );
+        }
         return 0;
       }
       console.log(`registry ${state.skillRegistry?.length ?? 0}  learned ${state.skills.length}`);

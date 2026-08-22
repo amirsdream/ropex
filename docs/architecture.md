@@ -250,7 +250,11 @@ Optional `Policy.spec.budget` (`maxUnits`, `windowMs`, `scope: cluster|fleet|age
 
 ## Fairness + queue latency
 
-`ropex fairness` / `GET /api/v1/fairness` derive claim-wait and run-duration percentiles from queue timestamps, plus idle skew (`lastTaskAt`) and claim-count CV. Prometheus: `ropex_claim_wait_*`, `ropex_run_duration_*`, `ropex_fairness_*`.
+`ropex fairness` / `GET /api/v1/fairness` derive claim-wait and run-duration percentiles from queue timestamps, plus idle skew (`lastTaskAt`) and claim-count CV. Prometheus: `ropex_claim_wait_*`, `ropex_run_duration_*`, `ropex_fairness_*`. Drift and fairness also appear on `GET /api/v1/view` and the control-plane UI.
+
+## Skill promote + workflow stage metrics
+
+`ropex skills promote <name>` shares the latest registry version with every desired agent; `versions` lists history. Trajectories persist `stages` from the run workflow; Prometheus counters `ropex_workflow_{compose,plan,execute,deliver,learn}_total`.
 
 ## Observability
 

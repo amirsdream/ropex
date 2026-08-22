@@ -15,6 +15,7 @@ function renderPulse(view) {
     ["done", view.counts.tasksCompleted],
     ["unhealthy", view.metrics?.workersUnhealthy ?? 0],
     ["slo", view.metrics?.backlogSloBreached ? "breach" : "ok"],
+    ["drift", view.drift?.ok === false ? "yes" : "ok"],
   ];
   el.innerHTML = items
     .map(
@@ -131,6 +132,87 @@ function renderHealth(view) {
     )
     .join("");
   el.innerHTML = head + repos + (workers || `<p class="empty">No live workers to probe.</p>`);
+}
+
+function renderDrift(view) {
+  const el = $("#drift-rail");
+  const d = view.drift;
+  if (!d) {
+    el.innerHTML = `<p class="empty">Drift report unavailable.</p>`;
+    return;
+  }
+  const s = d.summary ?? {};
+  const head = `
+    <div class="worker-row">
+      <div>
+        <div class="worker-id">cluster</div>
+        <div class="digest">live ${d.liveWorkers} · desired ${d.desiredWorkers}</div>
+      </div>
+      <div class="status status-${d.ok ? "idle" : "failed"}">${d.ok ? "in sync" : "drift"}</div>
+      <div class="digest">digest ${s.digest ?? 0} · replica ${s.replica ?? 0}</div>
+      <div class="digest">missing ${s.missing ?? 0} · extra ${s.extra ?? 0}</div>
+    </div>`;
+  const rows = (d.findings ?? [])
+    .slice(0, 16)
+    .map(
+      (f, i) => `
+      <div class="worker-row" style="animation-delay:${Math.min(i, 12) * 0.03}s">
+        <div>
+          <div class="worker-id">${escapeHtml(f.kind)}</div>
+          <div class="digest">${escapeHtml(f.detail)}</div>
+        </div>
+        <div class="status status-failed">${escapeHtml(f.agent ?? "—")}</div>
+        <div class="digest">${escapeHtml(f.workerId ?? "")}</div>
+        <div class="digest"></div>
+      </div>`,
+    )
+    .join("");
+  el.innerHTML =
+    head +
+    (rows ||
+      `<p class="empty">${d.ok ? "Desired and live workers match." : "No finding details."}</p>`);
+}
+
+function renderFairness(view) {
+  const el = $("#fairness-rail");
+  const f = view.fairness;
+  if (!f) {
+    el.innerHTML = `<p class="empty">Fairness report unavailable.</p>`;
+    return;
+  }
+  const pending = Object.entries(f.pendingByAgent ?? {})
+    .map(([a, n]) => `${a}=${n}`)
+    .join(" ");
+  const head = `
+    <div class="worker-row">
+      <div>
+        <div class="worker-id">claim wait</div>
+        <div class="digest">p50 ${f.claimWaitP50Ms}ms · p95 ${f.claimWaitP95Ms}ms · max ${f.claimWaitMaxMs}ms</div>
+      </div>
+      <div class="status status-idle">latency</div>
+      <div class="digest">run p50 ${f.runDurationP50Ms}ms · p95 ${f.runDurationP95Ms}ms</div>
+      <div class="digest">skew ${f.maxIdleSkewMs}ms · cv ${f.claimCountCv}</div>
+    </div>
+    ${
+      pending
+        ? `<div class="worker-row"><div><div class="worker-id">pending</div><div class="digest">${escapeHtml(pending)}</div></div><div class="status status-running">queue</div><div class="digest"></div><div class="digest"></div></div>`
+        : ""
+    }`;
+  const rows = (f.topWorkers ?? [])
+    .map(
+      (w, i) => `
+      <div class="worker-row" style="animation-delay:${Math.min(i, 12) * 0.03}s">
+        <div>
+          <div class="worker-id">${escapeHtml(w.workerId)}</div>
+          <div class="digest">${escapeHtml(w.agent)}</div>
+        </div>
+        <div class="status status-idle">claims ${w.claims}</div>
+        <div class="digest">idleSkew ${w.idleSkewMs}ms</div>
+        <div class="digest"></div>
+      </div>`,
+    )
+    .join("");
+  el.innerHTML = head + (rows || `<p class="empty">No live workers for fairness.</p>`);
 }
 
 function renderAutoscale(view) {
@@ -311,6 +393,8 @@ async function main() {
     renderMemory(view);
     renderWorkers(view);
     renderHealth(view);
+    renderDrift(view);
+    renderFairness(view);
     renderAutoscale(view);
     renderQueue(view);
     renderJournal(view);

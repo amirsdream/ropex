@@ -20,6 +20,12 @@ Claim-wait / run-duration percentiles from queue timestamps; idle skew + claim-c
 
 **Shipped (2026-08-22 night):** `src/fairness.ts`, metrics wiring.
 
+## Drift/fairness UI + skill promote + stage metrics
+
+Control-plane view embeds drift + fairness; UI sections render them. `ropex skills promote|versions`. Trajectories store workflow stage ids; Prometheus `ropex_workflow_*_total`. Example fleet YAML declares placement.
+
+**Shipped (2026-08-22 night):** UI panels, `promoteSkill`, `workflowStageCounts`, fleets/examples placement.
+
 ## Canary digest rolls + state snapshot
 
 Rolling canary strategy limits digest retire/create per agent; scheduler skips holdouts. Snapshot exports cluster checkpoints.

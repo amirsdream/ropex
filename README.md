@@ -165,6 +165,9 @@ Control plane today (local, network-free tests):
 | Placement require/prefer + taints | shipped |
 | Config drift detector | shipped |
 | Queue latency + fairness metrics | shipped |
+| Drift + fairness UI panels | shipped |
+| Skill promote / versions CLI | shipped |
+| Workflow stage trajectory metrics | shipped |
 | GitRepo local watch/sync | shipped (no remote clone yet) |
 | Live `@deepseek-ai/dsh` / Hermes process | not yet |
 

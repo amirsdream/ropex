@@ -46,6 +46,36 @@ export function shareSkill(
   return latest;
 }
 
+/**
+ * Promote a skill fleet-wide: share the latest version with every desired agent
+ * (or an explicit target list). Origin agent is skipped.
+ */
+export function promoteSkill(
+  state: ClusterState,
+  name: string,
+  opts: { toAgents?: string[] } = {},
+): SkillRecord | undefined {
+  ensureSkillRegistry(state);
+  const latest = latestSkill(state, name);
+  if (!latest) return undefined;
+  const targets =
+    opts.toAgents ??
+    state.desired.map((a) => a.metadata.name).filter((n) => n !== latest.originAgent);
+  for (const to of targets) {
+    shareSkill(state, name, to);
+  }
+  return latestSkill(state, name);
+}
+
+/** All registered versions of a skill, newest first. */
+export function skillVersions(state: ClusterState, name: string): SkillRecord[] {
+  ensureSkillRegistry(state);
+  return state.skillRegistry
+    .filter((s) => s.name === name)
+    .slice()
+    .sort((a, b) => b.version - a.version);
+}
+
 export function latestSkill(state: ClusterState, name: string): SkillRecord | undefined {
   ensureSkillRegistry(state);
   const rows = state.skillRegistry.filter((s) => s.name === name);

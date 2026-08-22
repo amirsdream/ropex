@@ -50,7 +50,7 @@ export {
 export { watchOnce, watchLoop, parseInterval, readManifestTree } from "./watch.js";
 export { bootDsh, profilePack, DSH_PROFILE_PACKS } from "./dsh.js";
 export { recordDelivery, deliveriesFor } from "./journal.js";
-export { registerSkill, shareSkill, skillsForAgent, latestSkill } from "./skills.js";
+export { registerSkill, shareSkill, promoteSkill, skillVersions, skillsForAgent, latestSkill } from "./skills.js";
 export { deliverOutbound, outboundFor, signOutboundBody, ensureOutbound } from "./deliver.js";
 export { cordonWorker, uncordonWorker, evictWorker, cordonedWorkers } from "./lifecycle.js";
 export { detectDrift, formatDriftReport } from "./drift.js";
@@ -96,7 +96,7 @@ export {
 } from "./gitrepo.js";
 export { replayDelivery } from "./journal.js";
 export { runSandboxDemo } from "./demo.js";
-export { recordTrajectory, trajectoriesFor, exportTrajectoriesJsonl, learnFromTrajectory } from "./trajectory.js";
+export { recordTrajectory, trajectoriesFor, exportTrajectoriesJsonl, learnFromTrajectory, workflowStageCounts } from "./trajectory.js";
 export { policyDryRun } from "./policy.js";
 export { runReconcileChaos, assertChaosInvariants } from "./chaos.js";
 export { checkRateLimit } from "./ratelimit.js";

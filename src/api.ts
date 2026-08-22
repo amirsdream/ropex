@@ -206,6 +206,40 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
         })),
       };
     })(),
+    drift: (() => {
+      const d = detectDrift(state);
+      return {
+        ok: d.ok,
+        liveWorkers: d.liveWorkers,
+        desiredWorkers: d.desiredWorkers,
+        summary: { ...d.summary },
+        findings: d.findings.slice(0, 30).map((f) => ({
+          kind: f.kind,
+          detail: f.detail,
+          workerId: f.workerId,
+          agent: f.agent,
+        })),
+      };
+    })(),
+    fairness: (() => {
+      const f = fairnessReport(state);
+      return {
+        claimWaitP50Ms: f.claimWait.p50Ms,
+        claimWaitP95Ms: f.claimWait.p95Ms,
+        claimWaitMaxMs: f.claimWait.maxMs,
+        runDurationP50Ms: f.runDuration.p50Ms,
+        runDurationP95Ms: f.runDuration.p95Ms,
+        maxIdleSkewMs: f.maxIdleSkewMs,
+        claimCountCv: f.claimCountCv,
+        pendingByAgent: { ...f.pendingByAgent },
+        topWorkers: f.workers.slice(0, 12).map((w) => ({
+          workerId: w.workerId,
+          agent: w.agent,
+          claims: w.claims,
+          idleSkewMs: w.idleSkewMs,
+        })),
+      };
+    })(),
   };
 }
 

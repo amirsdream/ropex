@@ -9,6 +9,7 @@ import { budgetReport } from "./budget.js";
 import { fairnessReport } from "./fairness.js";
 import { queueSummary } from "./queue.js";
 import type { ClusterState } from "./types.js";
+import { workflowStageCounts } from "./trajectory.js";
 
 export type MetricsSnapshot = {
   workers_live: number;
@@ -46,6 +47,11 @@ export type MetricsSnapshot = {
   run_duration_p95_ms: number;
   fairness_idle_skew_ms: number;
   fairness_claim_cv: number;
+  workflow_compose_total: number;
+  workflow_plan_total: number;
+  workflow_execute_total: number;
+  workflow_deliver_total: number;
+  workflow_learn_total: number;
 };
 
 export function metricsSnapshot(state: ClusterState): MetricsSnapshot {
@@ -53,6 +59,7 @@ export function metricsSnapshot(state: ClusterState): MetricsSnapshot {
   const q = queueSummary(state);
   const health = healthReport(state);
   const fair = fairnessReport(state);
+  const stages = workflowStageCounts(state);
   return {
     workers_live: live.length,
     workers_idle: live.filter((w) => w.status === "idle").length,
@@ -95,6 +102,11 @@ export function metricsSnapshot(state: ClusterState): MetricsSnapshot {
     run_duration_p95_ms: fair.runDuration.p95Ms,
     fairness_idle_skew_ms: fair.maxIdleSkewMs,
     fairness_claim_cv: fair.claimCountCv,
+    workflow_compose_total: stages.compose ?? 0,
+    workflow_plan_total: stages.plan ?? 0,
+    workflow_execute_total: stages.execute ?? 0,
+    workflow_deliver_total: stages.deliver ?? 0,
+    workflow_learn_total: stages.learn ?? 0,
   };
 }
 
@@ -183,6 +195,21 @@ export function metricsPrometheus(state: ClusterState): string {
     "# HELP ropex_fairness_claim_cv Claim-count coefficient of variation.",
     "# TYPE ropex_fairness_claim_cv gauge",
     `ropex_fairness_claim_cv ${m.fairness_claim_cv}`,
+    "# HELP ropex_workflow_compose_total Trajectory compose stages.",
+    "# TYPE ropex_workflow_compose_total counter",
+    `ropex_workflow_compose_total ${m.workflow_compose_total}`,
+    "# HELP ropex_workflow_plan_total Trajectory plan stages.",
+    "# TYPE ropex_workflow_plan_total counter",
+    `ropex_workflow_plan_total ${m.workflow_plan_total}`,
+    "# HELP ropex_workflow_execute_total Trajectory execute stages.",
+    "# TYPE ropex_workflow_execute_total counter",
+    `ropex_workflow_execute_total ${m.workflow_execute_total}`,
+    "# HELP ropex_workflow_deliver_total Trajectory deliver stages.",
+    "# TYPE ropex_workflow_deliver_total counter",
+    `ropex_workflow_deliver_total ${m.workflow_deliver_total}`,
+    "# HELP ropex_workflow_learn_total Trajectory learn stages.",
+    "# TYPE ropex_workflow_learn_total counter",
+    `ropex_workflow_learn_total ${m.workflow_learn_total}`,
   ];
   return `${lines.join("\n")}\n`;
 }

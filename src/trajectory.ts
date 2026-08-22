@@ -12,6 +12,7 @@ export function ensureTrajectories(state: ClusterState): void {
 
 export function recordTrajectory(state: ClusterState, result: RunResult): TrajectoryRecord {
   ensureTrajectories(state);
+  const stages = result.workflow.map((s) => s.id);
   const rec: TrajectoryRecord = {
     id: `traj-${result.task.id}-${Date.now()}`,
     at: new Date().toISOString(),
@@ -26,12 +27,40 @@ export function recordTrajectory(state: ClusterState, result: RunResult): Trajec
       observation: s.observation,
     })),
     output: result.output,
+    stages,
   };
   state.trajectories.push(rec);
   if (state.trajectories.length > 500) {
     state.trajectories = state.trajectories.slice(-500);
   }
   return rec;
+}
+
+/** Count how often each workflow stage appears on stored trajectories. */
+export function workflowStageCounts(state: ClusterState): Record<string, number> {
+  ensureTrajectories(state);
+  const counts: Record<string, number> = {
+    compose: 0,
+    plan: 0,
+    execute: 0,
+    deliver: 0,
+    learn: 0,
+  };
+  for (const t of state.trajectories) {
+    const stages = t.stages?.length
+      ? t.stages
+      : inferStagesFromTrajectory(t);
+    for (const s of stages) counts[s] = (counts[s] ?? 0) + 1;
+  }
+  return counts;
+}
+
+function inferStagesFromTrajectory(t: TrajectoryRecord): string[] {
+  const out: string[] = ["compose"];
+  if (t.plan?.length) out.push("plan");
+  if (t.steps?.length) out.push("execute");
+  if (t.output) out.push("deliver");
+  return out;
 }
 
 export function trajectoriesFor(

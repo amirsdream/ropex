@@ -28,8 +28,14 @@ metadata:
   name: triage
   labels:
     role: github
+    zone: ingress
 spec:
   replicas: 3
+  placement:
+    require:
+      role: github
+    prefer:
+      zone: ingress
   harness:
     profile: minimal
     model: deepseek-v4-flash
@@ -61,8 +67,20 @@ metadata:
   name: reviewer
   labels:
     role: github
+    zone: review
 spec:
   replicas: 5
+  placement:
+    require:
+      role: github
+    prefer:
+      zone: review
+    taints:
+      - key: code-review
+        effect: NoSchedule
+    tolerations:
+      - key: code-review
+        operator: Exists
   harness:
     profile: code
     model: deepseek-v4-pro
@@ -101,7 +119,19 @@ spec:
     metadata:
       labels:
         role: implement
+        zone: build
     spec:
+      placement:
+        require:
+          role: implement
+        prefer:
+          zone: build
+        taints:
+          - key: builder
+            effect: NoSchedule
+        tolerations:
+          - key: builder
+            operator: Exists
       harness:
         profile: standard
         model: deepseek-v4-pro

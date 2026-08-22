@@ -25,6 +25,7 @@
       <div class="cta-row">
         <a class="cta" href="#memory">Memory stream</a>
         <a class="cta cta-ghost" href="#health">Health</a>
+        <a class="cta cta-ghost" href="#drift">Drift</a>
       </div>
       <dl class="pulse" id="pulse" aria-label="Cluster pulse"></dl>
     </header>
@@ -52,6 +53,18 @@
         <h2>Health</h2>
         <p class="section-lede">Worker probes and backlog SLO — the control plane pulse.</p>
         <div id="health-panel" class="worker-rail"></div>
+      </section>
+
+      <section id="drift" class="section">
+        <h2>Drift</h2>
+        <p class="section-lede">Live workers vs desired digests, replicas, labels, and taints.</p>
+        <div id="drift-rail" class="worker-rail"></div>
+      </section>
+
+      <section id="fairness" class="section">
+        <h2>Fairness</h2>
+        <p class="section-lede">Claim-wait latency and LRU skew across the worker pool.</p>
+        <div id="fairness-rail" class="worker-rail"></div>
       </section>
 
       <section id="autoscale" class="section">

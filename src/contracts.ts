@@ -218,6 +218,24 @@ export type ControlPlaneView = {
       reason: string;
     }>;
   };
+  drift: {
+    ok: boolean;
+    liveWorkers: number;
+    desiredWorkers: number;
+    summary: Record<string, number>;
+    findings: Array<{ kind: string; detail: string; workerId?: string; agent?: string }>;
+  };
+  fairness: {
+    claimWaitP50Ms: number;
+    claimWaitP95Ms: number;
+    claimWaitMaxMs: number;
+    runDurationP50Ms: number;
+    runDurationP95Ms: number;
+    maxIdleSkewMs: number;
+    claimCountCv: number;
+    pendingByAgent: Record<string, number>;
+    topWorkers: Array<{ workerId: string; agent: string; claims: number; idleSkewMs: number }>;
+  };
 };
 
 /** Stable API routes the UI and CLI share. */

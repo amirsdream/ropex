@@ -244,6 +244,8 @@ export type TrajectoryRecord = {
   plan: string[];
   steps: TrajectoryStep[];
   output: string;
+  /** Workflow stage ids completed for this run (compose→learn). */
+  stages?: Array<"compose" | "plan" | "execute" | "deliver" | "learn">;
 };
 
 /** Sliding-window webhook rate-limit counters (per delivery key / repo). */
