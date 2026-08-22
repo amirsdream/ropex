@@ -50,7 +50,8 @@ export { fanOutTask, shouldFanOut, shardCount } from "./fanout.js";
 export { syncGitRepos, resolveGitRepoPath, gitRepoIntervalMs } from "./gitrepo.js";
 export { replayDelivery } from "./journal.js";
 export { runSandboxDemo } from "./demo.js";
-export { recordTrajectory, trajectoriesFor, exportTrajectoriesJsonl } from "./trajectory.js";
+export { recordTrajectory, trajectoriesFor, exportTrajectoriesJsonl, learnFromTrajectory } from "./trajectory.js";
+export { policyDryRun } from "./policy.js";
 export { checkRateLimit } from "./ratelimit.js";
 export {
   requestApprovals,

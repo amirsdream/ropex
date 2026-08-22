@@ -18,6 +18,8 @@ Persist Hermes→DeepSeek trajectories (JSONL export) and sliding-window rate li
 
 `requireApproval` tools create durable `ApprovalRequest`s; `ropex approve` / `reject` decide them. Scheduler prefers fleet-affine idle workers.
 
+**Shipped:** approvals CLI + UI panel, `learnFromTrajectory`, `policy dry-run`.
+
 Gate tool calls with Policy deny/requireApproval before DeepSeek executes; fan large tasks across idle replicas.
 
 **Shipped (2026-08-21 night):** `admitCalls` / enqueue deny, `fanOutTask` + `ropex fanout`, UI queue + delivery journal panels.

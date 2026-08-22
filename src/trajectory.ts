@@ -2,7 +2,9 @@
  * Trajectory store — persist Hermes plans + DeepSeek steps for export/learning.
  */
 
-import type { ClusterState, RunResult, TrajectoryRecord } from "./types.js";
+import { createHermes } from "./hermes.js";
+import { registerSkill } from "./skills.js";
+import type { ClusterState, LearnedSkill, RunResult, SkillRecord, TrajectoryRecord } from "./types.js";
 
 export function ensureTrajectories(state: ClusterState): void {
   if (!state.trajectories) state.trajectories = [];
@@ -26,7 +28,6 @@ export function recordTrajectory(state: ClusterState, result: RunResult): Trajec
     output: result.output,
   };
   state.trajectories.push(rec);
-  // Cap history so state.json stays bounded.
   if (state.trajectories.length > 500) {
     state.trajectories = state.trajectories.slice(-500);
   }
@@ -54,4 +55,42 @@ export function exportTrajectoriesJsonl(
   return trajectoriesFor(state, filter)
     .map((t) => JSON.stringify(t))
     .join("\n");
+}
+
+/**
+ * Replay a stored trajectory through Hermes learn() and register the skill.
+ * Distills skills from past runs without re-executing tools.
+ */
+export function learnFromTrajectory(
+  state: ClusterState,
+  trajectoryId: string,
+): { learned?: LearnedSkill; skill?: SkillRecord; reason?: string } {
+  ensureTrajectories(state);
+  const traj = state.trajectories.find((t) => t.id === trajectoryId);
+  if (!traj) return { reason: `trajectory not found: ${trajectoryId}` };
+
+  const agent = state.desired.find((a) => a.metadata.name === traj.agent);
+  if (!agent) return { reason: `desired agent missing: ${traj.agent}` };
+  if (!agent.spec.hermes.learning) return { reason: "learning disabled for agent" };
+
+  const hermes = createHermes(agent.spec, {
+    worker: { id: traj.workerId, agent: traj.agent },
+    skills: [
+      ...agent.spec.hermes.skills,
+      ...state.skills.filter((s) => s.agent === traj.agent).map((s) => s.name),
+    ],
+  });
+
+  const prompt =
+    traj.plan.find((p) => p.startsWith("task:"))?.replace(/^task:\s*/, "") ?? traj.output;
+  const learned = hermes.learn({ id: traj.taskId, agent: traj.agent, prompt }, traj.steps);
+  if (!learned) return { reason: "no new skill extracted (already known or too short)" };
+
+  state.skills.push(learned);
+  const skill = registerSkill(state, learned, `replayed from ${traj.id}`);
+  const worker = state.workers.find((w) => w.id === traj.workerId && w.status !== "retired");
+  if (worker) {
+    worker.skills = [...new Set([...worker.skills, learned.name])];
+  }
+  return { learned, skill };
 }

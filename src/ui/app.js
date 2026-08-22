@@ -127,6 +127,28 @@ function renderJournal(view) {
     .join("");
 }
 
+function renderApprovals(view) {
+  const el = $("#approvals-rail");
+  if (!view.approvals?.length) {
+    el.innerHTML = `<p class="empty">No pending approvals.</p>`;
+    return;
+  }
+  el.innerHTML = view.approvals
+    .map(
+      (a, i) => `
+      <div class="worker-row" style="animation-delay:${Math.min(i, 12) * 0.03}s">
+        <div>
+          <div class="worker-id">${escapeHtml(a.tool)}</div>
+          <div class="digest">${escapeHtml(a.reason)}</div>
+        </div>
+        <div class="status status-failed">${escapeHtml(a.status)}</div>
+        <div class="digest">${escapeHtml(a.agent)}</div>
+        <div class="digest">${escapeHtml(a.id)}</div>
+      </div>`,
+    )
+    .join("");
+}
+
 function renderSurfaces(view) {
   $("#hermes-list").innerHTML = view.hermes
     .map(
@@ -191,6 +213,7 @@ async function main() {
     renderWorkers(view);
     renderQueue(view);
     renderJournal(view);
+    renderApprovals(view);
     renderSurfaces(view);
   } catch (err) {
     $("#tagline").textContent = "Control plane unreachable";

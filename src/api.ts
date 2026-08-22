@@ -132,6 +132,17 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
       workersIdle: live.filter((w) => w.status === "idle").length,
       deliveries: state.deliveries?.length ?? 0,
     },
+    approvals: (state.approvals ?? [])
+      .filter((a) => a.status === "pending")
+      .slice(0, 40)
+      .map((a) => ({
+        id: a.id,
+        status: a.status,
+        tool: a.tool,
+        agent: a.agent,
+        taskId: a.taskId,
+        reason: a.reason,
+      })),
   };
 }
 
@@ -278,6 +289,10 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
         limit: url.searchParams.get("limit") ? Number(url.searchParams.get("limit")) : 50,
       }),
     );
+  }
+
+  if (url.pathname === API_ROUTES.approvals) {
+    return json(res, state.approvals ?? []);
   }
 
   // Static UI

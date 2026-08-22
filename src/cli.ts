@@ -13,8 +13,9 @@ import { shareSkill } from "./skills.js";
 import { fanOutTask } from "./fanout.js";
 import { syncGitRepos } from "./gitrepo.js";
 import { runSandboxDemo } from "./demo.js";
-import { exportTrajectoriesJsonl, trajectoriesFor } from "./trajectory.js";
+import { exportTrajectoriesJsonl, trajectoriesFor, learnFromTrajectory } from "./trajectory.js";
 import { decideApproval, pendingApprovals } from "./approval.js";
+import { policyDryRun } from "./policy.js";
 import { parseManifests } from "./spec.js";
 import { ingestGithubWebhook, signGithubPayload } from "./webhook.js";
 import { parseInterval, watchLoop, watchOnce } from "./watch.js";
@@ -39,6 +40,8 @@ Usage:
   ropex approvals                 List pending approval requests
   ropex approve <id>              Approve a gated tool (re-enqueue task)
   ropex reject <id>               Reject a gated tool
+  ropex learn <trajectory-id>     Distill a skill from a stored trajectory
+  ropex policy dry-run --agent <name> <prompt>
   ropex watch <path> [--once] [--interval 5s]
                                      Reconcile manifests on an interval (Flux-style)
   ropex metrics [--prometheus]    Export cluster metrics
@@ -286,6 +289,34 @@ async function main(argv: string[]): Promise<number> {
         console.log(`rejected ${decided.tool}`);
       }
       saveState(root, state);
+      return 0;
+    }
+    case "learn": {
+      const id = rest[0];
+      if (!id) return fail("usage: ropex learn <trajectory-id>");
+      const state = loadState(root);
+      const result = learnFromTrajectory(state, id);
+      if (result.reason) return fail(result.reason);
+      saveState(root, state);
+      console.log(`learned ${result.learned?.name}  registry v${result.skill?.version}`);
+      return 0;
+    }
+    case "policy": {
+      if (rest[0] !== "dry-run") return fail("usage: ropex policy dry-run --agent <name> <prompt>");
+      const agent = flag(rest, "--agent");
+      const prompt = positional(rest.slice(1)).join(" ");
+      if (!agent || !prompt) return fail("policy dry-run requires --agent and a prompt");
+      const state = loadState(root);
+      const report = policyDryRun(state, { id: `dry-${Date.now()}`, agent, prompt });
+      console.log(`task admission: ${report.taskAdmission.status}`);
+      if (report.taskAdmission.status !== "allow") console.log(`  ${report.taskAdmission.reason}`);
+      console.log(`deny=[${report.permissions.deny.join(",")}] approval=[${report.permissions.requireApproval.join(",")}]`);
+      console.log(`planned: ${report.plannedCalls.map((c) => c.name).join(" → ") || "(none)"}`);
+      console.log(
+        `calls allow=${report.callAdmission.allowed.length} deny=${report.callAdmission.denied.length} approval=${report.callAdmission.needsApproval.length}`,
+      );
+      for (const d of report.callAdmission.denied) console.log(`  deny ${d.name}: ${d.reason}`);
+      for (const a of report.callAdmission.needsApproval) console.log(`  approval ${a.name}: ${a.reason}`);
       return 0;
     }
     case "watch": {

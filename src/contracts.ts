@@ -183,6 +183,7 @@ export type ControlPlaneView = {
     workersIdle: number;
     deliveries: number;
   };
+  approvals: Array<{ id: string; status: string; tool: string; agent: string; taskId: string; reason: string }>;
 };
 
 /** Stable API routes the UI and CLI share. */
@@ -195,5 +196,6 @@ export const API_ROUTES = {
   deliveries: "/api/v1/deliveries",
   skills: "/api/v1/skills",
   trajectories: "/api/v1/trajectories",
+  approvals: "/api/v1/approvals",
   health: "/api/v1/health",
 } as const;
