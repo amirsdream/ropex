@@ -40,6 +40,7 @@ export function agentImagePayload(agent: DesiredAgent, soulText: string): string
           }
         : null,
       learning: agent.spec.hermes.learning,
+      exportMemory: agent.spec.hermes.exportMemory ?? false,
       skills: [...agent.spec.hermes.skills].sort(),
     },
     harness: {

@@ -115,7 +115,7 @@ Usage:
   ropex autoscale                 Recommend replica YAML from backlog SLO
   ropex tick [--concurrency N] [--gc] [--age] [--clone] [--compact N]
                                      Control-plane heartbeat + optional hooks
-  ropex clone [--force] [--dry-run]   Prepare GitRepo checkouts (file:// / local)
+  ropex clone [--force] [--dry-run] [--remote]   Prepare GitRepo checkouts (file:// / git remote)
   ropex budget                    Show task-unit budget spend
   ropex memory [promote <id> --scope fleet|cluster|agent [--no-export]]
                   | sync [path] [--repos]
@@ -918,6 +918,7 @@ async function main(argv: string[]): Promise<number> {
       const results = cloneAllGitRepos(root, state, {
         force: rest.includes("--force"),
         dryRun,
+        remote: rest.includes("--remote"),
       });
       if (!dryRun) saveState(root, state);
       for (const r of results) {

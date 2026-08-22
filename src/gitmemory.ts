@@ -212,6 +212,39 @@ export function findMemoryFact(state: ClusterState, id: string): SharedMemoryFac
   return fact ? normalizeFact(fact as SharedMemoryFact) : undefined;
 }
 
+/** When agent spec enables exportMemory, write the fact to memory/*.yaml. */
+export function maybeExportRememberedFact(
+  state: ClusterState,
+  root: string,
+  fact: SharedMemoryFact,
+  exportMemory?: boolean,
+): string | undefined {
+  if (!exportMemory) return fact.manifestPath;
+  const path = exportMemoryFactToGit(fact, { root });
+  const idx = state.memory.findIndex((f) => f.id === fact.id);
+  if (idx !== -1) state.memory[idx] = { ...fact, manifestPath: path };
+  recordAudit(state, {
+    kind: "memory",
+    message: `auto-export memory ${fact.id} → ${path}`,
+    agent: fact.agent,
+    meta: { path, id: fact.id, scope: fact.scope },
+  });
+  return path;
+}
+
+export function memoryGitSummary(state: ClusterState): {
+  gitBacked: number;
+  runtimeOnly: number;
+  total: number;
+} {
+  const gitBacked = state.memory.filter((f) => f.manifestPath).length;
+  return {
+    gitBacked,
+    runtimeOnly: state.memory.length - gitBacked,
+    total: state.memory.length,
+  };
+}
+
 export function promoteAndExportMemory(
   state: ClusterState,
   root: string,

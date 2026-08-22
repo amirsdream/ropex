@@ -112,7 +112,7 @@ describe("clone contract", () => {
     expect(remote.backend).toBe("remote-stub");
     expect(remote.phase).toBe("failed");
     expect(remote.steps.some((s) => s.phase === "remote-blocked")).toBe(true);
-    expect(remote.reason).toMatch(/remote clone not wired/);
+    expect(remote.reason).toMatch(/remote clone disabled/);
   });
 
   it("cloneAllGitRepos audits results and records progress", () => {

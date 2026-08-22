@@ -194,6 +194,10 @@ Control plane today (local, network-free tests):
 | GitRepo local watch/sync | shipped (no remote clone yet) |
 | Forge-neutral Task YAML inbox + git delivery | shipped |
 | Git-defined Memory YAML sync + export | shipped |
+| Auto-export memory on remember (hermes.exportMemory) | shipped |
+| Memory sync/export UI + API | shipped |
+| Remote git clone (--remote / ROPEX_GIT_CLONE) | shipped |
+| Live dsh when @deepseek-ai/dsh installed | shipped (Cordis adapter) |
 | Live `@deepseek-ai/dsh` / Hermes process | not yet |
 
 See [architecture](./docs/architecture.md), [API](./docs/api.md), and [ideas](./docs/ideas.md).

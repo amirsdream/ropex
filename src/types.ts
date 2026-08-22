@@ -44,6 +44,8 @@ export type HermesSpec = {
   skills: string[];
   /** Closed learning loop: extract skills from trajectories. */
   learning: boolean;
+  /** Auto-write remembered facts to memory/*.yaml for git review. */
+  exportMemory?: boolean;
 };
 
 export type GithubSpec = {
