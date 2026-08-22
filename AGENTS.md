@@ -20,7 +20,8 @@ This repo is a GitOps control plane for agent fleets.
 | Brain / execute | `hermes.ts`, `dsh.ts`, `harness.ts`, `plugins.ts`, `workflow.ts`, `runtime.ts` |
 | Memory / skills | `memory.ts`, `skills.ts`, `contracts.ts` |
 | Queue / scale | `queue.ts`, `scheduler.ts`, `fanout.ts`, `admission.ts`, `approval.ts`, `autoscale.ts`, `budget.ts` |
-| Ingress / audit | `webhook.ts`, `ratelimit.ts`, `journal.ts`, `trajectory.ts`, `metrics.ts`, `health.ts`, `audit.ts` |
+| Ingress / audit | `webhook.ts`, `ratelimit.ts`, `journal.ts`, `deliver.ts`, `trajectory.ts`, `metrics.ts`, `health.ts`, `audit.ts` |
+| Lifecycle | `lifecycle.ts` (cordon/evict), `canary.ts`, `snapshot.ts` |
 | Surfaces | `api.ts`, `ui/`, `cli.ts`, `demo.ts` |
 
 ## Overnight orthodoxy

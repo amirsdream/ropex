@@ -13,6 +13,7 @@ import { normalizeFact } from "./memory.js";
 import { ensureAudit, recordAudit } from "./audit.js";
 import { emptyMetrics, ensureQueue } from "./queue.js";
 import { ensureJournal } from "./journal.js";
+import { ensureOutbound } from "./deliver.js";
 import { ensureSkillRegistry } from "./skills.js";
 import { ensureTrajectories } from "./trajectory.js";
 import { ensureRateLimits } from "./ratelimit.js";
@@ -36,6 +37,7 @@ export function emptyState(source = ""): ClusterState {
     skills: [],
     skillRegistry: [],
     deliveries: [],
+    outbound: [],
     trajectories: [],
     rateLimits: [],
     approvals: [],
@@ -56,6 +58,7 @@ export function loadState(root: string): ClusterState {
     );
     ensureQueue(state);
     ensureJournal(state);
+    ensureOutbound(state);
     ensureSkillRegistry(state);
     ensureTrajectories(state);
     ensureRateLimits(state);
@@ -180,6 +183,7 @@ export function planReconcile(
     metrics: current.metrics ?? emptyMetrics(),
     skillRegistry: current.skillRegistry ?? [],
     deliveries: current.deliveries ?? [],
+    outbound: current.outbound ?? [],
     trajectories: current.trajectories ?? [],
     rateLimits: current.rateLimits ?? [],
     approvals: current.approvals ?? [],

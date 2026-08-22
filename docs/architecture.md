@@ -240,6 +240,10 @@ Optional `Policy.spec.budget` (`maxUnits`, `windowMs`, `scope: cluster|fleet|age
 
 `ropex apply --canary [--canary-count N]` rolls only N mismatch slots per agent per reconcile (default 1). Holdouts keep the old digest; the scheduler prefers digest-matching idle workers. Re-apply to continue the rollout. `ropex snapshot` checkpoints `.ropex/state.json`.
 
+## Cordon / evict + outbound delivery
+
+`ropex cordon` / `uncordon` / `evict` control scheduling. `ropex deliver <id> --stub` records an outbound webhook intent (live HTTPS fails closed). See [api.md](./api.md).
+
 ## Observability
 
 - **Delivery journal** — every comment/check/PR appends to `state.deliveries` (`ropex journal`).

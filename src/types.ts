@@ -142,6 +142,8 @@ export type Worker = {
   worktree?: string;
   /** Last task finish time — fair scheduling prefers least-recently-used. */
   lastTaskAt?: string;
+  /** When true, scheduler will not claim this worker (drain/cordon). */
+  cordoned?: boolean;
 };
 
 export type MemoryFact = {
@@ -193,6 +195,22 @@ export type DeliveryRecord = {
   imageDigest: string;
   repo?: string;
   number?: number;
+};
+
+/** Outbound webhook POST intent (network fail-closed until live transport). */
+export type OutboundDelivery = {
+  id: string;
+  at: string;
+  url: string;
+  method: "POST";
+  headers: Record<string, string>;
+  body: string;
+  /** simulated = recorded locally; rejected = live transport not wired / bad URL. */
+  status: "simulated" | "rejected";
+  reason?: string;
+  deliveryId?: string;
+  agent?: string;
+  taskId?: string;
 };
 
 /** Persisted Hermes→DeepSeek trajectory for learning / export. */
@@ -269,6 +287,8 @@ export type ClusterState = {
   skillRegistry: SkillRecord[];
   /** Append-only delivery journal. */
   deliveries: DeliveryRecord[];
+  /** Intended outbound HTTP deliveries (stub until live GitHub App). */
+  outbound: OutboundDelivery[];
   /** Hermes/DeepSeek trajectories for export and learning. */
   trajectories: TrajectoryRecord[];
   /** Webhook rate-limit buckets. */

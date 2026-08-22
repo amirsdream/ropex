@@ -3,6 +3,8 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { applyManifestText, loadState, planReconcile, saveState } from "./controller.js";
 import { writeSnapshot } from "./snapshot.js";
+import { deliverOutbound, outboundFor } from "./deliver.js";
+import { cordonWorker, uncordonWorker, evictWorker, cordonedWorkers } from "./lifecycle.js";
 import { agentsForEvent, eventToTask, pickWorker } from "./github.js";
 import { buildControlPlaneView, startControlPlaneServer } from "./api.js";
 import { enqueueTask, queueSummary, deadLetters, requeueDead, reclaimExpiredLeases } from "./queue.js";
@@ -37,6 +39,10 @@ Usage:
                                      Reconcile YAML (file or directory) into workers
   ropex diff <path> [--canary]        Show create/retire without writing state
   ropex snapshot                  Export cluster state checkpoint
+  ropex cordon <worker-id>        Stop scheduling onto a worker
+  ropex uncordon <worker-id>      Allow scheduling again
+  ropex evict <worker-id>         Retire idle worker (or cordon if running)
+  ropex deliver <delivery-id> [--stub]  Outbound webhook stub for a journal entry
   ropex status                    List derived workers
   ropex run --agent <name> <task> Execute one task on a live worker
   ropex github simulate <event> --repo <org/name> [--title t]
@@ -119,6 +125,51 @@ async function main(argv: string[]): Promise<number> {
       console.log(`snapshot ${out.path}  rev=${out.meta.revision} live=${out.meta.workersLive}`);
       return 0;
     }
+    case "cordon": {
+      const id = rest[0];
+      if (!id) return fail("usage: ropex cordon <worker-id>");
+      const state = loadState(root);
+      const w = cordonWorker(state, id);
+      if (!w) return fail(`worker not found: ${id}`);
+      saveState(root, state);
+      console.log(`cordoned ${w.id}`);
+      return 0;
+    }
+    case "uncordon": {
+      const id = rest[0];
+      if (!id) return fail("usage: ropex uncordon <worker-id>");
+      const state = loadState(root);
+      const w = uncordonWorker(state, id);
+      if (!w) return fail(`worker not found: ${id}`);
+      saveState(root, state);
+      console.log(`uncordoned ${w.id}`);
+      return 0;
+    }
+    case "evict": {
+      const id = rest[0];
+      if (!id) return fail("usage: ropex evict <worker-id>");
+      const state = loadState(root);
+      const result = evictWorker(state, id);
+      if (result.status === "missing") return fail(result.reason);
+      saveState(root, state);
+      console.log(`${result.status} ${id}  ${result.reason}`);
+      return 0;
+    }
+    case "deliver": {
+      const id = rest[0];
+      if (!id) return fail("usage: ropex deliver <delivery-id> [--stub] [--url u]");
+      const state = loadState(root);
+      const rec = state.deliveries?.find((d) => d.id === id);
+      if (!rec) return fail(`delivery not found: ${id}`);
+      const out = deliverOutbound(state, rec, {
+        url: flag(rest, "--url") ?? undefined,
+        secret: flag(rest, "--secret") ?? undefined,
+        mode: rest.includes("--stub") ? "stub" : "live",
+      });
+      saveState(root, state);
+      console.log(`${out.status} ${out.id}  ${out.url}${out.reason ? `  ${out.reason}` : ""}`);
+      return out.status === "simulated" ? 0 : 1;
+    }
     case "status": {
       const state = loadState(root);
       if (!state.workers.length) {
@@ -135,7 +186,15 @@ async function main(argv: string[]): Promise<number> {
         const fleet = w.fleet ? ` fleet=${w.fleet}` : "";
         const wt = w.worktree ? ` worktree=${w.worktree}` : "";
         const dig = w.imageDigest ? ` digest=${w.imageDigest.slice(0, 8)}` : "";
-        console.log(`  ${w.id}  ${w.status}  ${w.harness}  ${w.model}${dig}${fleet}${wt}`);
+        const cord = w.cordoned ? " CORDONED" : "";
+        console.log(`  ${w.id}  ${w.status}${cord}  ${w.harness}  ${w.model}${dig}${fleet}${wt}`);
+      }
+      const cordoned = cordonedWorkers(state);
+      if (cordoned.length) console.log(`cordoned ${cordoned.length}`);
+      const outs = outboundFor(state, { limit: 3 });
+      if (outs.length) {
+        console.log("recent outbound:");
+        for (const o of outs) console.log(`  [${o.status}] ${o.url}`);
       }
       if (state.skills.length) {
         console.log("learned skills:");

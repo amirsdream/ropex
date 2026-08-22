@@ -2,6 +2,12 @@
 
 Nightly capture. Newest first. Each entry should be one shippable idea, not a slogan.
 
+## Outbound delivery stub + worker cordon/evict
+
+Record intended webhook POSTs offline; cordon workers out of the scheduler; evict when idle.
+
+**Shipped (2026-08-22 night):** `deliverOutbound`, `lifecycle` cordon/evict, `docs/api.md`.
+
 ## Canary digest rolls + state snapshot
 
 Rolling canary strategy limits digest retire/create per agent; scheduler skips holdouts. Snapshot exports cluster checkpoints.

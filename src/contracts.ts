@@ -235,4 +235,5 @@ export const API_ROUTES = {
   audit: "/api/v1/audit",
   autoscale: "/api/v1/autoscale",
   budget: "/api/v1/budget",
+  outbound: "/api/v1/outbound",
 } as const;

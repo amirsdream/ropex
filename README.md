@@ -161,10 +161,11 @@ Control plane today (local, network-free tests):
 | Control-plane tick + clone contract | shipped (remote clone stub) |
 | Policy budget / cost accounting | shipped |
 | Canary digest rolls + snapshots | shipped |
+| Outbound webhook stub + cordon/evict | shipped |
 | GitRepo local watch/sync | shipped (no remote clone yet) |
 | Live `@deepseek-ai/dsh` / Hermes process | not yet |
 
-See [architecture](./docs/architecture.md) and [ideas](./docs/ideas.md).
+See [architecture](./docs/architecture.md), [API](./docs/api.md), and [ideas](./docs/ideas.md).
 
 ## License
 

@@ -21,6 +21,7 @@ import { memoryContextFor, resolveSharePolicy, SharedMemoryStore } from "./memor
 import { healthReport } from "./health.js";
 import { planAutoscale } from "./autoscale.js";
 import { budgetReport } from "./budget.js";
+import { outboundFor } from "./deliver.js";
 import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { ensureQueue, queueSummary } from "./queue.js";
@@ -383,6 +384,15 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
   }
   if (url.pathname === API_ROUTES.budget) {
     return json(res, { budgets: budgetReport(state), ledgers: state.budgets ?? [] });
+  }
+  if (url.pathname === API_ROUTES.outbound) {
+    return json(
+      res,
+      outboundFor(state, {
+        status: (url.searchParams.get("status") as "simulated" | "rejected" | undefined) ?? undefined,
+        limit: url.searchParams.get("limit") ? Number(url.searchParams.get("limit")) : 50,
+      }),
+    );
   }
 
   // Static UI

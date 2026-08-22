@@ -120,9 +120,11 @@ export function pickIdleWorker(
     if (at !== bt) return at < bt ? -1 : 1;
     return a.replica - b.replica;
   });
-  // Prefer digest-matching idle workers (canary holdouts stay unclaimed).
-  // If none match, do not fall back to stale digests — wait for canary promotion.
-  const candidates = ranked.filter((w) => w.status === "idle" || w.status === "pending");
+  const candidates = ranked.filter((w) => {
+    if (!(w.status === "idle" || w.status === "pending")) return false;
+    if (w.cordoned) return false;
+    return true;
+  });
   if (!desiredDigest) return candidates[0];
   return candidates.find((w) => w.imageDigest === desiredDigest);
 }
