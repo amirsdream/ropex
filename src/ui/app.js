@@ -152,11 +152,11 @@ async function memoryAction(action) {
     showToast(`Memory ${action} failed`, "err");
     return;
   }
-  const body = await res.json().catch(() => ({}));
+  const result = await res.json().catch(() => ({}));
   showToast(
     action === "sync"
-      ? `Synced ${body.synced?.length ?? 0} memory facts`
-      : `Exported ${body.exported?.length ?? 0} files`,
+      ? `Synced ${result.synced?.length ?? 0} memory facts`
+      : `Exported ${result.exported?.length ?? 0} files`,
   );
   await refresh();
 }
