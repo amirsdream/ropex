@@ -116,6 +116,7 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
       agent: item.task.agent,
       source: item.source,
       prompt: item.task.prompt,
+      priority: item.priority ?? 0,
     })),
     deliveries: (state.deliveries ?? []).slice(-30).map((d) => ({
       id: d.id,

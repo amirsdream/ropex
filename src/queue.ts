@@ -20,10 +20,16 @@ export function enqueueTask(
   state: ClusterState,
   task: Task,
   source: QueuedTask["source"] = "cli",
+  opts: { priority?: number } = {},
 ): QueuedTask {
   ensureQueue(state);
   const existing = state.queue.find((q) => q.id === task.id && q.status === "pending");
-  if (existing) return existing;
+  if (existing) {
+    if (opts.priority !== undefined && opts.priority > existing.priority) {
+      existing.priority = opts.priority;
+    }
+    return existing;
+  }
 
   const decision = admitTask(state, task);
   const item: QueuedTask = {
@@ -33,6 +39,7 @@ export function enqueueTask(
     status: decision.status === "deny" ? "failed" : "pending",
     attempts: 0,
     source,
+    priority: opts.priority ?? 0,
     error: decision.status === "deny" ? decision.reason : undefined,
     finishedAt: decision.status === "deny" ? new Date().toISOString() : undefined,
   };
@@ -88,7 +95,14 @@ export function claimPending(
 ): DrainResult {
   ensureQueue(state);
   const claimed: DrainResult["claimed"] = [];
-  const pending = state.queue.filter((q) => q.status === "pending");
+  const pending = state.queue
+    .filter((q) => q.status === "pending")
+    .sort((a, b) => {
+      const pa = a.priority ?? 0;
+      const pb = b.priority ?? 0;
+      if (pa !== pb) return pb - pa; // higher priority first
+      return a.enqueuedAt < b.enqueuedAt ? -1 : a.enqueuedAt > b.enqueuedAt ? 1 : 0;
+    });
 
   for (const item of pending) {
     if (claimed.length >= limit) break;

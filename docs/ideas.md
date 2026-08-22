@@ -20,6 +20,10 @@ Persist Hermes→DeepSeek trajectories (JSONL export) and sliding-window rate li
 
 **Shipped:** approvals CLI + UI panel, `learnFromTrajectory`, `policy dry-run`.
 
+## Queue priority + reconcile chaos
+
+Higher `priority` claims first; `ropex chaos` stress-tests scale/digest rolls for slot invariants.
+
 Gate tool calls with Policy deny/requireApproval before DeepSeek executes; fan large tasks across idle replicas.
 
 **Shipped (2026-08-21 night):** `admitCalls` / enqueue deny, `fanOutTask` + `ropex fanout`, UI queue + delivery journal panels.

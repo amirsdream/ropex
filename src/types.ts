@@ -275,6 +275,8 @@ export type QueuedTask = {
   workerId?: string;
   attempts: number;
   source: "cli" | "github" | "webhook";
+  /** Higher runs first (default 0). */
+  priority: number;
   error?: string;
   finishedAt?: string;
 };

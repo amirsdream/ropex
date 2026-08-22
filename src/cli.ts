@@ -16,6 +16,7 @@ import { runSandboxDemo } from "./demo.js";
 import { exportTrajectoriesJsonl, trajectoriesFor, learnFromTrajectory } from "./trajectory.js";
 import { decideApproval, pendingApprovals } from "./approval.js";
 import { policyDryRun } from "./policy.js";
+import { runReconcileChaos, assertChaosInvariants } from "./chaos.js";
 import { parseManifests } from "./spec.js";
 import { ingestGithubWebhook, signGithubPayload } from "./webhook.js";
 import { parseInterval, watchLoop, watchOnce } from "./watch.js";
@@ -42,6 +43,8 @@ Usage:
   ropex reject <id>               Reject a gated tool
   ropex learn <trajectory-id>     Distill a skill from a stored trajectory
   ropex policy dry-run --agent <name> <prompt>
+  ropex enqueue --agent <name> [--priority N] <prompt>
+  ropex chaos [--replicas N]          Stress reconcile scale + digest rolls
   ropex watch <path> [--once] [--interval 5s]
                                      Reconcile manifests on an interval (Flux-style)
   ropex metrics [--prometheus]    Export cluster metrics
@@ -91,7 +94,8 @@ async function main(argv: string[]): Promise<number> {
       for (const w of state.workers.filter((x) => x.status !== "retired")) {
         const fleet = w.fleet ? ` fleet=${w.fleet}` : "";
         const wt = w.worktree ? ` worktree=${w.worktree}` : "";
-        console.log(`  ${w.id}  ${w.status}  ${w.harness}  ${w.model}  image=${w.imageDigest}${fleet}${wt}`);
+        const dig = w.imageDigest ? ` digest=${w.imageDigest.slice(0, 8)}` : "";
+        console.log(`  ${w.id}  ${w.status}  ${w.harness}  ${w.model}${dig}${fleet}${wt}`);
       }
       if (state.skills.length) {
         console.log("learned skills:");
@@ -317,6 +321,38 @@ async function main(argv: string[]): Promise<number> {
       );
       for (const d of report.callAdmission.denied) console.log(`  deny ${d.name}: ${d.reason}`);
       for (const a of report.callAdmission.needsApproval) console.log(`  approval ${a.name}: ${a.reason}`);
+      return 0;
+    }
+    case "enqueue": {
+      const agent = flag(rest, "--agent");
+      const priority = Number(flag(rest, "--priority") ?? "0");
+      const prompt = positional(rest).join(" ");
+      if (!agent || !prompt) return fail("enqueue requires --agent and a prompt");
+      const state = loadState(root);
+      const item = enqueueTask(
+        state,
+        { id: `enq-${Date.now()}`, agent, prompt },
+        "cli",
+        { priority },
+      );
+      saveState(root, state);
+      console.log(`enqueued ${item.id}  priority=${item.priority}  status=${item.status}`);
+      return 0;
+    }
+    case "chaos": {
+      const maxReplicas = Number(flag(rest, "--replicas") ?? "8");
+      const { steps, final } = runReconcileChaos(root, { maxReplicas });
+      for (const s of steps) {
+        console.log(
+          `${s.name}  live=${s.live} retired=${s.retired}  create=${s.plan.create.length} retire=${s.plan.retire.length}`,
+        );
+      }
+      const errors = assertChaosInvariants(final);
+      if (errors.length) {
+        for (const e of errors) console.error(`invariant: ${e}`);
+        return 1;
+      }
+      console.log(`chaos ok  revision=${final.revision}  workers=${final.workers.length}`);
       return 0;
     }
     case "watch": {

@@ -52,6 +52,7 @@ export { replayDelivery } from "./journal.js";
 export { runSandboxDemo } from "./demo.js";
 export { recordTrajectory, trajectoriesFor, exportTrajectoriesJsonl, learnFromTrajectory } from "./trajectory.js";
 export { policyDryRun } from "./policy.js";
+export { runReconcileChaos, assertChaosInvariants } from "./chaos.js";
 export { checkRateLimit } from "./ratelimit.js";
 export {
   requestApprovals,
