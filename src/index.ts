@@ -32,6 +32,10 @@ export {
   pickIdleWorker,
   queueSummary,
   emptyMetrics,
+  requeueDead,
+  deadLetters,
+  retryBackoffMs,
+  DEFAULT_MAX_ATTEMPTS,
 } from "./queue.js";
 export { drainQueue } from "./scheduler.js";
 export {

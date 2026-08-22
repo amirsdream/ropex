@@ -191,6 +191,19 @@ sequenceDiagram
 
 GitHub webhooks (HMAC-verified), `github simulate`, and CLI enqueue into `ClusterState.queue`. `ropex drain` claims pending items onto LRU-idle workers and records metrics.
 
+Failures **retry** with exponential backoff (`nextRetryAt`, default 3 attempts), then land in the **dead-letter** lane (`status: dead`). `ropex retry <id>|--all` re-queues DLQ items. Transient task errors release the worker back to `idle` so capacity is not burned.
+
+```mermaid
+stateDiagram-v2
+  [*] --> pending: enqueue
+  pending --> claimed: claimPending
+  claimed --> done: ok
+  claimed --> pending: fail + attempts < max
+  claimed --> dead: fail + attempts >= max
+  dead --> pending: requeueDead
+  pending --> pending: waiting nextRetryAt
+```
+
 ## GitRepo watch
 
 `ropex watch <path> [--once] [--interval 5s]` re-reads local manifest trees and reconciles — Flux-style drift control without a remote clone (yet). Scale or skill edits produce create/retire/image rolls.
@@ -233,7 +246,7 @@ Shipped end-to-end offline:
 | --- | --- |
 | Desired state | `fleets/**`, `spec`, `controller`, `image`, `worktree` |
 | Ingress | `webhook` (HMAC), `ratelimit`, `github` |
-| Schedule | fair LRU `queue`, concurrent `scheduler`, priority, `fanout` |
+| Schedule | fair LRU `queue`, concurrent `scheduler`, priority, retry/DLQ, `fanout` |
 | Brain / kernel | Hermes compose/plan/learn, `bootDsh` profile packs |
 | Governance | `admission`, `approval`, `policy` dry-run |
 | Memory / skills | scoped `SharedMemoryStore`, versioned `skillRegistry` |

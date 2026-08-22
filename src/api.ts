@@ -119,6 +119,9 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
       source: item.source,
       prompt: item.task.prompt,
       priority: item.priority ?? 0,
+      attempts: item.attempts,
+      nextRetryAt: item.nextRetryAt,
+      error: item.error,
     })),
     deliveries: (state.deliveries ?? []).slice(-30).map((d) => ({
       id: d.id,
@@ -254,10 +257,12 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
     return json(res, buildControlPlaneView(state).workers);
   }
   if (url.pathname === API_ROUTES.queue) {
+    const summary = queueSummary(state);
     return json(res, {
-      summary: queueSummary(state),
+      summary,
       metrics: state.metrics,
       items: state.queue,
+      deadLetters: state.queue.filter((q) => q.status === "dead"),
     });
   }
   if (url.pathname === API_ROUTES.metrics) {

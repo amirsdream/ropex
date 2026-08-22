@@ -99,8 +99,8 @@ function renderQueue(view) {
           <div class="worker-id">${escapeHtml(q.agent)}</div>
           <div class="digest">${escapeHtml(q.prompt)}</div>
         </div>
-        <div class="status status-${q.status === "done" ? "idle" : q.status}">${q.status}</div>
-        <div class="digest">${escapeHtml(q.source)}</div>
+        <div class="status status-${q.status === "done" ? "idle" : q.status === "dead" ? "failed" : q.status}">${q.status}${q.attempts ? `·a${q.attempts}` : ""}</div>
+        <div class="digest">${escapeHtml(q.source)}${q.nextRetryAt ? " · retry" : ""}${q.error ? ` · ${escapeHtml(q.error).slice(0, 40)}` : ""}</div>
         <div class="digest">${escapeHtml(q.id)}</div>
       </div>`,
     )

@@ -174,7 +174,17 @@ export type ControlPlaneView = {
   harness: HarnessSurfaceView[];
   skills: LearnedSkill[];
   workflow: Array<{ id: string; owner: string; purpose: string }>;
-  queue: Array<{ id: string; status: string; agent: string; source: string; prompt: string; priority?: number }>;
+  queue: Array<{
+    id: string;
+    status: string;
+    agent: string;
+    source: string;
+    prompt: string;
+    priority?: number;
+    attempts?: number;
+    nextRetryAt?: string;
+    error?: string;
+  }>;
   deliveries: Array<{ id: string; kind: string; agent: string; body: string; at: string; repo?: string }>;
   metrics: {
     tasksCompleted: number;

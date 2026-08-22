@@ -17,9 +17,13 @@ export type MetricsSnapshot = {
   queue_claimed: number;
   queue_done: number;
   queue_failed: number;
+  queue_dead: number;
+  queue_waiting_retry: number;
   tasks_completed: number;
   tasks_failed: number;
   tasks_enqueued: number;
+  tasks_retried: number;
+  tasks_dead: number;
   memory_facts: number;
   skills_learned: number;
   skills_registry: number;
@@ -43,9 +47,13 @@ export function metricsSnapshot(state: ClusterState): MetricsSnapshot {
     queue_claimed: q.claimed,
     queue_done: q.done,
     queue_failed: q.failed,
+    queue_dead: q.dead,
+    queue_waiting_retry: q.waitingRetry,
     tasks_completed: state.metrics?.tasksCompleted ?? 0,
     tasks_failed: state.metrics?.tasksFailed ?? 0,
     tasks_enqueued: state.metrics?.tasksEnqueued ?? 0,
+    tasks_retried: state.metrics?.tasksRetried ?? 0,
+    tasks_dead: state.metrics?.tasksDead ?? 0,
     memory_facts: state.memory?.length ?? 0,
     skills_learned: state.skills?.length ?? 0,
     skills_registry: state.skillRegistry?.length ?? 0,
@@ -75,12 +83,21 @@ export function metricsPrometheus(state: ClusterState): string {
     "# HELP ropex_queue_pending Pending queue depth.",
     "# TYPE ropex_queue_pending gauge",
     `ropex_queue_pending ${m.queue_pending}`,
+    "# HELP ropex_queue_dead Dead-letter depth.",
+    "# TYPE ropex_queue_dead gauge",
+    `ropex_queue_dead ${m.queue_dead}`,
     "# HELP ropex_tasks_completed_total Completed tasks.",
     "# TYPE ropex_tasks_completed_total counter",
     `ropex_tasks_completed_total ${m.tasks_completed}`,
-    "# HELP ropex_tasks_failed_total Failed tasks.",
+    "# HELP ropex_tasks_failed_total Failed tasks (incl. dead-letter).",
     "# TYPE ropex_tasks_failed_total counter",
     `ropex_tasks_failed_total ${m.tasks_failed}`,
+    "# HELP ropex_tasks_retried_total Soft failures re-queued.",
+    "# TYPE ropex_tasks_retried_total counter",
+    `ropex_tasks_retried_total ${m.tasks_retried}`,
+    "# HELP ropex_tasks_dead_total Tasks exhausted retries.",
+    "# TYPE ropex_tasks_dead_total counter",
+    `ropex_tasks_dead_total ${m.tasks_dead}`,
     "# HELP ropex_memory_facts Shared memory facts.",
     "# TYPE ropex_memory_facts gauge",
     `ropex_memory_facts ${m.memory_facts}`,

@@ -1,18 +1,24 @@
 /**
  * Durable work queue + fair scheduler.
  * GitHub webhooks / simulate / CLI enqueue; drain claims idle workers LRU-first.
+ * Failed claims retry with backoff, then land in the dead-letter lane.
  */
 
 import { admitTask } from "./admission.js";
 import type { ClusterMetrics, ClusterState, QueuedTask, Task, Worker } from "./types.js";
 
+/** Default max claim attempts before dead-letter. */
+export const DEFAULT_MAX_ATTEMPTS = 3;
+
 export function emptyMetrics(): ClusterMetrics {
-  return { tasksCompleted: 0, tasksFailed: 0, tasksEnqueued: 0 };
+  return { tasksCompleted: 0, tasksFailed: 0, tasksEnqueued: 0, tasksRetried: 0, tasksDead: 0 };
 }
 
 export function ensureQueue(state: ClusterState): ClusterState {
   if (!state.queue) state.queue = [];
   if (!state.metrics) state.metrics = emptyMetrics();
+  if (state.metrics.tasksRetried === undefined) state.metrics.tasksRetried = 0;
+  if (state.metrics.tasksDead === undefined) state.metrics.tasksDead = 0;
   return state;
 }
 
@@ -84,19 +90,33 @@ export type DrainResult = {
   remaining: number;
 };
 
+/** Exponential backoff: 1s, 2s, 4s… capped at 15m (attempt is post-increment claim count). */
+export function retryBackoffMs(attempts: number): number {
+  const exp = Math.max(0, attempts - 1);
+  return Math.min(1_000 * 2 ** exp, 15 * 60_000);
+}
+
+function isClaimablePending(item: QueuedTask, now: number): boolean {
+  if (item.status !== "pending") return false;
+  if (!item.nextRetryAt) return true;
+  const at = Date.parse(item.nextRetryAt);
+  return !Number.isFinite(at) || at <= now;
+}
+
 /**
  * Claim up to `limit` pending queue items onto idle workers.
- * Does not execute — caller runs `runTask` then `completeQueued`.
+ * Skips items waiting on `nextRetryAt`. Does not execute — caller runs `runTask` then `completeQueued`.
  */
 export function claimPending(
   state: ClusterState,
   limit = 32,
-  opts: { preferFleet?: string } = {},
+  opts: { preferFleet?: string; now?: number } = {},
 ): DrainResult {
   ensureQueue(state);
+  const now = opts.now ?? Date.now();
   const claimed: DrainResult["claimed"] = [];
   const pending = state.queue
-    .filter((q) => q.status === "pending")
+    .filter((q) => isClaimablePending(q, now))
     .sort((a, b) => {
       const pa = a.priority ?? 0;
       const pb = b.priority ?? 0;
@@ -115,7 +135,8 @@ export function claimPending(
     if (!worker) continue;
     item.status = "claimed";
     item.workerId = worker.id;
-    item.claimedAt = new Date().toISOString();
+    item.claimedAt = new Date(now).toISOString();
+    item.nextRetryAt = undefined;
     item.attempts += 1;
     worker.status = "running";
     claimed.push({ queueId: item.id, workerId: worker.id, task: item.task });
@@ -127,21 +148,99 @@ export function claimPending(
   };
 }
 
+function releaseWorker(state: ClusterState, workerId?: string): void {
+  if (!workerId) return;
+  const worker = state.workers.find((w) => w.id === workerId);
+  if (!worker) return;
+  if (worker.status === "running" || worker.status === "failed") {
+    worker.status = "idle";
+    worker.lastTaskAt = new Date().toISOString();
+  }
+}
+
+export type CompleteQueuedOptions = {
+  /** Max claim attempts before dead-letter (default 3). */
+  maxAttempts?: number;
+  now?: number;
+  /** When false, leave worker status alone (default true → idle). */
+  releaseWorker?: boolean;
+};
+
+/**
+ * Mark a claimed item done, or retry / dead-letter on failure.
+ * Policy denials stay `failed` (never claimed). Runtime failures retry then `dead`.
+ */
 export function completeQueued(
   state: ClusterState,
   queueId: string,
   ok: boolean,
   error?: string,
-): void {
+  opts: CompleteQueuedOptions = {},
+): QueuedTask | undefined {
   ensureQueue(state);
   const item = state.queue.find((q) => q.id === queueId);
-  if (!item) return;
-  item.status = ok ? "done" : "failed";
-  item.finishedAt = new Date().toISOString();
+  if (!item) return undefined;
+  const now = opts.now ?? Date.now();
+  const maxAttempts = opts.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
+  const workerId = item.workerId;
+
+  if (ok) {
+    item.status = "done";
+    item.finishedAt = new Date(now).toISOString();
+    item.error = undefined;
+    item.nextRetryAt = undefined;
+    state.metrics.tasksCompleted += 1;
+    state.metrics.lastDrainAt = item.finishedAt;
+    if (opts.releaseWorker !== false) releaseWorker(state, workerId);
+    return item;
+  }
+
   if (error) item.error = error;
-  if (ok) state.metrics.tasksCompleted += 1;
-  else state.metrics.tasksFailed += 1;
+
+  if (item.attempts > 0 && item.attempts < maxAttempts) {
+    item.status = "pending";
+    item.workerId = undefined;
+    item.claimedAt = undefined;
+    item.finishedAt = undefined;
+    item.nextRetryAt = new Date(now + retryBackoffMs(item.attempts)).toISOString();
+    state.metrics.tasksRetried = (state.metrics.tasksRetried ?? 0) + 1;
+    state.metrics.lastDrainAt = new Date(now).toISOString();
+    if (opts.releaseWorker !== false) releaseWorker(state, workerId);
+    return item;
+  }
+
+  item.status = "dead";
+  item.finishedAt = new Date(now).toISOString();
+  item.nextRetryAt = undefined;
+  state.metrics.tasksFailed += 1;
+  state.metrics.tasksDead = (state.metrics.tasksDead ?? 0) + 1;
   state.metrics.lastDrainAt = item.finishedAt;
+  if (opts.releaseWorker !== false) releaseWorker(state, workerId);
+  return item;
+}
+
+/** Re-queue a dead-letter item for another attempt cycle. */
+export function requeueDead(
+  state: ClusterState,
+  queueId: string,
+  opts: { now?: number; resetAttempts?: boolean } = {},
+): QueuedTask | undefined {
+  ensureQueue(state);
+  const item = state.queue.find((q) => q.id === queueId && q.status === "dead");
+  if (!item) return undefined;
+  item.status = "pending";
+  item.workerId = undefined;
+  item.claimedAt = undefined;
+  item.finishedAt = undefined;
+  item.nextRetryAt = undefined;
+  item.error = undefined;
+  if (opts.resetAttempts !== false) item.attempts = 0;
+  return item;
+}
+
+export function deadLetters(state: ClusterState): QueuedTask[] {
+  ensureQueue(state);
+  return state.queue.filter((q) => q.status === "dead");
 }
 
 export function queueSummary(state: ClusterState): {
@@ -149,11 +248,20 @@ export function queueSummary(state: ClusterState): {
   claimed: number;
   done: number;
   failed: number;
+  dead: number;
+  waitingRetry: number;
 } {
   ensureQueue(state);
-  const counts = { pending: 0, claimed: 0, done: 0, failed: 0 };
+  const now = Date.now();
+  const counts = { pending: 0, claimed: 0, done: 0, failed: 0, dead: 0, waitingRetry: 0 };
   for (const q of state.queue) {
-    counts[q.status] += 1;
+    if (q.status === "dead") counts.dead += 1;
+    else if (q.status === "pending" || q.status === "claimed" || q.status === "done" || q.status === "failed") {
+      counts[q.status] += 1;
+    }
+    if (q.status === "pending" && q.nextRetryAt && Date.parse(q.nextRetryAt) > now) {
+      counts.waitingRetry += 1;
+    }
   }
   return counts;
 }

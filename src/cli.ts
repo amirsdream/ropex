@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { applyManifestText, loadState, planReconcile, saveState } from "./controller.js";
 import { agentsForEvent, eventToTask, pickWorker } from "./github.js";
 import { buildControlPlaneView, startControlPlaneServer } from "./api.js";
-import { enqueueTask, queueSummary } from "./queue.js";
+import { enqueueTask, queueSummary, deadLetters, requeueDead } from "./queue.js";
 import { runTask } from "./runtime.js";
 import { drainQueue } from "./scheduler.js";
 import { healthReport } from "./health.js";
@@ -33,6 +33,7 @@ Usage:
   ropex github simulate <event> --repo <org/name> [--title t]
   ropex webhook simulate <event> --repo <org/name> [--title t] [--secret s]
   ropex queue                     Show work queue + metrics
+  ropex retry <id>|--all          Re-queue dead-letter item(s)
   ropex drain [--limit N] [--concurrency N]
                                      Claim idle workers and run pending queue
   ropex sync                          Sync declared GitRepo paths (local stub)
@@ -92,7 +93,9 @@ async function main(argv: string[]): Promise<number> {
       console.log(`revision ${state.revision}  source ${state.source}`);
       console.log(`workers ${liveCount(state.workers)} live / ${state.workers.length} known`);
       const q = queueSummary(state);
-      console.log(`queue pending=${q.pending} claimed=${q.claimed} done=${q.done} failed=${q.failed}`);
+      console.log(
+        `queue pending=${q.pending} claimed=${q.claimed} done=${q.done} failed=${q.failed} dead=${q.dead}`,
+      );
       for (const w of state.workers.filter((x) => x.status !== "retired")) {
         const fleet = w.fleet ? ` fleet=${w.fleet}` : "";
         const wt = w.worktree ? ` worktree=${w.worktree}` : "";
@@ -184,14 +187,37 @@ async function main(argv: string[]): Promise<number> {
     case "queue": {
       const state = loadState(root);
       const q = queueSummary(state);
-      console.log(`pending=${q.pending} claimed=${q.claimed} done=${q.done} failed=${q.failed}`);
       console.log(
-        `metrics completed=${state.metrics.tasksCompleted} failed=${state.metrics.tasksFailed} enqueued=${state.metrics.tasksEnqueued}`,
+        `pending=${q.pending} claimed=${q.claimed} done=${q.done} failed=${q.failed} dead=${q.dead} waitingRetry=${q.waitingRetry}`,
+      );
+      console.log(
+        `metrics completed=${state.metrics.tasksCompleted} failed=${state.metrics.tasksFailed} retried=${state.metrics.tasksRetried ?? 0} dead=${state.metrics.tasksDead ?? 0} enqueued=${state.metrics.tasksEnqueued}`,
       );
       for (const item of state.queue.slice(-20)) {
-        console.log(`  [${item.status}] ${item.source} ${item.task.agent}  ${item.task.prompt}`);
+        const retry = item.nextRetryAt ? ` retry@${item.nextRetryAt}` : "";
+        console.log(
+          `  [${item.status}] a${item.attempts} ${item.source} ${item.task.agent}  ${item.task.prompt}${retry}${item.error ? `  err=${item.error}` : ""}`,
+        );
       }
       return 0;
+    }
+    case "retry": {
+      const state = loadState(root);
+      const all = rest.includes("--all");
+      const id = rest.find((a) => a !== "--all");
+      if (!all && !id) return fail("usage: ropex retry <id> | ropex retry --all");
+      const targets = all ? deadLetters(state).map((d) => d.id) : [id!];
+      if (!targets.length) {
+        console.log("no dead-letter items");
+        return 0;
+      }
+      let n = 0;
+      for (const tid of targets) {
+        if (requeueDead(state, tid)) n += 1;
+      }
+      saveState(root, state);
+      console.log(`requeued ${n} dead-letter item(s)`);
+      return n ? 0 : 1;
     }
     case "drain": {
       const state = loadState(root);

@@ -2,6 +2,12 @@
 
 Nightly capture. Newest first. Each entry should be one shippable idea, not a slogan.
 
+## Dead-letter + retry queue
+
+Failed claims retry with exponential backoff (`nextRetryAt`), then `dead`. Workers release to idle on transient failure. `ropex retry` resurrects DLQ items.
+
+**Shipped (2026-08-22 night):** `completeQueued` retry/DLQ, `requeueDead`, metrics + CLI + API.
+
 ## Worker health probes + backlog SLO
 
 Probe live workers (digest, worktree presence, stuck claims via `claimedAt`) and evaluate pending depth/age SLOs. Surface via CLI, `/api/v1/health` (503 on breach), and Prometheus gauges.

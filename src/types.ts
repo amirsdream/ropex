@@ -271,7 +271,7 @@ export type QueuedTask = {
   id: string;
   task: Task;
   enqueuedAt: string;
-  status: "pending" | "claimed" | "done" | "failed";
+  status: "pending" | "claimed" | "done" | "failed" | "dead";
   workerId?: string;
   /** Set when a worker claims the item (stuck-probe input). */
   claimedAt?: string;
@@ -281,12 +281,18 @@ export type QueuedTask = {
   priority: number;
   error?: string;
   finishedAt?: string;
+  /** Earliest time a pending retry may be claimed again. */
+  nextRetryAt?: string;
 };
 
 export type ClusterMetrics = {
   tasksCompleted: number;
   tasksFailed: number;
   tasksEnqueued: number;
+  /** Soft failures that were re-queued for another attempt. */
+  tasksRetried?: number;
+  /** Tasks that exhausted retries (dead-letter). */
+  tasksDead?: number;
   lastEventAt?: string;
   lastDrainAt?: string;
 };
