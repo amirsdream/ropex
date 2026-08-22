@@ -29,6 +29,12 @@ import { deliveriesFor, replayDelivery } from "./journal.js";
 import { shareSkill, promoteSkill, skillVersions } from "./skills.js";
 import { fanOutTask } from "./fanout.js";
 import { syncGitRepos, syncDueGitRepos, syncMultiRepo } from "./gitrepo.js";
+import {
+  readTaskManifest,
+  syncTasksFromDir,
+  syncTasksFromGitRepos,
+  taskFromManifest,
+} from "./tasks.js";
 import { runSandboxDemo } from "./demo.js";
 import { exportTrajectoriesJsonl, trajectoriesFor, learnFromTrajectory } from "./trajectory.js";
 import { rateLimitReport } from "./ratelimit.js";
@@ -83,6 +89,8 @@ Usage:
   ropex policy dry-run --agent <name> <prompt>
   ropex policy simulate           Fleet-wide policy dry-run report
   ropex enqueue --agent <name> [--priority N] <prompt>
+  ropex tasks sync [path] [--repos]   Enqueue pending Task YAML from git
+  ropex tasks apply <task.yaml>       Enqueue one Task manifest file
   ropex chaos [--replicas N]          Stress reconcile scale + digest rolls
   ropex watch <path> [--once] [--interval 5s]
                                      Reconcile manifests on an interval (Flux-style)
@@ -633,6 +641,40 @@ async function main(argv: string[]): Promise<number> {
       for (const d of report.callAdmission.denied) console.log(`  deny ${d.name}: ${d.reason}`);
       for (const a of report.callAdmission.needsApproval) console.log(`  approval ${a.name}: ${a.reason}`);
       return 0;
+    }
+    case "tasks": {
+      const state = loadState(root);
+      const sub = rest[0];
+      if (sub === "apply") {
+        const file = rest[1];
+        if (!file) return fail("usage: ropex tasks apply <task.yaml>");
+        const m = readTaskManifest(resolve(root, file));
+        if ((m.spec.status ?? "pending") !== "pending") {
+          return fail(`task ${m.metadata.name} is not pending (status=${m.spec.status})`);
+        }
+        const path = resolve(root, file);
+        const task = taskFromManifest(m, path);
+        const item = enqueueTask(state, task, "git", { priority: m.spec.priority });
+        saveState(root, state);
+        console.log(`enqueued ${item.id} from ${path}  status=${item.status}`);
+        return 0;
+      }
+      if (sub === "sync" || !sub) {
+        const fromRepos = rest.includes("--repos");
+        const pathFlag = flag(rest, "--path");
+        const dirArg = rest.find((x) => !x.startsWith("--") && x !== "sync");
+        const result = fromRepos
+          ? syncTasksFromGitRepos(state, root)
+          : syncTasksFromDir(state, root, pathFlag ?? dirArg);
+        saveState(root, state);
+        console.log(
+          `tasks sync  scanned=${result.scanned} enqueued=${result.enqueued.length} skipped=${result.skipped.length} errors=${result.errors.length}`,
+        );
+        for (const id of result.enqueued) console.log(`  + ${id}`);
+        for (const e of result.errors) console.log(`  ! ${e.path}: ${e.error}`);
+        return result.errors.length ? 1 : 0;
+      }
+      return fail("usage: ropex tasks sync [path] [--repos] | ropex tasks apply <file>");
     }
     case "enqueue": {
       const agent = flag(rest, "--agent");

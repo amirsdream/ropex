@@ -15,6 +15,7 @@ import {
   reclaimExpiredLeases,
 } from "./queue.js";
 import { runTask, type RunTaskOptions } from "./runtime.js";
+import { deliverGitTaskFromQueueItem } from "./tasks.js";
 import type { ClusterState, RunResult } from "./types.js";
 
 /** Hard ceiling so UI/API cannot spawn uncapped parallel drains. */
@@ -99,12 +100,16 @@ export async function drainQueue(
         try {
           heartbeatClaim(state, c.queueId, { leaseMs: opts.leaseMs });
           const result = await runTask(state, worker, c.task, opts);
-          completeQueued(state, c.queueId, true, undefined, { maxAttempts: opts.maxAttempts });
-          return result;
-        } catch (err) {
-          completeQueued(state, c.queueId, false, err instanceof Error ? err.message : String(err), {
+          const updated = completeQueued(state, c.queueId, true, undefined, {
             maxAttempts: opts.maxAttempts,
           });
+          if (updated) deliverGitTaskFromQueueItem(updated, result.output);
+          return result;
+        } catch (err) {
+          const updated = completeQueued(state, c.queueId, false, err instanceof Error ? err.message : String(err), {
+            maxAttempts: opts.maxAttempts,
+          });
+          if (updated) deliverGitTaskFromQueueItem(updated);
           return undefined;
         }
       }),

@@ -1,12 +1,12 @@
 # Ropex
 
-Git is the control plane. Agents are the workload. GitHub is the queue.
+Git is the control plane. Agents are the workload. **The queue is pluggable** — git-native Task YAML, CLI, or optional GitHub webhooks.
 
 The name is from **RoPE** (rotary position embeddings) — the trick that lets a transformer keep many tokens in one coherent sequence. Ropex does the same for agents: one git sequence, many workers in position.
 
 Ropex treats agents the way Kubernetes treats pods: you declare desired state in git, a controller derives workers, and they reconcile toward it. Each worker is **DeepSeek Harness** (everything is a plugin) plus **Hermes** (soul, memory, skills, a closed learning loop).
 
-GitHub stops being a place humans dump work and starts being the API agents already speak: issues in, pull requests out.
+Work can arrive as **`Task` YAML in your fleet repo** (any git server), from the CLI, or via optional GitHub events. Delivery for git tasks writes status back to the same file. See [forge-neutral tasks](./docs/forge-neutral.md).
 
 ## Why this exists
 
@@ -71,6 +71,8 @@ npm install
 npm test
 npx tsx src/cli.ts demo --root /tmp/ropex-demo
 npx tsx src/cli.ts apply fleets/examples
+npx tsx src/cli.ts apply fleets/examples/forge-local.yaml
+npx tsx src/cli.ts tasks sync
 npx tsx src/cli.ts status
 npx tsx src/cli.ts webhook simulate issues.opened --repo acme/app --title "login is broken" --secret test
 npx tsx src/cli.ts drain --concurrency 2
@@ -187,6 +189,7 @@ Control plane today (local, network-free tests):
 | Hygiene API + worker pool heatmap | shipped |
 | Skills promote UI + canary + budget alerts | shipped |
 | GitRepo local watch/sync | shipped (no remote clone yet) |
+| Forge-neutral Task YAML inbox + git delivery | shipped |
 | Live `@deepseek-ai/dsh` / Hermes process | not yet |
 
 See [architecture](./docs/architecture.md), [API](./docs/api.md), and [ideas](./docs/ideas.md).

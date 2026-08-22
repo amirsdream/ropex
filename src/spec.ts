@@ -8,6 +8,7 @@ import type {
   LabelSelector,
   Manifest,
   Policy,
+  TaskManifest,
 } from "./types.js";
 import { API_VERSION } from "./types.js";
 
@@ -34,12 +35,18 @@ function validateManifest(data: unknown): Manifest {
     throw new Error(`unsupported apiVersion: ${String(m.apiVersion)}`);
   }
   const kind = m.kind;
-  if (kind !== "Agent" && kind !== "Fleet" && kind !== "GitRepo" && kind !== "Policy") {
+  if (kind !== "Agent" && kind !== "Fleet" && kind !== "GitRepo" && kind !== "Policy" && kind !== "Task") {
     throw new Error(`unsupported kind: ${String(kind)}`);
   }
   const metadata = m.metadata as { name?: string } | undefined;
   if (!metadata?.name) {
     throw new Error(`${kind} is missing metadata.name`);
+  }
+  if (kind === "Task") {
+    const spec = m.spec as { agent?: string; prompt?: string } | undefined;
+    if (!spec?.agent || !spec?.prompt) {
+      throw new Error("Task is missing spec.agent or spec.prompt");
+    }
   }
   return data as Manifest;
 }
@@ -118,6 +125,10 @@ export function collectPolicies(manifests: Manifest[]): Policy[] {
 
 export function collectGitRepos(manifests: Manifest[]): GitRepo[] {
   return manifests.filter((m): m is GitRepo => m.kind === "GitRepo");
+}
+
+export function collectTasks(manifests: Manifest[]): TaskManifest[] {
+  return manifests.filter((m): m is TaskManifest => m.kind === "Task");
 }
 
 export function collectFleets(manifests: Manifest[]): Fleet[] {

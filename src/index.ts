@@ -2,7 +2,7 @@ export { API_VERSION } from "./types.js";
 export type * from "./types.js";
 export type * from "./contracts.js";
 export { API_ROUTES } from "./contracts.js";
-export { parseManifests, expandDesired, applyReplicaCap, maxReplicas } from "./spec.js";
+export { parseManifests, expandDesired, applyReplicaCap, maxReplicas, collectTasks } from "./spec.js";
 export { planReconcile, applyManifestText, loadState, saveState, emptyState } from "./controller.js";
 export { createHarness } from "./harness.js";
 export { createHermes, liveHermesScaffold } from "./hermes.js";
@@ -129,6 +129,14 @@ export {
   queueDepthBars,
   runHygiene,
 } from "./hygiene.js";
+export {
+  syncTasksFromDir,
+  syncTasksFromGitRepos,
+  readTaskManifest,
+  taskFromManifest,
+  deliverGitTaskManifest,
+  DEFAULT_TASKS_DIR,
+} from "./tasks.js";
 export { checkRateLimit, rateLimitReport } from "./ratelimit.js";
 export {
   requestApprovals,

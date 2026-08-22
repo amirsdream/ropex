@@ -1,0 +1,13 @@
+apiVersion: ropex.dev/v1
+kind: Agent
+metadata:
+  name: docbot
+spec:
+  replicas: 1
+  harness:
+    profile: minimal
+    plugins: [fs]
+  hermes:
+    memory: shared
+    learning: false
+    skills: []

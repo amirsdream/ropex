@@ -105,6 +105,28 @@ export type GitRepo = {
     path: string;
     interval?: string;
     branch?: string;
+    /** Task inbox directory relative to repo path (default `tasks`). */
+    tasksPath?: string;
+  };
+};
+
+/** Git-native work item declared in the fleet repo (forge-neutral queue). */
+export type TaskManifest = {
+  apiVersion: typeof API_VERSION;
+  kind: "Task";
+  metadata: ObjectMeta;
+  spec: {
+    agent: string;
+    prompt: string;
+    priority?: number;
+    status?: "pending" | "claimed" | "done" | "failed" | "cancelled";
+    delivery?: { mode?: "git" };
+    result?: {
+      output?: string;
+      workerId?: string;
+      completedAt?: string;
+      error?: string;
+    };
   };
 };
 
@@ -133,7 +155,7 @@ export type Policy = {
   };
 };
 
-export type Manifest = Agent | Fleet | GitRepo | Policy;
+export type Manifest = Agent | Fleet | GitRepo | Policy | TaskManifest;
 
 export type DesiredAgent = Agent & {
   derivedFrom?: { fleet: string; replica: number };
@@ -396,6 +418,47 @@ export type Task = {
   agent: string;
   prompt: string;
   event?: GithubEvent;
+  /** Absolute path to source Task YAML for git delivery writeback. */
+  manifestPath?: string;
+};
+
+/** Work-queue item — GitHub webhook / CLI / simulate all land here. */
+export type QueuedTask = {
+  id: string;
+  task: Task;
+  enqueuedAt: string;
+  status: "pending" | "claimed" | "done" | "failed" | "dead";
+  workerId?: string;
+  /** Set when a worker claims the item (stuck-probe input). */
+  claimedAt?: string;
+  /** Lease deadline — expired claims are reclaimed. */
+  leaseExpiresAt?: string;
+  /** Last heartbeat that extended the lease. */
+  heartbeatAt?: string;
+  attempts: number;
+  source: "cli" | "github" | "webhook" | "git";
+  /** Higher runs first (default 0). */
+  priority: number;
+  error?: string;
+  finishedAt?: string;
+  /** Earliest time a pending retry may be claimed again. */
+  nextRetryAt?: string;
+};
+
+export type ClusterMetrics = {
+  tasksCompleted: number;
+  tasksFailed: number;
+  tasksEnqueued: number;
+  /** Soft failures that were re-queued for another attempt. */
+  tasksRetried?: number;
+  /** Tasks that exhausted retries (dead-letter). */
+  tasksDead?: number;
+  /** Claimed tasks reclaimed after lease expiry. */
+  leasesReclaimed?: number;
+  /** Webhook deliveries skipped as duplicates. */
+  webhookDuplicates?: number;
+  lastEventAt?: string;
+  lastDrainAt?: string;
 };
 
 /** Work-queue item — GitHub webhook / CLI / simulate all land here. */
