@@ -62,18 +62,19 @@ Scale is a git commit: change `spec.replicas` from `20` to `2000`. The controlle
 ```sh
 npm install
 npm test
+npx tsx src/cli.ts demo --root /tmp/ropex-demo
 npx tsx src/cli.ts apply fleets/examples
 npx tsx src/cli.ts status
-npx tsx src/cli.ts github simulate issues.opened --repo acme/app --title "login is broken"
-npx tsx src/cli.ts run --agent triage "summarize open bugs"
-npx tsx src/cli.ts memory
 npx tsx src/cli.ts webhook simulate issues.opened --repo acme/app --title "login is broken" --secret test
-npx tsx src/cli.ts queue
-npx tsx src/cli.ts watch fleets/examples --once
+npx tsx src/cli.ts drain --concurrency 2
+npx tsx src/cli.ts metrics --prometheus
+npx tsx src/cli.ts trajectories --jsonl
 npx tsx src/cli.ts ui
 ```
 
 `apply` reads YAML, expands fleets, applies policy, and writes `.ropex/state.json`. That local store is a stand-in for a real cluster; the contract is the same.
+
+Soul / skills / harness edits change the **agent image digest** → reconcile retires the old worker and boots a new one (hot-reload via immutable roll, not in-place mutate).
 
 ## Manifests
 
@@ -139,7 +140,21 @@ See [architecture](./docs/architecture.md) for the Kubernetes analogy, image dig
 
 ## Status
 
-Immutable workers (agent image digests) + Hermes/DeepSeek workflow stages + scoped memory sharing + control-plane UI are in the tree. Still a local prototype: simulated tools, no live DeepSeek or Hermes process yet.
+Control plane today (local, network-free tests):
+
+| Capability | Status |
+| --- | --- |
+| Immutable workers + image digests | shipped |
+| Hermes plan / learn + DeepSeek execute / deliver | shipped |
+| Scoped shared memory + contracts + UI | shipped |
+| Worktrees, fair queue, concurrent drain | shipped |
+| HMAC webhooks + rate limit | shipped |
+| Policy admission + fan-out | shipped |
+| Journal, skills, metrics, trajectories | shipped |
+| GitRepo local watch/sync | shipped (no remote clone yet) |
+| Live `@deepseek-ai/dsh` / Hermes process | not yet |
+
+See [architecture](./docs/architecture.md) and [ideas](./docs/ideas.md).
 
 ## License
 

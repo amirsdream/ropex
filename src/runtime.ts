@@ -5,6 +5,7 @@ import { buildAgentImage, type ImageResolveOptions } from "./image.js";
 import { recordDelivery } from "./journal.js";
 import { SharedMemoryStore } from "./memory.js";
 import { registerSkill, skillsForAgent } from "./skills.js";
+import { recordTrajectory } from "./trajectory.js";
 import { composeWorkflow } from "./workflow.js";
 import { ensureWorktree } from "./worktree.js";
 import type {
@@ -135,6 +136,7 @@ export async function runTask(
     worktree,
   };
   recordDelivery(state, result);
+  recordTrajectory(state, result);
 
   worker.status = "idle";
   worker.lastTaskAt = new Date().toISOString();

@@ -20,6 +20,7 @@ import { loopModeFor, toolsFor } from "./harness.js";
 import { memoryContextFor, resolveSharePolicy, SharedMemoryStore } from "./memory.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { ensureQueue, queueSummary } from "./queue.js";
+import { trajectoriesFor, exportTrajectoriesJsonl } from "./trajectory.js";
 import { WORKFLOW_STAGES } from "./workflow.js";
 import type { ClusterState, DesiredAgent } from "./types.js";
 
@@ -258,6 +259,25 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
       learned: state.skills ?? [],
       registry: state.skillRegistry ?? [],
     });
+  }
+  if (url.pathname === API_ROUTES.trajectories) {
+    if (url.searchParams.get("format") === "jsonl") {
+      res.writeHead(200, { "content-type": "application/x-ndjson; charset=utf-8" });
+      res.end(
+        exportTrajectoriesJsonl(state, {
+          agent: url.searchParams.get("agent") ?? undefined,
+          limit: url.searchParams.get("limit") ? Number(url.searchParams.get("limit")) : 100,
+        }),
+      );
+      return;
+    }
+    return json(
+      res,
+      trajectoriesFor(state, {
+        agent: url.searchParams.get("agent") ?? undefined,
+        limit: url.searchParams.get("limit") ? Number(url.searchParams.get("limit")) : 50,
+      }),
+    );
   }
 
   // Static UI

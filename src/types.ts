@@ -183,6 +183,26 @@ export type DeliveryRecord = {
   number?: number;
 };
 
+/** Persisted Hermes→DeepSeek trajectory for learning / export. */
+export type TrajectoryRecord = {
+  id: string;
+  at: string;
+  taskId: string;
+  agent: string;
+  workerId: string;
+  imageDigest: string;
+  plan: string[];
+  steps: TrajectoryStep[];
+  output: string;
+};
+
+/** Sliding-window webhook rate-limit counters (per delivery key / repo). */
+export type RateLimitBucket = {
+  key: string;
+  windowStartedAt: string;
+  count: number;
+};
+
 export type ClusterState = {
   revision: number;
   source: string;
@@ -197,6 +217,10 @@ export type ClusterState = {
   skillRegistry: SkillRecord[];
   /** Append-only delivery journal. */
   deliveries: DeliveryRecord[];
+  /** Hermes/DeepSeek trajectories for export and learning. */
+  trajectories: TrajectoryRecord[];
+  /** Webhook rate-limit buckets. */
+  rateLimits: RateLimitBucket[];
   /** Durable work queue (webhook / simulate / CLI). */
   queue: QueuedTask[];
   metrics: ClusterMetrics;

@@ -8,6 +8,12 @@ Parallel drain with `--concurrency`, replay journal entries, and local GitRepo s
 
 **Shipped (2026-08-21 night):** `drainQueue` concurrency, `replayDelivery`, `syncGitRepos`, `ropex demo` e2e sandbox.
 
+## Trajectories + webhook rate limit
+
+Persist Hermes→DeepSeek trajectories (JSONL export) and sliding-window rate limits on webhook ingest.
+
+**Shipped (2026-08-21 night):** `recordTrajectory`, `ropex trajectories --jsonl`, `/api/v1/trajectories`, `checkRateLimit` on ingest.
+
 Gate tool calls with Policy deny/requireApproval before DeepSeek executes; fan large tasks across idle replicas.
 
 **Shipped (2026-08-21 night):** `admitCalls` / enqueue deny, `fanOutTask` + `ropex fanout`, UI queue + delivery journal panels.

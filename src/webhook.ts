@@ -6,6 +6,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { agentsForEvent, eventToTask } from "./github.js";
 import { enqueueTask } from "./queue.js";
+import { checkRateLimit, type RateLimitOptions } from "./ratelimit.js";
 import type { ClusterState, GithubEvent, QueuedTask } from "./types.js";
 
 export type WebhookHeaders = {
@@ -79,10 +80,12 @@ export type IngestResult = {
   reason?: string;
   event?: GithubEvent;
   enqueued: QueuedTask[];
+  rateLimited?: boolean;
+  remaining?: number;
 };
 
 /**
- * Verify HMAC (when secret set), parse event, match agents, enqueue tasks.
+ * Verify HMAC (when secret set), rate-limit, parse event, match agents, enqueue.
  * When `secret` is empty, signature check is skipped (local simulate).
  */
 export function ingestGithubWebhook(
@@ -90,6 +93,7 @@ export function ingestGithubWebhook(
   rawBody: string,
   headers: WebhookHeaders,
   secret = "",
+  rateLimit: RateLimitOptions = {},
 ): IngestResult {
   if (secret) {
     const sig = headers["x-hub-signature-256"];
@@ -111,15 +115,27 @@ export function ingestGithubWebhook(
     return { ok: false, reason: "unrecognized payload", enqueued: [] };
   }
 
+  const rateKey = event.repo || headers["x-github-delivery"] || "default";
+  const rl = checkRateLimit(state, rateKey, rateLimit);
+  if (!rl.allowed) {
+    return {
+      ok: false,
+      reason: `rate limited for ${rateKey}`,
+      event,
+      enqueued: [],
+      rateLimited: true,
+      remaining: 0,
+    };
+  }
+
   const matched = agentsForEvent(state, event);
   if (!matched.length) {
-    return { ok: true, reason: "no matching agents", event, enqueued: [] };
+    return { ok: true, reason: "no matching agents", event, enqueued: [], remaining: rl.remaining };
   }
 
   const enqueued: QueuedTask[] = [];
   for (const agent of matched) {
     const task = eventToTask(agent, event);
-    // Dedupe by delivery id when present.
     const delivery = headers["x-github-delivery"];
     if (delivery) {
       task.id = `${delivery}:${agent.metadata.name}`;
@@ -127,5 +143,5 @@ export function ingestGithubWebhook(
     enqueued.push(enqueueTask(state, task, "webhook"));
   }
 
-  return { ok: true, event, enqueued };
+  return { ok: true, event, enqueued, remaining: rl.remaining };
 }

@@ -194,5 +194,6 @@ export const API_ROUTES = {
   metrics: "/api/v1/metrics",
   deliveries: "/api/v1/deliveries",
   skills: "/api/v1/skills",
+  trajectories: "/api/v1/trajectories",
   health: "/api/v1/health",
 } as const;

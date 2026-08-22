@@ -13,6 +13,8 @@ import { normalizeFact } from "./memory.js";
 import { emptyMetrics, ensureQueue } from "./queue.js";
 import { ensureJournal } from "./journal.js";
 import { ensureSkillRegistry } from "./skills.js";
+import { ensureTrajectories } from "./trajectory.js";
+import { ensureRateLimits } from "./ratelimit.js";
 import { applyWorktrees } from "./worktree.js";
 import type { ClusterState, Manifest, ReconcilePlan, SharedMemoryFact, Worker } from "./types.js";
 
@@ -30,6 +32,8 @@ export function emptyState(source = ""): ClusterState {
     skills: [],
     skillRegistry: [],
     deliveries: [],
+    trajectories: [],
+    rateLimits: [],
     queue: [],
     metrics: emptyMetrics(),
   };
@@ -45,6 +49,8 @@ export function loadState(root: string): ClusterState {
     ensureQueue(state);
     ensureJournal(state);
     ensureSkillRegistry(state);
+    ensureTrajectories(state);
+    ensureRateLimits(state);
     return state;
   } catch {
     return emptyState();
@@ -146,6 +152,8 @@ export function planReconcile(
     metrics: current.metrics ?? emptyMetrics(),
     skillRegistry: current.skillRegistry ?? [],
     deliveries: current.deliveries ?? [],
+    trajectories: current.trajectories ?? [],
+    rateLimits: current.rateLimits ?? [],
     lastReconcile: new Date().toISOString(),
   };
 
