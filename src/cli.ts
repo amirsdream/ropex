@@ -5,6 +5,7 @@ import { applyManifestText, loadState, planReconcile, saveState } from "./contro
 import { writeSnapshot, restoreSnapshot } from "./snapshot.js";
 import { detectDrift, formatDriftReport } from "./drift.js";
 import { fairnessReport, formatFairnessReport } from "./fairness.js";
+import { canaryProgress } from "./canary.js";
 import { deliverOutbound, outboundFor } from "./deliver.js";
 import { cordonWorker, uncordonWorker, evictWorker, cordonedWorkers } from "./lifecycle.js";
 import { agentsForEvent, eventToTask, pickWorker } from "./github.js";
@@ -47,6 +48,7 @@ Usage:
   ropex diff <path> [--canary]        Show create/retire without writing state
   ropex drift [path]              Report live vs desired config drift
   ropex fairness                  Queue latency + LRU fairness report
+  ropex canary                    Digest coverage vs desired images
   ropex snapshot                  Export cluster state checkpoint
   ropex restore <path>            Restore cluster state from a snapshot file
   ropex cordon <worker-id>        Stop scheduling onto a worker
@@ -173,6 +175,19 @@ async function main(argv: string[]): Promise<number> {
       const state = loadState(root);
       console.log(formatFairnessReport(fairnessReport(state)));
       return 0;
+    }
+    case "canary": {
+      const state = loadState(root);
+      const c = canaryProgress(state);
+      console.log(
+        `canary  matched=${c.matched}/${c.total} (${c.pctMatched}%)  mismatched=${c.mismatched}  ${c.ok ? "ok" : "rolling"}`,
+      );
+      for (const a of c.agents) {
+        console.log(
+          `  ${a.agent}  ${a.pctMatched}%  ok=${a.matched} hold=${a.mismatched}  digest=${a.desiredDigest.slice(0, 12)}`,
+        );
+      }
+      return c.ok ? 0 : 1;
     }
     case "cordon": {
       const id = rest[0];

@@ -148,6 +148,12 @@ Pause/resume and DLQ retry from `POST /api/v1/queue`. Custom-prompt policy dry-r
 
 **Shipped (2026-08-22 night):** `src/hygiene.ts`, hygiene API/CLI/UI.
 
+## Skills promote UI + canary progress + budget alerts
+
+`skillsCatalog` + `POST /api/v1/skills` promote/share. `canaryProgress` / `GET /api/v1/canary` for digest coverage. Budget warn at ≤20% remaining. UI Skills + Canary panels.
+
+**Shipped (2026-08-22 night):** skills API actions, canary report, budgetAlerts.
+
 ## Approval workflow + fleet affinity
 
 `requireApproval` tools create durable `ApprovalRequest`s; `ropex approve` / `reject` decide them. Scheduler prefers fleet-affine idle workers.

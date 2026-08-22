@@ -72,7 +72,7 @@ export { watchOnce, watchLoop, parseInterval, readManifestTree } from "./watch.j
 export { bootDsh, profilePack, DSH_PROFILE_PACKS, liveDshScaffold } from "./dsh.js";
 export type { LiveDshScaffold, DshAdapter, DshBackend } from "./dsh.js";
 export { recordDelivery, deliveriesFor, compactJournal, replayDelivery, JOURNAL_DEFAULT_KEEP } from "./journal.js";
-export { registerSkill, shareSkill, promoteSkill, skillVersions, skillsForAgent, latestSkill } from "./skills.js";
+export { registerSkill, shareSkill, promoteSkill, skillVersions, skillsForAgent, latestSkill, skillsCatalog } from "./skills.js";
 export { deliverOutbound, outboundFor, signOutboundBody, ensureOutbound } from "./deliver.js";
 export { cordonWorker, uncordonWorker, evictWorker, cordonedWorkers } from "./lifecycle.js";
 export { detectDrift, formatDriftReport } from "./drift.js";
@@ -80,13 +80,15 @@ export type { DriftReport, DriftFinding, DriftKind } from "./drift.js";
 export { canPlace, placementScore, labelsInclude, taskLabelMap } from "./placement.js";
 export { fairnessReport, formatFairnessReport, latencyStats, percentile } from "./fairness.js";
 export type { FairnessReport, LatencyStats, WorkerFairness } from "./fairness.js";
-export { selectCanaryRolls } from "./canary.js";
+export { selectCanaryRolls, canaryProgress } from "./canary.js";
 export type { RolloutOptions, RolloutStrategy } from "./canary.js";
 export { exportSnapshot, writeSnapshot, loadSnapshot, restoreSnapshot, parseSnapshot, snapshotMeta } from "./snapshot.js";
 export type { SnapshotMeta, SnapshotDocument } from "./snapshot.js";
 export {
   budgetStatus,
   budgetReport,
+  budgetAlerts,
+  budgetAlertLevel,
   chargeBudget,
   admitBudget,
   estimateTaskUnits,

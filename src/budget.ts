@@ -33,6 +33,35 @@ export type BudgetStatus = {
   exhausted: boolean;
 };
 
+/** Alert level for budget remaining ratio (default warn below 20%). */
+export type BudgetAlertLevel = "ok" | "warn" | "exhausted";
+
+export type BudgetAlert = BudgetStatus & {
+  level: BudgetAlertLevel;
+  remainingPct: number;
+};
+
+export function budgetAlertLevel(
+  row: Pick<BudgetStatus, "remaining" | "limit" | "exhausted">,
+  warnPct = 0.2,
+): BudgetAlertLevel {
+  if (row.exhausted || row.remaining <= 0) return "exhausted";
+  if (row.limit > 0 && row.remaining / row.limit <= warnPct) return "warn";
+  return "ok";
+}
+
+export function budgetAlerts(
+  state: ClusterState,
+  opts: { now?: number; warnPct?: number } = {},
+): BudgetAlert[] {
+  const warnPct = opts.warnPct ?? 0.2;
+  return budgetReport(state, { now: opts.now }).map((row) => ({
+    ...row,
+    level: budgetAlertLevel(row, warnPct),
+    remainingPct: row.limit > 0 ? Math.round((100 * row.remaining) / row.limit) : 0,
+  }));
+}
+
 export function ensureBudgets(state: ClusterState): void {
   if (!state.budgets) state.budgets = [];
 }

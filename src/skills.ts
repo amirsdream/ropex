@@ -94,3 +94,40 @@ export function skillsForAgent(state: ClusterState, agent: string): SkillRecord[
   }
   return [...byName.values()];
 }
+
+export type SkillCatalogEntry = {
+  name: string;
+  version: number;
+  originAgent: string;
+  sharedWith: string[];
+  summary: string;
+  at: string;
+  versions: number;
+  coverage: number;
+};
+
+/** Latest skill per name with version count and fleet share coverage. */
+export function skillsCatalog(state: ClusterState): SkillCatalogEntry[] {
+  ensureSkillRegistry(state);
+  const names = [...new Set(state.skillRegistry.map((s) => s.name))];
+  const desired = (state.desired ?? []).map((a) => a.metadata.name);
+  return names
+    .map((name) => {
+      const latest = latestSkill(state, name)!;
+      const versions = skillVersions(state, name).length;
+      const targets = desired.filter((n) => n !== latest.originAgent);
+      const covered = targets.filter((t) => latest.sharedWith.includes(t)).length;
+      const coverage = targets.length ? Math.round((100 * covered) / targets.length) : 100;
+      return {
+        name: latest.name,
+        version: latest.version,
+        originAgent: latest.originAgent,
+        sharedWith: [...latest.sharedWith],
+        summary: latest.summary,
+        at: latest.at,
+        versions,
+        coverage,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+}

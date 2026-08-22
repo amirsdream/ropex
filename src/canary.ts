@@ -4,7 +4,8 @@
  * slots advance per reconcile so a bad image cannot take the whole fleet at once.
  */
 
-import type { ReconcilePlan, Worker } from "./types.js";
+import { buildAgentImage } from "./image.js";
+import type { ClusterState, ReconcilePlan, Worker } from "./types.js";
 
 export type RolloutStrategy = "recreate" | "canary";
 
@@ -53,4 +54,63 @@ export function selectCanaryRolls(
 
 export function summarizeRollout(plan: ReconcilePlan, held: number): string {
   return `create=${plan.create.length} retire=${plan.retire.length} held=${held}`;
+}
+
+export type CanaryAgentProgress = {
+  agent: string;
+  desiredDigest: string;
+  matched: number;
+  mismatched: number;
+  total: number;
+  pctMatched: number;
+};
+
+export type CanaryProgressReport = {
+  ok: boolean;
+  agents: CanaryAgentProgress[];
+  matched: number;
+  mismatched: number;
+  total: number;
+  pctMatched: number;
+};
+
+/**
+ * Live vs desired digest coverage — how far a canary / roll has progressed.
+ */
+export function canaryProgress(state: ClusterState): CanaryProgressReport {
+  const agents: CanaryAgentProgress[] = [];
+  let matched = 0;
+  let mismatched = 0;
+  for (const desired of state.desired ?? []) {
+    const dig = buildAgentImage(desired).digest;
+    const live = (state.workers ?? []).filter(
+      (w) => w.agent === desired.metadata.name && w.status !== "retired",
+    );
+    let m = 0;
+    let mm = 0;
+    for (const w of live) {
+      if (w.imageDigest === dig) m += 1;
+      else mm += 1;
+    }
+    matched += m;
+    mismatched += mm;
+    const total = m + mm;
+    agents.push({
+      agent: desired.metadata.name,
+      desiredDigest: dig,
+      matched: m,
+      mismatched: mm,
+      total,
+      pctMatched: total ? Math.round((100 * m) / total) : 100,
+    });
+  }
+  const total = matched + mismatched;
+  return {
+    ok: mismatched === 0,
+    agents,
+    matched,
+    mismatched,
+    total,
+    pctMatched: total ? Math.round((100 * matched) / total) : 100,
+  };
 }

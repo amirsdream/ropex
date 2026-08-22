@@ -20,6 +20,7 @@ function renderPulse(view) {
     ["traj", view.trajectories?.total ?? 0],
     ["rl", view.rateLimits?.nearLimit ?? 0],
     ["dup", view.webhookDuplicates ?? 0],
+    ["canary", view.canary?.ok === false ? `${view.canary.pctMatched}%` : "ok"],
   ];
   el.innerHTML = items
     .map(
@@ -319,20 +320,109 @@ function renderBudget(view) {
     el.innerHTML = `<p class="empty">No Policy.budget scopes configured.</p>`;
     return;
   }
-  el.innerHTML = rows
-    .map(
-      (r, i) => `
+  const alerts = view.budget?.alerts ?? 0;
+  const head = `
+    <div class="worker-row">
+      <div>
+        <div class="worker-id">alerts</div>
+        <div class="digest">warn/exhausted scopes (remaining ≤20%)</div>
+      </div>
+      <div class="status status-${alerts ? "failed" : "idle"}">${alerts ? `${alerts} alert` : "ok"}</div>
+      <div class="digest"></div>
+      <div class="digest"></div>
+    </div>`;
+  el.innerHTML =
+    head +
+    rows
+      .map(
+        (r, i) => `
       <div class="worker-row" style="animation-delay:${Math.min(i, 12) * 0.03}s">
         <div>
           <div class="worker-id">${escapeHtml(r.key)}</div>
-          <div class="digest">${escapeHtml(r.scope)} · remaining ${r.remaining}</div>
+          <div class="digest">${escapeHtml(r.scope)} · remaining ${r.remaining} (${r.remainingPct ?? "—"}%)</div>
         </div>
-        <div class="status status-${r.exhausted ? "failed" : "idle"}">${r.exhausted ? "exhausted" : "ok"}</div>
+        <div class="status status-${r.level === "ok" || (!r.level && !r.exhausted) ? "idle" : "failed"}">${escapeHtml(r.level ?? (r.exhausted ? "exhausted" : "ok"))}</div>
         <div class="digest">spent ${r.spent}</div>
         <div class="digest">limit ${r.limit}</div>
       </div>`,
+      )
+      .join("");
+}
+
+function renderCanary(view) {
+  const el = $("#canary-rail");
+  const c = view.canary;
+  if (!c) {
+    el.innerHTML = `<p class="empty">Canary progress unavailable.</p>`;
+    return;
+  }
+  const head = `
+    <div class="worker-row">
+      <div>
+        <div class="worker-id">digest coverage</div>
+        <div class="digest">${c.matched}/${c.total} matched · ${c.pctMatched}%</div>
+      </div>
+      <div class="status status-${c.ok ? "idle" : "failed"}">${c.ok ? "rolled" : "rolling"}</div>
+      <div class="digest">mismatched ${c.mismatched}</div>
+      <div class="digest">GET /api/v1/canary</div>
+    </div>`;
+  const rows = (c.agents ?? [])
+    .map(
+      (a, i) => `
+      <div class="worker-row" style="animation-delay:${Math.min(i, 12) * 0.03}s">
+        <div>
+          <div class="worker-id">${escapeHtml(a.agent)}</div>
+          <div class="digest">${escapeHtml((a.desiredDigest || "").slice(0, 12))}…</div>
+        </div>
+        <div class="status status-${a.mismatched ? "failed" : "idle"}">${a.pctMatched}%</div>
+        <div class="digest">ok ${a.matched} · hold ${a.mismatched}</div>
+        <div class="digest"></div>
+      </div>`,
     )
     .join("");
+  el.innerHTML = head + (rows || `<p class="empty">No desired agents.</p>`);
+}
+
+function renderSkills(view) {
+  const el = $("#skills-rail");
+  const rows = view.skillCatalog ?? [];
+  if (!rows.length) {
+    el.innerHTML = `<p class="empty">No registry skills yet. Learn from a trajectory, then promote.</p>`;
+    return;
+  }
+  el.innerHTML = rows
+    .map(
+      (s, i) => `
+      <div class="worker-row" style="animation-delay:${Math.min(i, 12) * 0.03}s">
+        <div>
+          <div class="worker-id">${escapeHtml(s.name)} v${s.version}</div>
+          <div class="digest">${escapeHtml(s.summary || "")}</div>
+        </div>
+        <div class="status status-${s.coverage >= 100 ? "idle" : "failed"}">${s.coverage}% share</div>
+        <div class="digest">origin ${escapeHtml(s.originAgent)} · vers ${s.versions}</div>
+        <div class="digest"><button type="button" data-promote="${escapeHtml(s.name)}">promote</button></div>
+      </div>`,
+    )
+    .join("");
+  el.querySelectorAll("[data-promote]").forEach((btn) => {
+    btn.addEventListener("click", () => promoteSkillUi(btn.getAttribute("data-promote")));
+  });
+}
+
+async function promoteSkillUi(name) {
+  if (!name) return;
+  const res = await fetch("/api/v1/skills", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "promote", name }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    $("#meta").textContent = `promote failed: ${body.error || res.status}`;
+    return;
+  }
+  $("#meta").textContent = `promoted ${name} v${body.skill?.version ?? "?"}`;
+  location.reload();
 }
 
 function renderPolicy(view) {
@@ -946,6 +1036,8 @@ async function main() {
     renderDrift(view);
     renderFairness(view);
     renderBudget(view);
+    renderCanary(view);
+    renderSkills(view);
     renderPolicy(view);
     renderOutbound(view);
     renderClone(view);

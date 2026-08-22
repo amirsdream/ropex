@@ -244,8 +244,36 @@ export type ControlPlaneView = {
       limit: number;
       remaining: number;
       exhausted: boolean;
+      level?: string;
+      remainingPct?: number;
+    }>;
+    alerts: number;
+  };
+  canary: {
+    ok: boolean;
+    matched: number;
+    mismatched: number;
+    total: number;
+    pctMatched: number;
+    agents: Array<{
+      agent: string;
+      desiredDigest: string;
+      matched: number;
+      mismatched: number;
+      total: number;
+      pctMatched: number;
     }>;
   };
+  skillCatalog: Array<{
+    name: string;
+    version: number;
+    originAgent: string;
+    sharedWith: string[];
+    summary: string;
+    at: string;
+    versions: number;
+    coverage: number;
+  }>;
   policySim: {
     deniedTasks: number;
     deniedCalls: number;
@@ -365,6 +393,7 @@ export const API_ROUTES = {
   metrics: "/api/v1/metrics",
   deliveries: "/api/v1/deliveries",
   skills: "/api/v1/skills",
+  canary: "/api/v1/canary",
   trajectories: "/api/v1/trajectories",
   approvals: "/api/v1/approvals",
   health: "/api/v1/health",

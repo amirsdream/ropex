@@ -20,7 +20,8 @@ import { loopModeFor, toolsFor } from "./harness.js";
 import { memoryContextFor, resolveSharePolicy, SharedMemoryStore } from "./memory.js";
 import { healthReport } from "./health.js";
 import { planAutoscale } from "./autoscale.js";
-import { budgetReport } from "./budget.js";
+import { budgetReport, budgetAlerts } from "./budget.js";
+import { canaryProgress } from "./canary.js";
 import { outboundFor } from "./deliver.js";
 import { detectDrift } from "./drift.js";
 import { fairnessReport } from "./fairness.js";
@@ -33,6 +34,7 @@ import { liveHermesScaffold } from "./hermes.js";
 import { rateLimitReport } from "./ratelimit.js";
 import { drainQueue, drainStatus, setDrainConcurrency } from "./scheduler.js";
 import { hygieneReport, runHygiene } from "./hygiene.js";
+import { promoteSkill, shareSkill, skillsCatalog } from "./skills.js";
 import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { ensureQueue, queueSummary, pauseQueue, resumeQueue, requeueDead, deadLetters, isQueuePaused } from "./queue.js";
@@ -249,16 +251,41 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
         })),
       };
     })(),
-    budget: {
-      rows: budgetReport(state).map((r) => ({
-        key: r.key,
-        scope: r.scope,
-        spent: r.spent,
-        limit: r.limit,
-        remaining: r.remaining,
-        exhausted: r.exhausted,
-      })),
-    },
+    budget: (() => {
+      const alerts = budgetAlerts(state);
+      return {
+        rows: alerts.map((r) => ({
+          key: r.key,
+          scope: r.scope,
+          spent: r.spent,
+          limit: r.limit,
+          remaining: r.remaining,
+          exhausted: r.exhausted,
+          level: r.level,
+          remainingPct: r.remainingPct,
+        })),
+        alerts: alerts.filter((a) => a.level !== "ok").length,
+      };
+    })(),
+    canary: (() => {
+      const c = canaryProgress(state);
+      return {
+        ok: c.ok,
+        matched: c.matched,
+        mismatched: c.mismatched,
+        total: c.total,
+        pctMatched: c.pctMatched,
+        agents: c.agents.map((a) => ({
+          agent: a.agent,
+          desiredDigest: a.desiredDigest,
+          matched: a.matched,
+          mismatched: a.mismatched,
+          total: a.total,
+          pctMatched: a.pctMatched,
+        })),
+      };
+    })(),
+    skillCatalog: skillsCatalog(state),
     policySim: (() => {
       const sim = simulatePolicies(state);
       return {
@@ -556,10 +583,44 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
     return json(res, state.deliveries ?? []);
   }
   if (url.pathname === API_ROUTES.skills) {
+    if (req.method === "POST") {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      let body: { action?: string; name?: string; to?: string } = {};
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as {
+          action?: string;
+          name?: string;
+          to?: string;
+        };
+      } catch {
+        return json(res, { error: "invalid json" }, 400);
+      }
+      const name = body.name?.trim();
+      if (!name) return json(res, { error: "need name" }, 400);
+      if (body.action === "promote") {
+        const rec = promoteSkill(state, name);
+        if (!rec) return json(res, { error: `skill not found: ${name}` }, 404);
+        opts.saveState?.(opts.root, state);
+        return json(res, { ok: true, action: "promote", skill: rec, catalog: skillsCatalog(state) });
+      }
+      if (body.action === "share") {
+        if (!body.to) return json(res, { error: "need to for share" }, 400);
+        const rec = shareSkill(state, name, body.to);
+        if (!rec) return json(res, { error: `skill not found: ${name}` }, 404);
+        opts.saveState?.(opts.root, state);
+        return json(res, { ok: true, action: "share", skill: rec, catalog: skillsCatalog(state) });
+      }
+      return json(res, { error: "action must be promote|share" }, 400);
+    }
     return json(res, {
       learned: state.skills ?? [],
       registry: state.skillRegistry ?? [],
+      catalog: skillsCatalog(state),
     });
+  }
+  if (url.pathname === API_ROUTES.canary) {
+    return json(res, canaryProgress(state));
   }
   if (url.pathname === API_ROUTES.trajectories) {
     if (url.searchParams.get("format") === "jsonl") {
