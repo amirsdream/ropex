@@ -2,6 +2,12 @@
 
 Nightly capture. Newest first. Each entry should be one shippable idea, not a slogan.
 
+## Multi-repo GitRepo sync + health UI
+
+Union all declared GitRepo local paths into one reconcile; interval-aware `--due`; UI health panel with probes + repo sync stamps.
+
+**Shipped (2026-08-22 night):** `syncMultiRepo` / `syncDueGitRepos`, `gitRepoStatus`, health panel in `ropex ui`.
+
 ## Event-sourced audit log
 
 Append-only `state.audit` for reconcile / queue / lease / webhook / approval / sync. Soft-capped at 5k. CLI + API + UI panel.

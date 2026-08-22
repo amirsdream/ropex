@@ -156,6 +156,7 @@ Control plane today (local, network-free tests):
 | Dead-letter + retry queue | shipped |
 | Claim leases + reclaim | shipped |
 | Event-sourced audit trail | shipped |
+| Multi-repo GitRepo sync + health UI | shipped (no remote clone yet) |
 | GitRepo local watch/sync | shipped (no remote clone yet) |
 | Live `@deepseek-ai/dsh` / Hermes process | not yet |
 

@@ -13,7 +13,7 @@ import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { deliveriesFor, replayDelivery } from "./journal.js";
 import { shareSkill } from "./skills.js";
 import { fanOutTask } from "./fanout.js";
-import { syncGitRepos } from "./gitrepo.js";
+import { syncGitRepos, syncDueGitRepos, syncMultiRepo } from "./gitrepo.js";
 import { runSandboxDemo } from "./demo.js";
 import { exportTrajectoriesJsonl, trajectoriesFor, learnFromTrajectory } from "./trajectory.js";
 import { decideApproval, pendingApprovals } from "./approval.js";
@@ -38,7 +38,7 @@ Usage:
   ropex reclaim                   Reclaim expired claim leases
   ropex drain [--limit N] [--concurrency N]
                                      Claim idle workers and run pending queue
-  ropex sync                          Sync declared GitRepo paths (local stub)
+  ropex sync [--due]                  Sync declared GitRepos (multi-repo union)
   ropex replay <delivery-id>          Replay a delivery into the journal
   ropex demo [--root path]            End-to-end sandbox demo (no network)
   ropex trajectories [--agent a] [--jsonl]
@@ -251,16 +251,26 @@ async function main(argv: string[]): Promise<number> {
         console.log("no GitRepo manifests in state — apply fleets first");
         return 0;
       }
-      const results = syncGitRepos(root, state);
-      for (const r of results) {
-        if (r.ok) {
+      const dueOnly = rest.includes("--due");
+      const bundle = dueOnly ? syncDueGitRepos(root, state) : syncMultiRepo(root, state);
+      if (bundle.skippedDue) {
+        console.log("no GitRepos due (interval not elapsed)");
+        return 0;
+      }
+      for (const r of bundle.results) {
+        if (r.ok && r.included !== false) {
           console.log(
-            `ok ${r.repo}  path=${r.path}  create=${r.watch?.plan.create.length ?? 0} retire=${r.watch?.plan.retire.length ?? 0}`,
+            `ok ${r.repo}  path=${r.path}  create=${bundle.plan?.create.length ?? 0} retire=${bundle.plan?.retire.length ?? 0}`,
           );
+        } else if (r.ok) {
+          console.log(`skip ${r.repo}  ${r.reason ?? "not included"}`);
         } else {
           console.log(`skip ${r.repo}  ${r.reason}`);
         }
       }
+      console.log(
+        `multi-repo synced=${bundle.synced} changed=${bundle.changed} repos=${bundle.results.length}`,
+      );
       return 0;
     }
     case "replay": {

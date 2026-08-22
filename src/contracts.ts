@@ -197,6 +197,15 @@ export type ControlPlaneView = {
   };
   approvals: Array<{ id: string; status: string; tool: string; agent: string; taskId: string; reason: string }>;
   audit: Array<{ id: string; at: string; kind: string; message: string; agent?: string; taskId?: string }>;
+  health: {
+    ok: boolean;
+    unhealthy: number;
+    backlogBreached: boolean;
+    backlogPending: number;
+    oldestPendingAgeMs: number | null;
+    workers: Array<{ id: string; status: string; healthy: boolean; detail: string }>;
+  };
+  gitRepos: Array<{ name: string; path: string; ok: boolean; lastSyncedAt?: string; reason?: string }>;
 };
 
 /** Stable API routes the UI and CLI share. */

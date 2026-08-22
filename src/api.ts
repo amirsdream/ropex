@@ -160,6 +160,32 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
       agent: e.agent,
       taskId: e.taskId,
     })),
+    health: {
+      ok: health.ok,
+      unhealthy: health.unhealthy,
+      backlogBreached: health.backlog.breached,
+      backlogPending: health.backlog.pending,
+      oldestPendingAgeMs: health.backlog.oldestPendingAgeMs,
+      workers: health.workers.map((w) => ({
+        id: w.id,
+        status: w.status,
+        healthy: w.healthy,
+        detail: w.checks
+          .filter((c) => !c.ok)
+          .map((c) => c.detail ?? c.name)
+          .join("; ") || "ok",
+      })),
+    },
+    gitRepos: (state.gitRepos ?? []).map((r) => {
+      const st = state.gitRepoStatus?.find((s) => s.name === r.metadata.name);
+      return {
+        name: r.metadata.name,
+        path: st?.path ?? r.spec.path,
+        ok: st?.ok ?? true,
+        lastSyncedAt: st?.lastSyncedAt,
+        reason: st?.reason,
+      };
+    }),
   };
 }
 

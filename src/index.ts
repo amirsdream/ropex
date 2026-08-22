@@ -56,7 +56,17 @@ export { metricsSnapshot, metricsPrometheus } from "./metrics.js";
 export { healthReport, probeWorker, evaluateBacklogSlo } from "./health.js";
 export { admitTool, admitCalls, admitTask, effectivePermissions } from "./admission.js";
 export { fanOutTask, shouldFanOut, shardCount } from "./fanout.js";
-export { syncGitRepos, resolveGitRepoPath, gitRepoIntervalMs } from "./gitrepo.js";
+export {
+  syncGitRepos,
+  syncMultiRepo,
+  syncDueGitRepos,
+  collectMultiRepoManifests,
+  resolveGitRepoPath,
+  resolveRepoLocalPath,
+  reposDueForSync,
+  isRepoDue,
+  gitRepoIntervalMs,
+} from "./gitrepo.js";
 export { replayDelivery } from "./journal.js";
 export { runSandboxDemo } from "./demo.js";
 export { recordTrajectory, trajectoriesFor, exportTrajectoriesJsonl, learnFromTrajectory } from "./trajectory.js";

@@ -268,7 +268,18 @@ export type ClusterState = {
   metrics: ClusterMetrics;
   /** Append-only control-plane audit trail. */
   audit: AuditEvent[];
+  /** Last sync status per declared GitRepo (multi-repo). */
+  gitRepoStatus: GitRepoSyncStatus[];
   lastReconcile?: string;
+};
+
+/** Per-GitRepo sync stamp for interval-aware multi-repo sync. */
+export type GitRepoSyncStatus = {
+  name: string;
+  path: string;
+  lastSyncedAt?: string;
+  ok: boolean;
+  reason?: string;
 };
 
 export type ReconcilePlan = {

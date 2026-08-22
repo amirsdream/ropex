@@ -212,6 +212,10 @@ stateDiagram-v2
 
 `ropex watch <path> [--once] [--interval 5s]` re-reads local manifest trees and reconciles — Flux-style drift control without a remote clone (yet). Scale or skill edits produce create/retire/image rolls.
 
+## Multi-repo sync
+
+`ropex sync` unions **all** declared `GitRepo` local paths into one reconcile so agents from repo A are not wiped when syncing repo B. `ropex sync --due` skips when every repo’s `interval` has not elapsed (`gitRepoStatus.lastSyncedAt`). Missing paths are reported; remote clone remains open.
+
 ## Observability
 
 - **Delivery journal** — every comment/check/PR appends to `state.deliveries` (`ropex journal`).

@@ -40,6 +40,7 @@ export function emptyState(source = ""): ClusterState {
     queue: [],
     metrics: emptyMetrics(),
     audit: [],
+    gitRepoStatus: [],
   };
 }
 
@@ -57,6 +58,7 @@ export function loadState(root: string): ClusterState {
     ensureRateLimits(state);
     ensureApprovals(state);
     ensureAudit(state);
+    if (!state.gitRepoStatus) state.gitRepoStatus = [];
     return state;
   } catch {
     return emptyState();
@@ -162,6 +164,7 @@ export function planReconcile(
     rateLimits: current.rateLimits ?? [],
     approvals: current.approvals ?? [],
     audit: current.audit ?? [],
+    gitRepoStatus: current.gitRepoStatus ?? [],
     lastReconcile: new Date().toISOString(),
   };
 

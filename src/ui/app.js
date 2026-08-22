@@ -83,6 +83,56 @@ function renderWorkers(view) {
     .join("");
 }
 
+function renderHealth(view) {
+  const el = $("#health-panel");
+  const h = view.health;
+  if (!h) {
+    el.innerHTML = `<p class="empty">Health report unavailable.</p>`;
+    return;
+  }
+  const age =
+    h.oldestPendingAgeMs == null ? "—" : `${Math.round(h.oldestPendingAgeMs / 1000)}s`;
+  const head = `
+    <div class="worker-row">
+      <div>
+        <div class="worker-id">cluster</div>
+        <div class="digest">pending ${h.backlogPending} · oldest ${age}</div>
+      </div>
+      <div class="status status-${h.ok ? "idle" : "failed"}">${h.ok ? "healthy" : "degraded"}</div>
+      <div class="digest">unhealthy ${h.unhealthy}</div>
+      <div class="digest">slo ${h.backlogBreached ? "breach" : "ok"}</div>
+    </div>`;
+  const repos = (view.gitRepos ?? [])
+    .map(
+      (r) => `
+      <div class="worker-row">
+        <div>
+          <div class="worker-id">${escapeHtml(r.name)}</div>
+          <div class="digest">${escapeHtml(r.path)}</div>
+        </div>
+        <div class="status status-${r.ok ? "idle" : "failed"}">${r.ok ? "synced" : "missing"}</div>
+        <div class="digest">${r.lastSyncedAt ? formatTime(r.lastSyncedAt) : "never"}</div>
+        <div class="digest">${escapeHtml(r.reason ?? "")}</div>
+      </div>`,
+    )
+    .join("");
+  const workers = (h.workers ?? [])
+    .map(
+      (w, i) => `
+      <div class="worker-row" style="animation-delay:${Math.min(i, 12) * 0.03}s">
+        <div>
+          <div class="worker-id">${escapeHtml(w.id)}</div>
+          <div class="digest">${escapeHtml(w.detail)}</div>
+        </div>
+        <div class="status status-${w.healthy ? "idle" : "failed"}">${w.healthy ? "ok" : "unhealthy"}</div>
+        <div class="digest">${escapeHtml(w.status)}</div>
+        <div class="digest"></div>
+      </div>`,
+    )
+    .join("");
+  el.innerHTML = head + repos + (workers || `<p class="empty">No live workers to probe.</p>`);
+}
+
 function renderQueue(view) {
   const el = $("#queue-rail");
   if (!view.queue?.length) {
@@ -237,6 +287,7 @@ async function main() {
     renderWorkflow(view);
     renderMemory(view);
     renderWorkers(view);
+    renderHealth(view);
     renderQueue(view);
     renderJournal(view);
     renderApprovals(view);
