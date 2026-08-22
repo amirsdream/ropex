@@ -216,6 +216,10 @@ stateDiagram-v2
 
 `ropex sync` unions **all** declared `GitRepo` local paths into one reconcile so agents from repo A are not wiped when syncing repo B. `ropex sync --due` skips when every repo’s `interval` has not elapsed (`gitRepoStatus.lastSyncedAt`). Missing paths are reported; remote clone remains open.
 
+## Autoscaler (GitOps)
+
+`ropex autoscale` / `/api/v1/autoscale` emit **replica YAML recommendations** from backlog depth, idle/running workers, and `Policy.maxReplicas`. Ropex never writes replicas into live state — commit the YAML so git stays the source of truth (same contract as `ropex scale`).
+
 ## Observability
 
 - **Delivery journal** — every comment/check/PR appends to `state.deliveries` (`ropex journal`).

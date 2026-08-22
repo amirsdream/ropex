@@ -206,6 +206,18 @@ export type ControlPlaneView = {
     workers: Array<{ id: string; status: string; healthy: boolean; detail: string }>;
   };
   gitRepos: Array<{ name: string; path: string; ok: boolean; lastSyncedAt?: string; reason?: string }>;
+  autoscale: {
+    backlogBreached: boolean;
+    policyCap: number;
+    recommendations: Array<{
+      kind: string;
+      name: string;
+      currentReplicas: number;
+      recommendedReplicas: number;
+      delta: number;
+      reason: string;
+    }>;
+  };
 };
 
 /** Stable API routes the UI and CLI share. */
@@ -221,4 +233,5 @@ export const API_ROUTES = {
   approvals: "/api/v1/approvals",
   health: "/api/v1/health",
   audit: "/api/v1/audit",
+  autoscale: "/api/v1/autoscale",
 } as const;

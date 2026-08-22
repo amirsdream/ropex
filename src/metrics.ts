@@ -4,6 +4,7 @@
  */
 
 import { healthReport } from "./health.js";
+import { planAutoscale } from "./autoscale.js";
 import { queueSummary } from "./queue.js";
 import type { ClusterState } from "./types.js";
 
@@ -31,6 +32,7 @@ export type MetricsSnapshot = {
   deliveries: number;
   revision: number;
   audit_events: number;
+  autoscale_recommendations: number;
   backlog_oldest_age_ms: number;
   backlog_slo_breached: number;
 };
@@ -63,6 +65,7 @@ export function metricsSnapshot(state: ClusterState): MetricsSnapshot {
     deliveries: state.deliveries?.length ?? 0,
     revision: state.revision,
     audit_events: state.audit?.length ?? 0,
+    autoscale_recommendations: planAutoscale(state).recommendations.length,
     backlog_oldest_age_ms: health.backlog.oldestPendingAgeMs ?? 0,
     backlog_slo_breached: health.backlog.breached ? 1 : 0,
   };
@@ -117,6 +120,9 @@ export function metricsPrometheus(state: ClusterState): string {
     "# HELP ropex_audit_events Audit trail depth.",
     "# TYPE ropex_audit_events gauge",
     `ropex_audit_events ${m.audit_events}`,
+    "# HELP ropex_autoscale_recommendations Pending GitOps scale recommendations.",
+    "# TYPE ropex_autoscale_recommendations gauge",
+    `ropex_autoscale_recommendations ${m.autoscale_recommendations}`,
     "# HELP ropex_backlog_oldest_age_ms Age of oldest pending task (ms).",
     "# TYPE ropex_backlog_oldest_age_ms gauge",
     `ropex_backlog_oldest_age_ms ${m.backlog_oldest_age_ms}`,

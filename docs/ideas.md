@@ -2,6 +2,12 @@
 
 Nightly capture. Newest first. Each entry should be one shippable idea, not a slogan.
 
+## Worker-pool autoscaler stub
+
+HPA-style recommendations from backlog SLO + idle/running; capped by Policy.maxReplicas; emits GitOps YAML only.
+
+**Shipped (2026-08-22 night):** `planAutoscale`, `ropex autoscale`, `/api/v1/autoscale`, UI panel.
+
 ## Multi-repo GitRepo sync + health UI
 
 Union all declared GitRepo local paths into one reconcile; interval-aware `--due`; UI health panel with probes + repo sync stamps.

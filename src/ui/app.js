@@ -133,6 +133,29 @@ function renderHealth(view) {
   el.innerHTML = head + repos + (workers || `<p class="empty">No live workers to probe.</p>`);
 }
 
+function renderAutoscale(view) {
+  const el = $("#autoscale-rail");
+  const a = view.autoscale;
+  if (!a?.recommendations?.length) {
+    el.innerHTML = `<p class="empty">No scale changes. Backlog SLO ${a?.backlogBreached ? "breached" : "ok"} · cap ${a?.policyCap ?? "—"}.</p>`;
+    return;
+  }
+  el.innerHTML = a.recommendations
+    .map(
+      (r, i) => `
+      <div class="worker-row" style="animation-delay:${Math.min(i, 12) * 0.03}s">
+        <div>
+          <div class="worker-id">${escapeHtml(r.kind)}/${escapeHtml(r.name)}</div>
+          <div class="digest">${escapeHtml(r.reason)}</div>
+        </div>
+        <div class="status status-${r.delta > 0 ? "running" : "idle"}">${r.currentReplicas}→${r.recommendedReplicas}</div>
+        <div class="digest">Δ ${r.delta > 0 ? "+" : ""}${r.delta}</div>
+        <div class="digest">commit YAML</div>
+      </div>`,
+    )
+    .join("");
+}
+
 function renderQueue(view) {
   const el = $("#queue-rail");
   if (!view.queue?.length) {
@@ -288,6 +311,7 @@ async function main() {
     renderMemory(view);
     renderWorkers(view);
     renderHealth(view);
+    renderAutoscale(view);
     renderQueue(view);
     renderJournal(view);
     renderApprovals(view);

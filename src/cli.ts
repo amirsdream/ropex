@@ -7,6 +7,7 @@ import { buildControlPlaneView, startControlPlaneServer } from "./api.js";
 import { enqueueTask, queueSummary, deadLetters, requeueDead, reclaimExpiredLeases } from "./queue.js";
 import { runTask } from "./runtime.js";
 import { drainQueue } from "./scheduler.js";
+import { planAutoscale } from "./autoscale.js";
 import { healthReport } from "./health.js";
 import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
@@ -60,6 +61,7 @@ Usage:
                                      Shard a task across idle replicas
   ropex scale <fleet> --replicas N
                                      Print YAML to commit (Git is source of truth)
+  ropex autoscale                 Recommend replica YAML from backlog SLO
   ropex memory                    Show shared memory stream
   ropex ui [--port N]             Serve control-plane UI + /api/v1/*
   ropex help
@@ -529,6 +531,25 @@ async function main(argv: string[]): Promise<number> {
         "# commit this to git — the controller derives workers from the repo",
       ].join("\n");
       console.log(yaml);
+      return 0;
+    }
+    case "autoscale": {
+      const state = loadState(root);
+      const plan = planAutoscale(state, { audit: true });
+      saveState(root, state);
+      if (!plan.recommendations.length) {
+        console.log(
+          `no scale changes  backlogBreached=${plan.backlogBreached} policyCap=${plan.policyCap}`,
+        );
+        return 0;
+      }
+      for (const r of plan.recommendations) {
+        console.log(
+          `${r.kind}/${r.name}  ${r.currentReplicas}→${r.recommendedReplicas}  pending=${r.pending} idle=${r.idle}  ${r.reason}`,
+        );
+      }
+      console.log("---");
+      process.stdout.write(plan.yaml);
       return 0;
     }
     case "memory": {

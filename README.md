@@ -157,6 +157,7 @@ Control plane today (local, network-free tests):
 | Claim leases + reclaim | shipped |
 | Event-sourced audit trail | shipped |
 | Multi-repo GitRepo sync + health UI | shipped (no remote clone yet) |
+| Worker-pool autoscaler (GitOps YAML) | shipped |
 | GitRepo local watch/sync | shipped (no remote clone yet) |
 | Live `@deepseek-ai/dsh` / Hermes process | not yet |
 

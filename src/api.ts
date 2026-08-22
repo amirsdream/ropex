@@ -19,6 +19,7 @@ import {
 import { loopModeFor, toolsFor } from "./harness.js";
 import { memoryContextFor, resolveSharePolicy, SharedMemoryStore } from "./memory.js";
 import { healthReport } from "./health.js";
+import { planAutoscale } from "./autoscale.js";
 import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { ensureQueue, queueSummary } from "./queue.js";
@@ -186,6 +187,21 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
         reason: st?.reason,
       };
     }),
+    autoscale: (() => {
+      const plan = planAutoscale(state);
+      return {
+        backlogBreached: plan.backlogBreached,
+        policyCap: plan.policyCap,
+        recommendations: plan.recommendations.map((r) => ({
+          kind: r.kind,
+          name: r.name,
+          currentReplicas: r.currentReplicas,
+          recommendedReplicas: r.recommendedReplicas,
+          delta: r.delta,
+          reason: r.reason,
+        })),
+      };
+    })(),
   };
 }
 
@@ -359,6 +375,10 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
         limit: url.searchParams.get("limit") ? Number(url.searchParams.get("limit")) : 100,
       }),
     );
+  }
+  if (url.pathname === API_ROUTES.autoscale) {
+    const plan = planAutoscale(state);
+    return json(res, plan);
   }
 
   // Static UI
