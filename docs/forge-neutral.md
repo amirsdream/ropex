@@ -80,8 +80,9 @@ cat tasks/update-readme.yaml   # status: done, result block filled in
 
 Copy `scripts/git-hook-post-receive.sh` to `.git/hooks/post-receive` on your git server or local bare repo. On push it runs:
 
-1. `ropex tasks sync --repos` (or `tasks sync` for `$ROPEX_ROOT/tasks`)
-2. `ropex drain`
+1. `ropex memory sync --repos` (or `memory sync` for `$ROPEX_ROOT/memory`)
+2. `ropex tasks sync --repos` (or `tasks sync` for `$ROPEX_ROOT/tasks`)
+3. `ropex drain`
 
 Set `ROPEX_ROOT` to the checkout that holds `.ropex/state.json`.
 
