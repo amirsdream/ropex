@@ -9,6 +9,7 @@ import type {
   Manifest,
   Policy,
   TaskManifest,
+  MemoryManifest,
 } from "./types.js";
 import { API_VERSION } from "./types.js";
 
@@ -35,7 +36,7 @@ function validateManifest(data: unknown): Manifest {
     throw new Error(`unsupported apiVersion: ${String(m.apiVersion)}`);
   }
   const kind = m.kind;
-  if (kind !== "Agent" && kind !== "Fleet" && kind !== "GitRepo" && kind !== "Policy" && kind !== "Task") {
+  if (kind !== "Agent" && kind !== "Fleet" && kind !== "GitRepo" && kind !== "Policy" && kind !== "Task" && kind !== "Memory") {
     throw new Error(`unsupported kind: ${String(kind)}`);
   }
   const metadata = m.metadata as { name?: string } | undefined;
@@ -46,6 +47,12 @@ function validateManifest(data: unknown): Manifest {
     const spec = m.spec as { agent?: string; prompt?: string } | undefined;
     if (!spec?.agent || !spec?.prompt) {
       throw new Error("Task is missing spec.agent or spec.prompt");
+    }
+  }
+  if (kind === "Memory") {
+    const spec = m.spec as { agent?: string; text?: string } | undefined;
+    if (!spec?.agent || !spec?.text) {
+      throw new Error("Memory is missing spec.agent or spec.text");
     }
   }
   return data as Manifest;
@@ -129,6 +136,10 @@ export function collectGitRepos(manifests: Manifest[]): GitRepo[] {
 
 export function collectTasks(manifests: Manifest[]): TaskManifest[] {
   return manifests.filter((m): m is TaskManifest => m.kind === "Task");
+}
+
+export function collectMemory(manifests: Manifest[]): MemoryManifest[] {
+  return manifests.filter((m): m is MemoryManifest => m.kind === "Memory");
 }
 
 export function collectFleets(manifests: Manifest[]): Fleet[] {

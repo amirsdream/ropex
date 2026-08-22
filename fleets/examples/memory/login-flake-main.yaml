@@ -1,0 +1,9 @@
+apiVersion: ropex.dev/v1
+kind: Memory
+metadata:
+  name: login-flake-main
+spec:
+  agent: docbot
+  scope: agent
+  text: "Login failures on main often trace to expired session cookies — check auth middleware first."
+  tags: [bug, auth]

@@ -107,6 +107,22 @@ export type GitRepo = {
     branch?: string;
     /** Task inbox directory relative to repo path (default `tasks`). */
     tasksPath?: string;
+    /** Declarative memory facts relative to repo path (default `memory`). */
+    memoryPath?: string;
+  };
+};
+
+/** Git-declared memory fact (forge-neutral durable knowledge). */
+export type MemoryManifest = {
+  apiVersion: typeof API_VERSION;
+  kind: "Memory";
+  metadata: ObjectMeta;
+  spec: {
+    agent: string;
+    text: string;
+    scope?: MemoryScope;
+    fleet?: string;
+    tags?: string[];
   };
 };
 
@@ -155,7 +171,7 @@ export type Policy = {
   };
 };
 
-export type Manifest = Agent | Fleet | GitRepo | Policy | TaskManifest;
+export type Manifest = Agent | Fleet | GitRepo | Policy | TaskManifest | MemoryManifest;
 
 export type DesiredAgent = Agent & {
   derivedFrom?: { fleet: string; replica: number };
@@ -202,6 +218,8 @@ export type SharedMemoryFact = MemoryFact & {
   fleet?: string;
   tags?: string[];
   sourceWorker?: string;
+  /** When loaded from or exported to git Memory YAML. */
+  manifestPath?: string;
 };
 
 export type LearnedSkill = {
@@ -307,6 +325,7 @@ export type AuditKind =
   | "webhook"
   | "approval"
   | "sync"
+  | "memory"
   | "info";
 
 export type AuditEvent = {

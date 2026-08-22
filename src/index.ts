@@ -137,6 +137,14 @@ export {
   deliverGitTaskManifest,
   DEFAULT_TASKS_DIR,
 } from "./tasks.js";
+export {
+  syncMemoryFromDir,
+  syncMemoryFromGitRepos,
+  readMemoryManifest,
+  exportMemoryFactToGit,
+  exportMemoryFacts,
+  DEFAULT_MEMORY_DIR,
+} from "./gitmemory.js";
 export { checkRateLimit, rateLimitReport } from "./ratelimit.js";
 export {
   requestApprovals,

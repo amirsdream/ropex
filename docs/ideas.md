@@ -160,6 +160,12 @@ Pause/resume and DLQ retry from `POST /api/v1/queue`. Custom-prompt policy dry-r
 
 **Shipped:** `src/tasks.ts`, CLI, hook script, tests.
 
+## Git-defined Memory YAML
+
+`kind: Memory` manifests under `memory/` declare durable facts (agent/fleet/cluster scope). `ropex memory sync` loads into the cluster bus; `ropex memory export` and `memory promote --export` write back to git. See [forge-neutral.md](./forge-neutral.md).
+
+**Shipped:** `src/gitmemory.ts`, CLI, hook, tests.
+
 ## Approval workflow + fleet affinity
 
 `requireApproval` tools create durable `ApprovalRequest`s; `ropex approve` / `reject` decide them. Scheduler prefers fleet-affine idle workers.

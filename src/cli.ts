@@ -35,6 +35,12 @@ import {
   syncTasksFromGitRepos,
   taskFromManifest,
 } from "./tasks.js";
+import {
+  exportMemoryFactToGit,
+  exportMemoryFacts,
+  syncMemoryFromDir,
+  syncMemoryFromGitRepos,
+} from "./gitmemory.js";
 import { runSandboxDemo } from "./demo.js";
 import { exportTrajectoriesJsonl, trajectoriesFor, learnFromTrajectory } from "./trajectory.js";
 import { rateLimitReport } from "./ratelimit.js";
@@ -111,7 +117,9 @@ Usage:
                                      Control-plane heartbeat + optional hooks
   ropex clone [--force] [--dry-run]   Prepare GitRepo checkouts (file:// / local)
   ropex budget                    Show task-unit budget spend
-  ropex memory [promote <id> --scope fleet|cluster|agent]
+  ropex memory [promote <id> --scope fleet|cluster|agent [--no-export]]
+                  | sync [path] [--repos]
+                  | export <id>|--all [--force] [--path dir]
                                      Show shared memory; promote a fact wider
   ropex ui [--port N]             Serve control-plane UI + /api/v1/*
   ropex help
@@ -938,19 +946,64 @@ async function main(argv: string[]): Promise<number> {
     }
     case "memory": {
       const state = loadState(root);
-      if (rest[0] === "promote") {
+      const sub = rest[0];
+      if (sub === "sync" || (!sub && rest.length === 0)) {
+        const fromRepos = rest.includes("--repos");
+        const pathFlag = flag(rest, "--path");
+        const dirArg = rest.find((x) => !x.startsWith("--") && x !== "sync");
+        const result = fromRepos
+          ? syncMemoryFromGitRepos(state, root)
+          : syncMemoryFromDir(state, root, pathFlag ?? dirArg);
+        saveState(root, state);
+        console.log(
+          `memory sync  scanned=${result.scanned} synced=${result.synced.length} skipped=${result.skipped.length} errors=${result.errors.length}`,
+        );
+        for (const id of result.synced) console.log(`  + ${id}`);
+        for (const e of result.errors) console.log(`  ! ${e.path}: ${e.error}`);
+        return result.errors.length ? 1 : 0;
+      }
+      if (sub === "export") {
+        const all = rest.includes("--all");
+        const force = rest.includes("--force");
+        const dir = flag(rest, "--path");
+        const ids = rest.filter((x) => !x.startsWith("--") && x !== "export" && x !== "all");
+        if (!all && !ids.length) {
+          return fail("usage: ropex memory export <id>... | --all [--force] [--path dir]");
+        }
+        const result = exportMemoryFacts(state, root, {
+          ids: all ? undefined : ids,
+          all,
+          force,
+          dir: dir ?? undefined,
+        });
+        saveState(root, state);
+        console.log(
+          `memory export  exported=${result.exported.length} skipped=${result.skipped.length} errors=${result.errors.length}`,
+        );
+        for (const p of result.exported) console.log(`  → ${p}`);
+        for (const e of result.errors) console.log(`  ! ${e.id}: ${e.error}`);
+        return result.errors.length ? 1 : 0;
+      }
+      if (sub === "promote") {
         const id = rest[1];
         const scope = flag(rest, "--scope") as "worker" | "agent" | "fleet" | "cluster" | undefined;
+        const doExport = !rest.includes("--no-export");
         if (!id || !scope) {
-          return fail("usage: ropex memory promote <id> --scope agent|fleet|cluster");
+          return fail("usage: ropex memory promote <id> --scope agent|fleet|cluster [--no-export]");
         }
         if (!["agent", "fleet", "cluster", "worker"].includes(scope)) {
           return fail("scope must be worker|agent|fleet|cluster");
         }
         const next = promoteMemoryFact(state, id, scope);
         if (!next) return fail(`memory fact not found: ${id}`);
+        let path: string | undefined;
+        if (doExport) {
+          path = exportMemoryFactToGit(next, { root });
+          const idx = state.memory.findIndex((f) => f.id === next.id);
+          if (idx !== -1) state.memory[idx] = { ...next, manifestPath: path };
+        }
         saveState(root, state);
-        console.log(`promoted ${next.id} → ${next.scope}`);
+        console.log(`promoted ${next.id} → ${next.scope}${path ? `  exported=${path}` : ""}`);
         return 0;
       }
       const view = buildControlPlaneView(state);
