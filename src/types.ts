@@ -461,6 +461,45 @@ export type ClusterMetrics = {
   lastDrainAt?: string;
 };
 
+/** Work-queue item — GitHub webhook / CLI / simulate all land here. */
+export type QueuedTask = {
+  id: string;
+  task: Task;
+  enqueuedAt: string;
+  status: "pending" | "claimed" | "done" | "failed" | "dead";
+  workerId?: string;
+  /** Set when a worker claims the item (stuck-probe input). */
+  claimedAt?: string;
+  /** Lease deadline — expired claims are reclaimed. */
+  leaseExpiresAt?: string;
+  /** Last heartbeat that extended the lease. */
+  heartbeatAt?: string;
+  attempts: number;
+  source: "cli" | "github" | "webhook";
+  /** Higher runs first (default 0). */
+  priority: number;
+  error?: string;
+  finishedAt?: string;
+  /** Earliest time a pending retry may be claimed again. */
+  nextRetryAt?: string;
+};
+
+export type ClusterMetrics = {
+  tasksCompleted: number;
+  tasksFailed: number;
+  tasksEnqueued: number;
+  /** Soft failures that were re-queued for another attempt. */
+  tasksRetried?: number;
+  /** Tasks that exhausted retries (dead-letter). */
+  tasksDead?: number;
+  /** Claimed tasks reclaimed after lease expiry. */
+  leasesReclaimed?: number;
+  /** Webhook deliveries skipped as duplicates. */
+  webhookDuplicates?: number;
+  lastEventAt?: string;
+  lastDrainAt?: string;
+};
+
 export type ToolCall = {
   plugin: string;
   name: string;

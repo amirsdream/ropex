@@ -73,7 +73,9 @@ npx tsx src/cli.ts demo --root /tmp/ropex-demo
 npx tsx src/cli.ts apply fleets/examples
 npx tsx src/cli.ts apply fleets/examples/forge-local.yaml
 npx tsx src/cli.ts tasks sync
-npx tsx src/cli.ts drain
+npx tsx src/cli.ts status
+npx tsx src/cli.ts webhook simulate issues.opened --repo acme/app --title "login is broken" --secret test
+npx tsx src/cli.ts drain --concurrency 2
 npx tsx src/cli.ts metrics --prometheus
 npx tsx src/cli.ts health
 npx tsx src/cli.ts trajectories --jsonl
