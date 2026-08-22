@@ -9,5 +9,6 @@ spec:
     plugins: [fs]
   hermes:
     memory: shared
+    exportMemory: true
     learning: false
     skills: []

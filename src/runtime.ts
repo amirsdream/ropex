@@ -6,6 +6,7 @@ import { buildAgentImage, type ImageResolveOptions } from "./image.js";
 import { recordDelivery } from "./journal.js";
 import { SharedMemoryStore } from "./memory.js";
 import { registerSkill, skillsForAgent } from "./skills.js";
+import { maybeExportRememberedFact } from "./gitmemory.js";
 import { recordTrajectory } from "./trajectory.js";
 import { composeWorkflow } from "./workflow.js";
 import { ensureWorktree } from "./worktree.js";
@@ -66,7 +67,7 @@ export async function runTask(
     hermes,
     memory: hermes.port,
     cwd: worktree,
-    backend: "simulated",
+    backend: undefined,
   });
 
   // compose + plan (Hermes)
@@ -128,7 +129,7 @@ export async function runTask(
     worker.skills = [...new Set([...worker.skills, learned.name])];
     registerSkill(state, learned, `via ${dsh.pack.profile} pack`);
   }
-  hermes.remember({
+  const remembered = hermes.remember({
     id: `${task.id}-done`,
     agent: worker.agent,
     text: task.prompt,
@@ -138,6 +139,7 @@ export async function runTask(
     fleet: worker.fleet,
     tags: ["task-complete"],
   });
+  maybeExportRememberedFact(state, root, remembered, agent.spec.hermes.exportMemory);
 
   const result: RunResult = {
     task,

@@ -46,6 +46,7 @@ export function normalizeFact(raw: SharedMemoryFact | (SharedMemoryFact & { scop
     fleet: raw.fleet,
     tags: raw.tags ? [...raw.tags] : undefined,
     sourceWorker: raw.sourceWorker,
+    manifestPath: raw.manifestPath,
   };
 }
 

@@ -104,6 +104,8 @@ export type MemoryStreamEntry = {
   worker?: string;
   at: string;
   tags: string[];
+  /** Set when loaded from or exported to git Memory YAML. */
+  manifestPath?: string;
 };
 
 /** UI-ready worker card data (not a layout card — structured view model). */
@@ -170,6 +172,11 @@ export type ControlPlaneView = {
   workers: WorkerView[];
   fleets: FleetView[];
   memory: MemoryStreamEntry[];
+  memoryGit: {
+    gitBacked: number;
+    runtimeOnly: number;
+    defaultDir: string;
+  };
   hermes: HermesSurfaceView[];
   harness: HarnessSurfaceView[];
   skills: LearnedSkill[];
@@ -324,6 +331,7 @@ export type ControlPlaneView = {
     backend: "simulated" | "live";
     profiles: Array<{ profile: string; loop: string; plugins: string[]; description: string }>;
     liveReady: boolean;
+    packageInstalled: boolean;
     scaffoldHint: string;
   };
   hermesLive: {

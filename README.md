@@ -72,6 +72,7 @@ npm test
 npx tsx src/cli.ts demo --root /tmp/ropex-demo
 npx tsx src/cli.ts apply fleets/examples
 npx tsx src/cli.ts apply fleets/examples/forge-local.yaml
+npx tsx src/cli.ts memory sync
 npx tsx src/cli.ts tasks sync
 npx tsx src/cli.ts status
 npx tsx src/cli.ts webhook simulate issues.opened --repo acme/app --title "login is broken" --secret test
@@ -125,6 +126,8 @@ Kinds:
 | `Agent` | One named worker type (Hermes bot + harness profile) |
 | `Fleet` | Replica set of agents, selected onto repos |
 | `Policy` | Max replicas and permission denylist |
+| `Task` | Git-native work item (forge-neutral queue) |
+| `Memory` | Git-declared shared memory fact |
 
 ## Runtime split
 
@@ -190,6 +193,11 @@ Control plane today (local, network-free tests):
 | Skills promote UI + canary + budget alerts | shipped |
 | GitRepo local watch/sync | shipped (no remote clone yet) |
 | Forge-neutral Task YAML inbox + git delivery | shipped |
+| Git-defined Memory YAML sync + export | shipped |
+| Auto-export memory on remember (hermes.exportMemory) | shipped |
+| Memory sync/export UI + API | shipped |
+| Remote git clone (--remote / ROPEX_GIT_CLONE) | shipped |
+| Live dsh when @deepseek-ai/dsh installed | shipped (Cordis adapter) |
 | Live `@deepseek-ai/dsh` / Hermes process | not yet |
 
 See [architecture](./docs/architecture.md), [API](./docs/api.md), and [ideas](./docs/ideas.md).

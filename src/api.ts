@@ -17,7 +17,15 @@ import {
   type WorkerView,
 } from "./contracts.js";
 import { loopModeFor, toolsFor } from "./harness.js";
-import { memoryContextFor, resolveSharePolicy, SharedMemoryStore } from "./memory.js";
+import { memoryContextFor, resolveSharePolicy, SharedMemoryStore, promoteMemoryFact } from "./memory.js";
+import {
+  DEFAULT_MEMORY_DIR,
+  exportMemoryFactToGit,
+  exportMemoryFacts,
+  memoryGitSummary,
+  syncMemoryFromDir,
+  syncMemoryFromGitRepos,
+} from "./gitmemory.js";
 import { healthReport } from "./health.js";
 import { planAutoscale } from "./autoscale.js";
 import { budgetReport, budgetAlerts } from "./budget.js";
@@ -26,10 +34,10 @@ import { outboundFor } from "./deliver.js";
 import { detectDrift } from "./drift.js";
 import { fairnessReport } from "./fairness.js";
 import { simulatePolicies } from "./policy-sim.js";
-import { cloneStatusReport } from "./clone.js";
+import { cloneStatusReport, cloneAllGitRepos } from "./clone.js";
 import { decideApproval } from "./approval.js";
 import { pruneAffinity } from "./affinity.js";
-import { DSH_PROFILE_PACKS, liveDshScaffold } from "./dsh.js";
+import { DSH_PROFILE_PACKS, liveDshScaffold, resolveDshBackend } from "./dsh.js";
 import { liveHermesScaffold } from "./hermes.js";
 import { rateLimitReport } from "./ratelimit.js";
 import { drainQueue, drainStatus, setDrainConcurrency } from "./scheduler.js";
@@ -101,7 +109,10 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
       worker: f.worker ?? f.sourceWorker,
       at: f.at,
       tags: f.tags ?? [],
+      manifestPath: f.manifestPath,
     }));
+
+  const memGit = memoryGitSummary(state);
 
   const hermes: HermesSurfaceView[] = state.desired.map((a) => hermesSurface(a));
   const harness: HarnessSurfaceView[] = state.desired.map((a) => harnessSurface(a));
@@ -125,6 +136,11 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
     workers,
     fleets,
     memory,
+    memoryGit: {
+      gitBacked: memGit.gitBacked,
+      runtimeOnly: memGit.runtimeOnly,
+      defaultDir: DEFAULT_MEMORY_DIR,
+    },
     hermes,
     harness,
     skills: [...state.skills],
@@ -352,8 +368,9 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
     })(),
     dsh: (() => {
       const scaffold = liveDshScaffold();
+      const backend = resolveDshBackend();
       return {
-        backend: "simulated" as const,
+        backend,
         profiles: Object.values(DSH_PROFILE_PACKS).map((p) => ({
           profile: p.profile,
           loop: p.loop,
@@ -361,6 +378,7 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
           description: p.description,
         })),
         liveReady: scaffold.liveReady,
+        packageInstalled: scaffold.packageInstalled,
         scaffoldHint: scaffold.summary,
       };
     })(),
@@ -512,9 +530,50 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
     return json(res, buildControlPlaneView(state));
   }
   if (url.pathname === API_ROUTES.memory) {
+    if (req.method === "POST") {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      let body: { action?: string; id?: string; scope?: string; all?: boolean; force?: boolean } = {};
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as typeof body;
+      } catch {
+        return json(res, { error: "invalid json" }, 400);
+      }
+      const action = body.action ?? url.searchParams.get("action") ?? "";
+      if (action === "sync") {
+        const fromRepos = url.searchParams.get("repos") === "1" || body.all;
+        const result = fromRepos
+          ? syncMemoryFromGitRepos(state, opts.root)
+          : syncMemoryFromDir(state, opts.root);
+        opts.saveState?.(opts.root, state);
+        return json(res, { ok: true, action: "sync", ...result, summary: memoryGitSummary(state) });
+      }
+      if (action === "export") {
+        const result = exportMemoryFacts(state, opts.root, {
+          ids: body.id ? [body.id] : undefined,
+          all: body.all ?? !body.id,
+          force: body.force,
+        });
+        opts.saveState?.(opts.root, state);
+        return json(res, { ok: true, action: "export", ...result, summary: memoryGitSummary(state) });
+      }
+      if (action === "promote") {
+        const id = body.id;
+        const scope = body.scope as "worker" | "agent" | "fleet" | "cluster" | undefined;
+        if (!id || !scope) return json(res, { error: "need id and scope" }, 400);
+        const next = promoteMemoryFact(state, id, scope);
+        if (!next) return json(res, { error: `fact not found: ${id}` }, 404);
+        const path = exportMemoryFactToGit(next, { root: opts.root });
+        const idx = state.memory.findIndex((f) => f.id === next.id);
+        if (idx !== -1) state.memory[idx] = { ...next, manifestPath: path };
+        opts.saveState?.(opts.root, state);
+        return json(res, { ok: true, action: "promote", fact: next, path, summary: memoryGitSummary(state) });
+      }
+      return json(res, { error: "action must be sync|export|promote" }, 400);
+    }
     const workerId = url.searchParams.get("worker");
     if (workerId) return json(res, memoryForWorker(state, workerId));
-    return json(res, state.memory);
+    return json(res, { facts: state.memory, summary: memoryGitSummary(state) });
   }
   if (url.pathname === API_ROUTES.workers) {
     return json(res, buildControlPlaneView(state).workers);
@@ -741,6 +800,23 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
     return json(res, fairnessReport(state));
   }
   if (url.pathname === API_ROUTES.clone) {
+    if (req.method === "POST") {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      let body: { remote?: boolean; force?: boolean; dryRun?: boolean } = {};
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as typeof body;
+      } catch {
+        return json(res, { error: "invalid json" }, 400);
+      }
+      const results = cloneAllGitRepos(opts.root, state, {
+        remote: body.remote,
+        force: body.force,
+        dryRun: body.dryRun,
+      });
+      opts.saveState?.(opts.root, state);
+      return json(res, { ok: true, results, report: cloneStatusReport(state) });
+    }
     return json(res, cloneStatusReport(state));
   }
   if (url.pathname === API_ROUTES.affinity) {

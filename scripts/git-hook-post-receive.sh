@@ -15,7 +15,8 @@ if [[ ! -d node_modules ]]; then
   exit 1
 fi
 
+npx tsx src/cli.ts --root "$ROOT" memory sync --repos 2>/dev/null || npx tsx src/cli.ts --root "$ROOT" memory sync
 npx tsx src/cli.ts --root "$ROOT" tasks sync --repos 2>/dev/null || npx tsx src/cli.ts --root "$ROOT" tasks sync
 npx tsx src/cli.ts --root "$ROOT" drain --concurrency "${ROPEX_DRAIN_CONCURRENCY:-2}"
 
-echo "ropex hook: tasks synced and drain complete"
+echo "ropex hook: memory + tasks synced and drain complete"

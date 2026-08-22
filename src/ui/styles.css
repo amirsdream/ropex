@@ -149,6 +149,12 @@ body {
   transform: translateY(-2px);
 }
 
+.cta-sm {
+  padding: 0.45rem 0.75rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
 .cta-ghost {
   color: var(--ink);
   background: transparent;

@@ -46,9 +46,24 @@ function renderWorkflow(view) {
 }
 
 function renderMemory(view) {
+  const toolbar = $("#memory-toolbar");
+  const mg = view.memoryGit ?? { gitBacked: 0, runtimeOnly: 0, defaultDir: "memory" };
+  toolbar.innerHTML = `
+    <div class="worker-row">
+      <div>
+        <div class="worker-id">git memory</div>
+        <div class="digest">${mg.gitBacked} in git · ${mg.runtimeOnly} runtime-only · dir ${escapeHtml(mg.defaultDir)}/</div>
+      </div>
+      <button type="button" class="cta cta-sm" data-memory-action="sync">Sync from git</button>
+      <button type="button" class="cta cta-sm" data-memory-action="export">Export all</button>
+    </div>`;
+  toolbar.querySelectorAll("[data-memory-action]").forEach((btn) => {
+    btn.addEventListener("click", () => memoryAction(btn.getAttribute("data-memory-action")));
+  });
+
   const el = $("#memory-stream");
   if (!view.memory.length) {
-    el.innerHTML = `<p class="empty">No shared facts yet. Run a task to write the rope.</p>`;
+    el.innerHTML = `<p class="empty">No shared facts yet. Run a task or <code>ropex memory sync</code>.</p>`;
     return;
   }
   el.innerHTML = view.memory
@@ -57,6 +72,7 @@ function renderMemory(view) {
       <article class="mem-item" style="animation-delay:${Math.min(i, 12) * 0.04}s">
         <div class="mem-meta">
           <span class="scope">${m.scope}</span>
+          ${m.manifestPath ? `<span class="scope" title="${escapeHtml(m.manifestPath)}">git</span>` : ""}
           <span>${escapeHtml(m.agent)}</span>
           ${m.fleet ? `<span>${escapeHtml(m.fleet)}</span>` : ""}
           <span>${formatTime(m.at)}</span>
@@ -65,6 +81,26 @@ function renderMemory(view) {
       </article>`,
     )
     .join("");
+}
+
+async function memoryAction(action) {
+  const body =
+    action === "sync"
+      ? { action: "sync" }
+      : action === "export"
+        ? { action: "export", all: true }
+        : null;
+  if (!body) return;
+  const res = await fetch("/api/v1/memory", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    alert(await res.text());
+    return;
+  }
+  await refresh();
 }
 
 function renderWorkers(view) {

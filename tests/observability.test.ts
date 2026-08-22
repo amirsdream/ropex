@@ -68,7 +68,7 @@ describe("dsh adapter", () => {
 
   it("refuses live backend until wired", async () => {
     const agent = expandDesired(parseManifests(yaml))[0];
-    await expect(bootDsh(agent.spec, { backend: "live" })).rejects.toThrow(/live backend not wired/);
+    await expect(bootDsh(agent.spec, { backend: "live" })).rejects.toThrow(/live backend unavailable/);
   });
 });
 

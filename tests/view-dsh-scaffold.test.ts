@@ -39,7 +39,7 @@ describe("view pause + affinity + dsh scaffold", () => {
     expect(view.affinity.bindings[0].workerId).toBe("ui:0");
     expect(view.dsh.liveReady).toBe(false);
     expect(view.dsh.profiles.length).toBe(4);
-    expect(view.dsh.scaffoldHint).toMatch(/not wired/i);
+    expect(view.dsh.scaffoldHint).toMatch(/@deepseek-ai\/dsh/i);
   });
 });
 
@@ -50,6 +50,6 @@ describe("live dsh scaffold", () => {
     expect(scaffold.steps.length).toBeGreaterThan(3);
     const { next } = planReconcile(emptyState(), parseManifests(yaml), "t");
     const agent = next.desired[0];
-    await expect(bootDsh(agent.spec, { backend: "live" })).rejects.toThrow(/not wired/i);
+    await expect(bootDsh(agent.spec, { backend: "live" })).rejects.toThrow(/live backend unavailable/);
   });
 });

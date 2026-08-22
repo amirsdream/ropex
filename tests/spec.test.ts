@@ -92,4 +92,20 @@ spec:
     expect(tasks).toHaveLength(1);
     expect(tasks[0].kind === "Task" && tasks[0].spec.agent).toBe("triage");
   });
+
+  it("parses Memory manifests", () => {
+    const raw = `
+apiVersion: ropex.dev/v1
+kind: Memory
+metadata:
+  name: m1
+spec:
+  agent: triage
+  text: institutional knowledge
+  scope: fleet
+`;
+    const mem = parseManifests(raw).filter((m) => m.kind === "Memory");
+    expect(mem).toHaveLength(1);
+    expect(mem[0].kind === "Memory" && mem[0].spec.scope).toBe("fleet");
+  });
 });

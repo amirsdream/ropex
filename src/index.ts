@@ -69,7 +69,7 @@ export {
 export { rememberAffinity, lookupAffinity, pruneAffinity, affinityKey } from "./affinity.js";
 export type { AffinityBinding } from "./types.js";
 export { watchOnce, watchLoop, parseInterval, readManifestTree } from "./watch.js";
-export { bootDsh, profilePack, DSH_PROFILE_PACKS, liveDshScaffold } from "./dsh.js";
+export { bootDsh, profilePack, DSH_PROFILE_PACKS, liveDshScaffold, resolveDshBackend, dshPackageInstalled } from "./dsh.js";
 export type { LiveDshScaffold, DshAdapter, DshBackend } from "./dsh.js";
 export { recordDelivery, deliveriesFor, compactJournal, replayDelivery, JOURNAL_DEFAULT_KEEP } from "./journal.js";
 export { registerSkill, shareSkill, promoteSkill, skillVersions, skillsForAgent, latestSkill, skillsCatalog } from "./skills.js";
@@ -137,6 +137,16 @@ export {
   deliverGitTaskManifest,
   DEFAULT_TASKS_DIR,
 } from "./tasks.js";
+export {
+  syncMemoryFromDir,
+  syncMemoryFromGitRepos,
+  readMemoryManifest,
+  exportMemoryFactToGit,
+  exportMemoryFacts,
+  DEFAULT_MEMORY_DIR,
+  maybeExportRememberedFact,
+  memoryGitSummary,
+} from "./gitmemory.js";
 export { checkRateLimit, rateLimitReport } from "./ratelimit.js";
 export {
   requestApprovals,

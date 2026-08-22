@@ -6,11 +6,12 @@
 
 import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
 import { recordAudit } from "./audit.js";
 import type { ClusterState, GitRepo, GitRepoSyncStatus } from "./types.js";
 import { resolveGitRepoPath } from "./gitrepo.js";
 
-export type CloneBackend = "local-copy" | "remote-stub";
+export type CloneBackend = "local-copy" | "remote-stub" | "git-remote";
 
 export type ClonePhase =
   | "resolve"
@@ -49,7 +50,40 @@ export type CloneOptions = {
   force?: boolean;
   /** When true, only plan phases — do not copy or mutate filesystem. */
   dryRun?: boolean;
+  /** When true (or ROPEX_GIT_CLONE=1), run `git clone` for https/git remotes. Off in vitest. */
+  remote?: boolean;
 };
+
+function remoteCloneEnabled(opts: CloneOptions): boolean {
+  if (!(opts.remote || process.env.ROPEX_GIT_CLONE === "1")) return false;
+  if (process.env.VITEST === "true" && !opts.dryRun) return false;
+  return true;
+}
+
+function runGitClone(
+  url: string,
+  dest: string,
+  branch: string | undefined,
+  opts: CloneOptions,
+): { ok: boolean; reason?: string } {
+  if (opts.dryRun) {
+    return { ok: true, reason: "dry-run (no git clone)" };
+  }
+  if (existsSync(dest)) {
+    if (opts.force) rmSync(dest, { recursive: true, force: true });
+    else return { ok: true, reason: "dest already exists" };
+  }
+  mkdirSync(dirname(dest), { recursive: true });
+  const args = ["clone", "--depth", "1"];
+  if (branch) args.push("-b", branch);
+  args.push(url, dest);
+  const result = spawnSync("git", args, { encoding: "utf8", timeout: 300_000 });
+  if (result.status !== 0) {
+    const msg = (result.stderr || result.stdout || "git clone failed").trim();
+    return { ok: false, reason: msg.slice(0, 500) };
+  }
+  return { ok: true };
+}
 
 function parseFileUrl(url: string): string | null {
   if (url.startsWith("file://")) {
@@ -153,10 +187,40 @@ export function cloneGitRepo(
   }
 
   if (isRemoteUrl(url)) {
+    if (remoteCloneEnabled(opts)) {
+      steps.push(step("copy", opts.dryRun ? `would git clone ${url}` : `git clone ${url}`, 55));
+      const cloned = runGitClone(url, dest, repo.spec.branch, opts);
+      if (!cloned.ok) {
+        steps.push(step("failed", cloned.reason ?? "git clone failed", 70));
+        return finish({
+          repo: repo.metadata.name,
+          url,
+          dest,
+          ok: false,
+          backend: "git-remote",
+          reason: cloned.reason,
+          phase: "failed",
+          progressPct: 70,
+          steps,
+        });
+      }
+      steps.push(step("done", opts.dryRun ? "dry-run ok" : "git clone complete", 100));
+      return finish({
+        repo: repo.metadata.name,
+        url,
+        dest,
+        ok: true,
+        backend: "git-remote",
+        reason: cloned.reason,
+        phase: "done",
+        progressPct: 100,
+        steps,
+      });
+    }
     steps.push(
       step(
         "remote-blocked",
-        "remote clone not wired (https/git); use file:// or local spec.path",
+        "remote clone disabled — ropex clone --remote or ROPEX_GIT_CLONE=1",
         40,
       ),
     );
@@ -167,7 +231,7 @@ export function cloneGitRepo(
       dest,
       ok: false,
       backend: "remote-stub",
-      reason: "remote clone not wired (https/git); use file:// or local spec.path",
+      reason: "remote clone disabled — ropex clone --remote or ROPEX_GIT_CLONE=1",
       phase: "failed",
       progressPct: 40,
       steps,
