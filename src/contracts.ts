@@ -286,6 +286,18 @@ export type ControlPlaneView = {
       lastClonedAt?: string;
     }>;
   };
+  queuePaused: boolean;
+  webhookDuplicates: number;
+  affinity: {
+    active: number;
+    bindings: Array<{ key: string; workerId: string; agent: string; expiresAt: string }>;
+  };
+  dsh: {
+    backend: "simulated" | "live";
+    profiles: Array<{ profile: string; loop: string; plugins: string[]; description: string }>;
+    liveReady: boolean;
+    scaffoldHint: string;
+  };
 };
 
 /** Stable API routes the UI and CLI share. */
@@ -307,4 +319,5 @@ export const API_ROUTES = {
   drift: "/api/v1/drift",
   fairness: "/api/v1/fairness",
   clone: "/api/v1/clone",
+  affinity: "/api/v1/affinity",
 } as const;

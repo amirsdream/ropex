@@ -293,7 +293,7 @@ flowchart LR
 
 ## DeepSeek adapter seam
 
-`bootDsh(spec)` loads a **profile pack** (`minimal` | `code` | `standard` | `creator`) and runs Hermes plans through it. `backend: "simulated"` today; `backend: "live"` is reserved for `@deepseek-ai/dsh`.
+`bootDsh(spec)` loads a **profile pack** (`minimal` | `code` | `standard` | `creator`) and runs Hermes plans through it. `backend: "simulated"` today; `backend: "live"` is reserved for `@deepseek-ai/dsh` and fails closed. See [dsh.md](./dsh.md) and `liveDshScaffold()` for the wiring checklist. The control-plane UI DeepSeek section surfaces packs + scaffold hint.
 
 ## Parallel drain + GitRepo sync
 

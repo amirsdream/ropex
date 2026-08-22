@@ -2,6 +2,13 @@
  * Offline DeepSeek Harness (dsh) adapter.
  * Profile packs mirror `@deepseek-ai/dsh` presets; swap backend to "live" later
  * without changing Hermes→harness call sites.
+ *
+ * Live wiring contract (fail-closed until the package is present):
+ * 1. `npm i @deepseek-ai/dsh` (optional peer — tests never require it)
+ * 2. Map `DSH_PROFILE_PACKS[profile].plugins` onto Cordis pack loaders
+ * 3. Implement `bootLiveDsh(spec)` that returns the same `DshAdapter` shape
+ * 4. Keep Policy deny/requireApproval as a permissions plugin in front of tools
+ * 5. `backend: "live"` must throw this module's error until step 3 lands
  */
 
 import type { HermesPlan } from "./contracts.js";
@@ -75,6 +82,39 @@ export type BootDshOptions = {
   backend?: DshBackend;
 };
 
+/** Checklist returned by `liveDshScaffold` — docs + UI surface this. */
+export type LiveDshScaffold = {
+  liveReady: boolean;
+  packageName: string;
+  summary: string;
+  steps: string[];
+  env: string[];
+  profiles: HarnessProfile[];
+};
+
+/**
+ * Describe how to wire the live `@deepseek-ai/dsh` backend without importing it.
+ * Always network-free; `liveReady` stays false until a future adapter lands.
+ */
+export function liveDshScaffold(): LiveDshScaffold {
+  return {
+    liveReady: false,
+    packageName: "@deepseek-ai/dsh",
+    summary:
+      "Live dsh not wired — bootDsh(backend: live) fails closed; use simulated packs offline.",
+    steps: [
+      "Add optional peer dependency @deepseek-ai/dsh (never required by tests).",
+      "Implement bootLiveDsh(spec) returning DshAdapter with backend: \"live\".",
+      "Map DSH_PROFILE_PACKS[profile].plugins onto Cordis pack loaders.",
+      "Mount Policy deny/requireApproval as a permissions plugin before tools.",
+      "Prove one Hermes plan → trajectory in ropex run --root sandbox with backend live.",
+      "Keep backend: simulated as the default for CI and network-free demos.",
+    ],
+    env: ["ROPEX_DSH_BACKEND=simulated|live", "DEEPSEEK_API_KEY=(live only)"],
+    profiles: Object.keys(DSH_PROFILE_PACKS) as HarnessProfile[],
+  };
+}
+
 /**
  * Boot a DeepSeek-shaped harness for an agent profile.
  * Live backend is a deliberate stub: tests stay network-free.
@@ -84,12 +124,12 @@ export async function bootDsh(spec: AgentSpec, opts: BootDshOptions = {}): Promi
   const pack = profilePack(spec.harness.profile);
 
   if (backend === "live") {
+    const scaffold = liveDshScaffold();
     throw new Error(
-      "dsh live backend not wired — install @deepseek-ai/dsh and map profile packs; use backend: simulated",
+      `dsh live backend not wired — ${scaffold.summary} Next: ${scaffold.steps[1]}`,
     );
   }
 
-  // Align pack tools with resolved agent tools (plugins may narrow/widen).
   const resolvedTools = toolsFor(spec);
   const aligned: DshProfilePack = {
     ...pack,

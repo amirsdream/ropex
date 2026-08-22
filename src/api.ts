@@ -26,6 +26,8 @@ import { detectDrift } from "./drift.js";
 import { fairnessReport } from "./fairness.js";
 import { simulatePolicies } from "./policy-sim.js";
 import { cloneStatusReport } from "./clone.js";
+import { pruneAffinity } from "./affinity.js";
+import { DSH_PROFILE_PACKS, liveDshScaffold } from "./dsh.js";
 import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { ensureQueue, queueSummary } from "./queue.js";
@@ -301,6 +303,35 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
         })),
       };
     })(),
+    queuePaused: Boolean(state.queuePaused),
+    webhookDuplicates: state.metrics?.webhookDuplicates ?? 0,
+    affinity: (() => {
+      pruneAffinity(state);
+      const bindings = (state.affinity ?? []).slice(0, 24);
+      return {
+        active: bindings.length,
+        bindings: bindings.map((b) => ({
+          key: b.key,
+          workerId: b.workerId,
+          agent: b.agent,
+          expiresAt: b.expiresAt,
+        })),
+      };
+    })(),
+    dsh: (() => {
+      const scaffold = liveDshScaffold();
+      return {
+        backend: "simulated" as const,
+        profiles: Object.values(DSH_PROFILE_PACKS).map((p) => ({
+          profile: p.profile,
+          loop: p.loop,
+          plugins: [...p.plugins],
+          description: p.description,
+        })),
+        liveReady: scaffold.liveReady,
+        scaffoldHint: scaffold.summary,
+      };
+    })(),
   };
 }
 
@@ -499,6 +530,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
   }
   if (url.pathname === API_ROUTES.clone) {
     return json(res, cloneStatusReport(state));
+  }
+  if (url.pathname === API_ROUTES.affinity) {
+    pruneAffinity(state);
+    return json(res, {
+      active: state.affinity?.length ?? 0,
+      bindings: state.affinity ?? [],
+    });
   }
 
   // Static UI

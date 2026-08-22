@@ -172,6 +172,7 @@ Control plane today (local, network-free tests):
 | Clone progress + outbound UI | shipped |
 | Worktree GC + webhook idempotency + priority aging | shipped |
 | Queue pause/resume + sticky affinity + tick hooks | shipped |
+| Pause/affinity/dsh UI + live scaffold docs | shipped |
 | GitRepo local watch/sync | shipped (no remote clone yet) |
 | Live `@deepseek-ai/dsh` / Hermes process | not yet |
 

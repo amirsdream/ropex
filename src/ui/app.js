@@ -16,6 +16,7 @@ function renderPulse(view) {
     ["unhealthy", view.metrics?.workersUnhealthy ?? 0],
     ["slo", view.metrics?.backlogSloBreached ? "breach" : "ok"],
     ["drift", view.drift?.ok === false ? "yes" : "ok"],
+    ["queue", view.queuePaused ? "paused" : "run"],
   ];
   el.innerHTML = items
     .map(
@@ -370,15 +371,22 @@ function renderAutoscale(view) {
 
 function renderQueue(view) {
   const el = $("#queue-rail");
+  const paused = view.queuePaused
+    ? `<div class="worker-row"><div><div class="worker-id">scheduler</div><div class="digest">claims blocked — ropex resume</div></div><div class="status status-failed">paused</div><div class="digest">dupes ${view.webhookDuplicates ?? 0}</div><div class="digest"></div></div>`
+    : "";
   if (!view.queue?.length) {
-    el.innerHTML = `<p class="empty">Queue empty. Webhook or simulate to enqueue.</p>`;
+    el.innerHTML =
+      paused +
+      `<p class="empty">Queue empty. Webhook or simulate to enqueue.</p>`;
     return;
   }
-  el.innerHTML = view.queue
-    .slice()
-    .reverse()
-    .map(
-      (q, i) => `
+  el.innerHTML =
+    paused +
+    view.queue
+      .slice()
+      .reverse()
+      .map(
+        (q, i) => `
       <div class="worker-row" style="animation-delay:${Math.min(i, 12) * 0.03}s">
         <div>
           <div class="worker-id">${escapeHtml(q.agent)}</div>
@@ -388,8 +396,77 @@ function renderQueue(view) {
         <div class="digest">${escapeHtml(q.source)}${q.nextRetryAt ? " · retry" : ""}${q.error ? ` · ${escapeHtml(q.error).slice(0, 40)}` : ""}</div>
         <div class="digest">${escapeHtml(q.id)}</div>
       </div>`,
+      )
+      .join("");
+}
+
+function renderAffinity(view) {
+  const el = $("#affinity-rail");
+  const a = view.affinity;
+  if (!a) {
+    el.innerHTML = `<p class="empty">Affinity unavailable.</p>`;
+    return;
+  }
+  const head = `
+    <div class="worker-row">
+      <div>
+        <div class="worker-id">sticky</div>
+        <div class="digest">active bindings ${a.active} · TTL prefers last successful worker</div>
+      </div>
+      <div class="status status-idle">affinity</div>
+      <div class="digest">agent:repo → worker</div>
+      <div class="digest"></div>
+    </div>`;
+  const rows = (a.bindings ?? [])
+    .map(
+      (b, i) => `
+      <div class="worker-row" style="animation-delay:${Math.min(i, 12) * 0.03}s">
+        <div>
+          <div class="worker-id">${escapeHtml(b.key)}</div>
+          <div class="digest">${escapeHtml(b.agent)}</div>
+        </div>
+        <div class="status status-running">${escapeHtml(b.workerId)}</div>
+        <div class="digest">expires ${formatTime(b.expiresAt)}</div>
+        <div class="digest"></div>
+      </div>`,
     )
     .join("");
+  el.innerHTML =
+    head + (rows || `<p class="empty">No sticky bindings yet. Complete a task to pin.</p>`);
+}
+
+function renderDsh(view) {
+  const el = $("#dsh-rail");
+  const d = view.dsh;
+  if (!d) {
+    el.innerHTML = `<p class="empty">dsh surface unavailable.</p>`;
+    return;
+  }
+  const head = `
+    <div class="worker-row">
+      <div>
+        <div class="worker-id">deepseek harness</div>
+        <div class="digest">${escapeHtml(d.scaffoldHint)}</div>
+      </div>
+      <div class="status status-${d.liveReady ? "idle" : "failed"}">${d.liveReady ? "live" : "simulated"}</div>
+      <div class="digest">backend ${escapeHtml(d.backend)}</div>
+      <div class="digest">profiles ${d.profiles?.length ?? 0}</div>
+    </div>`;
+  const rows = (d.profiles ?? [])
+    .map(
+      (p, i) => `
+      <div class="worker-row" style="animation-delay:${Math.min(i, 12) * 0.03}s">
+        <div>
+          <div class="worker-id">${escapeHtml(p.profile)}</div>
+          <div class="digest">${escapeHtml(p.description)}</div>
+        </div>
+        <div class="status status-idle">${escapeHtml(p.loop)}</div>
+        <div class="digest">${escapeHtml((p.plugins ?? []).join(", "))}</div>
+        <div class="digest"></div>
+      </div>`,
+    )
+    .join("");
+  el.innerHTML = head + rows;
 }
 
 function renderJournal(view) {
@@ -531,6 +608,8 @@ async function main() {
     renderClone(view);
     renderAutoscale(view);
     renderQueue(view);
+    renderAffinity(view);
+    renderDsh(view);
     renderJournal(view);
     renderApprovals(view);
     renderAudit(view);

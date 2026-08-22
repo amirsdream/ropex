@@ -487,7 +487,10 @@ export function deadLetters(state: ClusterState): QueuedTask[] {
   return state.queue.filter((q) => q.status === "dead");
 }
 
-export function queueSummary(state: ClusterState): {
+export function queueSummary(
+  state: ClusterState,
+  opts: { now?: number } = {},
+): {
   pending: number;
   claimed: number;
   done: number;
@@ -497,7 +500,7 @@ export function queueSummary(state: ClusterState): {
   leaseExpired: number;
 } {
   ensureQueue(state);
-  const now = Date.now();
+  const now = opts.now ?? Date.now();
   const counts = {
     pending: 0,
     claimed: 0,

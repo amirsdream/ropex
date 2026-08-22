@@ -50,6 +50,12 @@ Clone attempts emit phase logs (`resolve`→`done`/`failed`) with progress %; re
 
 **Shipped (2026-08-22 night):** pause/resume, `src/affinity.ts`, `compactJournal`, tick options.
 
+## Pause/affinity/dsh UI + live scaffold
+
+Control-plane view exposes `queuePaused`, affinity bindings, webhook duplicate count, and dsh profile packs. UI rails for pause banner, affinity, and DeepSeek harness. `liveDshScaffold()` + `docs/dsh.md` document fail-closed live wiring.
+
+**Shipped (2026-08-22 night):** view/UI fields, `/api/v1/affinity`, dsh scaffold docs.
+
 ## Canary digest rolls + state snapshot
 
 Rolling canary strategy limits digest retire/create per agent; scheduler skips holdouts. Snapshot exports cluster checkpoints.

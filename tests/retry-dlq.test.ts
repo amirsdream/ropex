@@ -75,7 +75,7 @@ describe("dead-letter + retry", () => {
     expect(after1?.nextRetryAt).toBe(new Date(t0 + 1_000).toISOString());
     expect(state.metrics.tasksRetried).toBe(1);
     expect(state.workers[0].status).toBe("idle");
-    expect(queueSummary(state).waitingRetry).toBe(1);
+    expect(queueSummary(state, { now: t0 }).waitingRetry).toBe(1);
 
     // Too early — not claimable
     expect(claimPending(state, 1, { now: t0 + 500 }).claimed).toHaveLength(0);
