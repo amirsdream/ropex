@@ -442,6 +442,18 @@ function renderDsh(view) {
     el.innerHTML = `<p class="empty">dsh surface unavailable.</p>`;
     return;
   }
+  const h = view.hermesLive;
+  const hermesRow = h
+    ? `<div class="worker-row">
+      <div>
+        <div class="worker-id">hermes brain</div>
+        <div class="digest">${escapeHtml(h.scaffoldHint)}</div>
+      </div>
+      <div class="status status-${h.liveReady ? "idle" : "failed"}">${h.liveReady ? "live" : "simulated"}</div>
+      <div class="digest">steps ${h.steps?.length ?? 0}</div>
+      <div class="digest"></div>
+    </div>`
+    : "";
   const head = `
     <div class="worker-row">
       <div>
@@ -466,7 +478,7 @@ function renderDsh(view) {
       </div>`,
     )
     .join("");
-  el.innerHTML = head + rows;
+  el.innerHTML = hermesRow + head + rows;
 }
 
 function renderJournal(view) {
@@ -507,10 +519,34 @@ function renderApprovals(view) {
         </div>
         <div class="status status-failed">${escapeHtml(a.status)}</div>
         <div class="digest">${escapeHtml(a.agent)}</div>
-        <div class="digest">${escapeHtml(a.id)}</div>
+        <div class="digest">
+          <button type="button" data-approve="${escapeHtml(a.id)}">approve</button>
+          <button type="button" data-reject="${escapeHtml(a.id)}">reject</button>
+        </div>
       </div>`,
     )
     .join("");
+  el.querySelectorAll("[data-approve]").forEach((btn) => {
+    btn.addEventListener("click", () => decide(btn.getAttribute("data-approve"), "approved"));
+  });
+  el.querySelectorAll("[data-reject]").forEach((btn) => {
+    btn.addEventListener("click", () => decide(btn.getAttribute("data-reject"), "rejected"));
+  });
+}
+
+async function decide(id, decision) {
+  if (!id) return;
+  const res = await fetch("/api/v1/approvals", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id, decision }),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    $("#meta").textContent = `approval failed: ${err}`;
+    return;
+  }
+  location.reload();
 }
 
 function renderAudit(view) {

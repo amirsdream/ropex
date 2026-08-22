@@ -26,8 +26,10 @@ import { detectDrift } from "./drift.js";
 import { fairnessReport } from "./fairness.js";
 import { simulatePolicies } from "./policy-sim.js";
 import { cloneStatusReport } from "./clone.js";
+import { decideApproval } from "./approval.js";
 import { pruneAffinity } from "./affinity.js";
 import { DSH_PROFILE_PACKS, liveDshScaffold } from "./dsh.js";
+import { liveHermesScaffold } from "./hermes.js";
 import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { ensureQueue, queueSummary } from "./queue.js";
@@ -332,6 +334,14 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
         scaffoldHint: scaffold.summary,
       };
     })(),
+    hermesLive: (() => {
+      const scaffold = liveHermesScaffold();
+      return {
+        liveReady: scaffold.liveReady,
+        scaffoldHint: scaffold.summary,
+        steps: [...scaffold.steps],
+      };
+    })(),
   };
 }
 
@@ -393,6 +403,8 @@ export type ServeOptions = {
   root: string;
   port?: number;
   loadState: (root: string) => ClusterState;
+  /** Optional persist hook for mutating routes (approvals). */
+  saveState?: (root: string, state: ClusterState) => void;
 };
 
 export function startControlPlaneServer(opts: ServeOptions): Promise<{ port: number; close: () => Promise<void> }> {
@@ -407,8 +419,10 @@ export function startControlPlaneServer(opts: ServeOptions): Promise<{ port: num
   return new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(port, "127.0.0.1", () => {
+      const addr = server.address();
+      const bound = typeof addr === "object" && addr ? addr.port : port;
       resolve({
-        port,
+        port: bound,
         close: () =>
           new Promise((r, j) => {
             server.close((e) => (e ? j(e) : r()));
@@ -484,6 +498,31 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
   }
 
   if (url.pathname === API_ROUTES.approvals) {
+    if (req.method === "POST") {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      let body: { id?: string; decision?: string } = {};
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as {
+          id?: string;
+          decision?: string;
+        };
+      } catch {
+        return json(res, { error: "invalid json" }, 400);
+      }
+      const id = body.id ?? url.searchParams.get("id") ?? undefined;
+      const decision =
+        body.decision === "approved" || body.decision === "rejected"
+          ? body.decision
+          : undefined;
+      if (!id || !decision) {
+        return json(res, { error: "need id and decision=approved|rejected" }, 400);
+      }
+      const updated = decideApproval(state, id, decision);
+      if (!updated) return json(res, { error: `approval not found or not pending: ${id}` }, 404);
+      opts.saveState?.(opts.root, state);
+      return json(res, updated);
+    }
     return json(res, state.approvals ?? []);
   }
   if (url.pathname === API_ROUTES.audit) {

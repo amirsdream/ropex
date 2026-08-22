@@ -22,5 +22,6 @@ Stable routes from `API_ROUTES` in `src/contracts.ts`. All JSON unless noted. Ne
 | GET | `/api/v1/fairness` | Queue latency + LRU fairness report |
 | GET | `/api/v1/clone` | Last GitRepo clone progress / fail-closed status |
 | GET | `/api/v1/affinity` | Sticky worker affinity bindings |
+| POST | `/api/v1/approvals` | Decide pending approval (`{ id, decision }`) |
 
 Serve with `ropex ui` (static UI + these routes on one port).

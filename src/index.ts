@@ -5,7 +5,8 @@ export { API_ROUTES } from "./contracts.js";
 export { parseManifests, expandDesired, applyReplicaCap, maxReplicas } from "./spec.js";
 export { planReconcile, applyManifestText, loadState, saveState, emptyState } from "./controller.js";
 export { createHarness } from "./harness.js";
-export { createHermes } from "./hermes.js";
+export { createHermes, liveHermesScaffold } from "./hermes.js";
+export type { LiveHermesScaffold } from "./hermes.js";
 export { runTask, expandWorkers } from "./runtime.js";
 export { agentsForEvent, eventToTask } from "./github.js";
 export { Kernel, memoryPlugin, skillsPlugin, soulPlugin } from "./plugins.js";
@@ -74,7 +75,8 @@ export { fairnessReport, formatFairnessReport, latencyStats, percentile } from "
 export type { FairnessReport, LatencyStats, WorkerFairness } from "./fairness.js";
 export { selectCanaryRolls } from "./canary.js";
 export type { RolloutOptions, RolloutStrategy } from "./canary.js";
-export { exportSnapshot, writeSnapshot, snapshotMeta } from "./snapshot.js";
+export { exportSnapshot, writeSnapshot, loadSnapshot, restoreSnapshot, parseSnapshot, snapshotMeta } from "./snapshot.js";
+export type { SnapshotMeta, SnapshotDocument } from "./snapshot.js";
 export {
   budgetStatus,
   budgetReport,

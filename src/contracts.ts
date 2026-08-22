@@ -298,6 +298,11 @@ export type ControlPlaneView = {
     liveReady: boolean;
     scaffoldHint: string;
   };
+  hermesLive: {
+    liveReady: boolean;
+    scaffoldHint: string;
+    steps: string[];
+  };
 };
 
 /** Stable API routes the UI and CLI share. */

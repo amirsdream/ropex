@@ -56,6 +56,12 @@ Control-plane view exposes `queuePaused`, affinity bindings, webhook duplicate c
 
 **Shipped (2026-08-22 night):** view/UI fields, `/api/v1/affinity`, dsh scaffold docs.
 
+## Snapshot restore + hermes seam + approval UI
+
+`ropex restore <path>` reloads a snapshot into `.ropex/state.json`. `liveHermesScaffold()` + `docs/hermes.md`. UI approve/reject posts to `/api/v1/approvals`. Example fleet notes sticky affinity.
+
+**Shipped (2026-08-22 night):** restoreSnapshot, hermes scaffold, approval POST API.
+
 ## Canary digest rolls + state snapshot
 
 Rolling canary strategy limits digest retire/create per agent; scheduler skips holdouts. Snapshot exports cluster checkpoints.

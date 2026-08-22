@@ -2,7 +2,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { applyManifestText, loadState, planReconcile, saveState } from "./controller.js";
-import { writeSnapshot } from "./snapshot.js";
+import { writeSnapshot, restoreSnapshot } from "./snapshot.js";
 import { detectDrift, formatDriftReport } from "./drift.js";
 import { fairnessReport, formatFairnessReport } from "./fairness.js";
 import { deliverOutbound, outboundFor } from "./deliver.js";
@@ -46,6 +46,7 @@ Usage:
   ropex drift [path]              Report live vs desired config drift
   ropex fairness                  Queue latency + LRU fairness report
   ropex snapshot                  Export cluster state checkpoint
+  ropex restore <path>            Restore cluster state from a snapshot file
   ropex cordon <worker-id>        Stop scheduling onto a worker
   ropex uncordon <worker-id>      Allow scheduling again
   ropex evict <worker-id>         Retire idle worker (or cordon if running)
@@ -140,6 +141,15 @@ async function main(argv: string[]): Promise<number> {
       const state = loadState(root);
       const out = writeSnapshot(root, state);
       console.log(`snapshot ${out.path}  rev=${out.meta.revision} live=${out.meta.workersLive}`);
+      return 0;
+    }
+    case "restore": {
+      const path = rest[0];
+      if (!path) return fail("usage: ropex restore <snapshot-path>");
+      const doc = restoreSnapshot(root, path, { save: saveState });
+      console.log(
+        `restored ${path}  rev=${doc.meta.revision} live=${doc.meta.workersLive} pending=${doc.meta.queuePending}`,
+      );
       return 0;
     }
     case "drift": {
@@ -849,6 +859,7 @@ async function main(argv: string[]): Promise<number> {
         root,
         port,
         loadState,
+        saveState,
       });
       console.log(`ropex ui  http://127.0.0.1:${server.port}`);
       console.log(`api       http://127.0.0.1:${server.port}/api/v1/view`);
