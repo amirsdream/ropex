@@ -1,0 +1,13 @@
+apiVersion: ropex.dev/v1
+kind: Task
+metadata:
+  name: update-readme
+  labels:
+    area: docs
+spec:
+  agent: docbot
+  prompt: "Review README and suggest one improvement to the forge-neutral task workflow."
+  priority: 1
+  status: pending
+  delivery:
+    mode: git

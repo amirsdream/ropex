@@ -77,4 +77,19 @@ describe("spec", () => {
       parseManifests("apiVersion: ropex.dev/v1\nkind: Pod\nmetadata:\n  name: x\n"),
     ).toThrow(/unsupported kind/);
   });
+
+  it("parses Task manifests", () => {
+    const raw = `
+apiVersion: ropex.dev/v1
+kind: Task
+metadata:
+  name: t
+spec:
+  agent: triage
+  prompt: hello
+`;
+    const tasks = parseManifests(raw).filter((m) => m.kind === "Task");
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0].kind === "Task" && tasks[0].spec.agent).toBe("triage");
+  });
 });
