@@ -168,6 +168,7 @@ Control plane today (local, network-free tests):
 | Drift + fairness UI panels | shipped |
 | Skill promote / versions CLI | shipped |
 | Workflow stage trajectory metrics | shipped |
+| Chaos invariants + budget/policy UI | shipped |
 | GitRepo local watch/sync | shipped (no remote clone yet) |
 | Live `@deepseek-ai/dsh` / Hermes process | not yet |
 

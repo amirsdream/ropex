@@ -236,6 +236,28 @@ export type ControlPlaneView = {
     pendingByAgent: Record<string, number>;
     topWorkers: Array<{ workerId: string; agent: string; claims: number; idleSkewMs: number }>;
   };
+  budget: {
+    rows: Array<{
+      key: string;
+      scope: string;
+      spent: number;
+      limit: number;
+      remaining: number;
+      exhausted: boolean;
+    }>;
+  };
+  policySim: {
+    deniedTasks: number;
+    deniedCalls: number;
+    approvalCalls: number;
+    rows: Array<{
+      agent: string;
+      prompt: string;
+      taskDenied: boolean;
+      callsDenied: string[];
+      callsNeedApproval: string[];
+    }>;
+  };
 };
 
 /** Stable API routes the UI and CLI share. */

@@ -48,12 +48,22 @@ describe("reconcile chaos", () => {
     const root = mkdtempSync(join(tmpdir(), "ropex-chaos-"));
     temps.push(root);
     const { steps, final } = runReconcileChaos(root, { maxReplicas: 6 });
-    expect(steps.length).toBeGreaterThanOrEqual(5);
+    expect(steps.length).toBeGreaterThanOrEqual(6);
     expect(steps.some((s) => s.plan.retire.length > 0)).toBe(true);
     expect(steps.some((s) => s.plan.create.length > 0)).toBe(true);
     expect(assertChaosInvariants(final)).toEqual([]);
     const live = final.workers.filter((w) => w.status !== "retired");
     expect(live.length).toBeGreaterThan(0);
     expect(new Set(live.map((w) => w.id)).size).toBe(live.length);
+    expect(live.every((w) => w.labels?.role === "chaos")).toBe(true);
+  });
+
+  it("allows digest mismatch only when canary holdouts flagged", () => {
+    const root = mkdtempSync(join(tmpdir(), "ropex-chaos-canary-"));
+    temps.push(root);
+    const { final, steps } = runReconcileChaos(root, { maxReplicas: 4, canary: true });
+    expect(steps.some((s) => (s.canaryHeld ?? 0) > 0)).toBe(true);
+    // Strict mode may fail during/after canary; allowDigestMismatch must pass.
+    expect(assertChaosInvariants(final, { allowDigestMismatch: true })).toEqual([]);
   });
 });

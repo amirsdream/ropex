@@ -215,6 +215,64 @@ function renderFairness(view) {
   el.innerHTML = head + (rows || `<p class="empty">No live workers for fairness.</p>`);
 }
 
+function renderBudget(view) {
+  const el = $("#budget-rail");
+  const rows = view.budget?.rows ?? [];
+  if (!rows.length) {
+    el.innerHTML = `<p class="empty">No Policy.budget scopes configured.</p>`;
+    return;
+  }
+  el.innerHTML = rows
+    .map(
+      (r, i) => `
+      <div class="worker-row" style="animation-delay:${Math.min(i, 12) * 0.03}s">
+        <div>
+          <div class="worker-id">${escapeHtml(r.key)}</div>
+          <div class="digest">${escapeHtml(r.scope)} · remaining ${r.remaining}</div>
+        </div>
+        <div class="status status-${r.exhausted ? "failed" : "idle"}">${r.exhausted ? "exhausted" : "ok"}</div>
+        <div class="digest">spent ${r.spent}</div>
+        <div class="digest">limit ${r.limit}</div>
+      </div>`,
+    )
+    .join("");
+}
+
+function renderPolicy(view) {
+  const el = $("#policy-rail");
+  const p = view.policySim;
+  if (!p) {
+    el.innerHTML = `<p class="empty">Policy simulation unavailable.</p>`;
+    return;
+  }
+  const head = `
+    <div class="worker-row">
+      <div>
+        <div class="worker-id">simulate</div>
+        <div class="digest">denied tasks ${p.deniedTasks} · denied calls ${p.deniedCalls}</div>
+      </div>
+      <div class="status status-${p.deniedTasks || p.deniedCalls ? "failed" : "idle"}">gates</div>
+      <div class="digest">approvals ${p.approvalCalls}</div>
+      <div class="digest">rows ${p.rows?.length ?? 0}</div>
+    </div>`;
+  const rows = (p.rows ?? [])
+    .slice(0, 12)
+    .map(
+      (r, i) => `
+      <div class="worker-row" style="animation-delay:${Math.min(i, 12) * 0.03}s">
+        <div>
+          <div class="worker-id">${escapeHtml(r.agent)}</div>
+          <div class="digest">${escapeHtml(r.prompt)}</div>
+        </div>
+        <div class="status status-${r.taskDenied ? "failed" : "idle"}">${r.taskDenied ? "deny" : "allow"}</div>
+        <div class="digest">${escapeHtml((r.callsDenied ?? []).join(",") || "—")}</div>
+        <div class="digest">${escapeHtml((r.callsNeedApproval ?? []).join(",") || "—")}</div>
+      </div>`,
+    )
+    .join("");
+  el.innerHTML = head + rows;
+}
+
 function renderAutoscale(view) {
   const el = $("#autoscale-rail");
   const a = view.autoscale;
@@ -395,6 +453,8 @@ async function main() {
     renderHealth(view);
     renderDrift(view);
     renderFairness(view);
+    renderBudget(view);
+    renderPolicy(view);
     renderAutoscale(view);
     renderQueue(view);
     renderJournal(view);

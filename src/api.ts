@@ -24,6 +24,7 @@ import { budgetReport } from "./budget.js";
 import { outboundFor } from "./deliver.js";
 import { detectDrift } from "./drift.js";
 import { fairnessReport } from "./fairness.js";
+import { simulatePolicies } from "./policy-sim.js";
 import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { ensureQueue, queueSummary } from "./queue.js";
@@ -237,6 +238,31 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
           agent: w.agent,
           claims: w.claims,
           idleSkewMs: w.idleSkewMs,
+        })),
+      };
+    })(),
+    budget: {
+      rows: budgetReport(state).map((r) => ({
+        key: r.key,
+        scope: r.scope,
+        spent: r.spent,
+        limit: r.limit,
+        remaining: r.remaining,
+        exhausted: r.exhausted,
+      })),
+    },
+    policySim: (() => {
+      const sim = simulatePolicies(state);
+      return {
+        deniedTasks: sim.deniedTasks,
+        deniedCalls: sim.deniedCalls,
+        approvalCalls: sim.approvalCalls,
+        rows: sim.rows.slice(0, 24).map((r) => ({
+          agent: r.agent,
+          prompt: r.prompt,
+          taskDenied: r.taskDenied,
+          callsDenied: r.callsDenied,
+          callsNeedApproval: r.callsNeedApproval,
         })),
       };
     })(),

@@ -26,6 +26,12 @@ Control-plane view embeds drift + fairness; UI sections render them. `ropex skil
 
 **Shipped (2026-08-22 night):** UI panels, `promoteSkill`, `workflowStageCounts`, fleets/examples placement.
 
+## Chaos hardening + budget/policy UI
+
+Stronger chaos invariants (replica sum, digest/label/placement, drift agreement); canary-aware allow flag. Budget spend and policy simulate projected into `/api/v1/view` + UI.
+
+**Shipped (2026-08-22 night):** `assertChaosInvariants` expansion, budget/policy UI rails.
+
 ## Canary digest rolls + state snapshot
 
 Rolling canary strategy limits digest retire/create per agent; scheduler skips holdouts. Snapshot exports cluster checkpoints.
