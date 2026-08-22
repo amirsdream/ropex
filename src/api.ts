@@ -23,6 +23,7 @@ import { planAutoscale } from "./autoscale.js";
 import { budgetReport } from "./budget.js";
 import { outboundFor } from "./deliver.js";
 import { detectDrift } from "./drift.js";
+import { fairnessReport } from "./fairness.js";
 import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { ensureQueue, queueSummary } from "./queue.js";
@@ -397,6 +398,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
   }
   if (url.pathname === API_ROUTES.drift) {
     return json(res, detectDrift(state));
+  }
+  if (url.pathname === API_ROUTES.fairness) {
+    return json(res, fairnessReport(state));
   }
 
   // Static UI

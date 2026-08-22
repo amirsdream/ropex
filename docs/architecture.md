@@ -248,6 +248,10 @@ Optional `Policy.spec.budget` (`maxUnits`, `windowMs`, `scope: cluster|fleet|age
 
 `Agent.spec.placement` (`require` / `prefer` / `taints` / `tolerations`) gates and scores claims. Workers carry `labels` (from metadata) and `taints`. Placement is part of the agent image digest. `ropex drift [path]` and `GET /api/v1/drift` report missing/extra/digest/replica/label/taint/cordoned findings without writing state (complements `ropex diff`).
 
+## Fairness + queue latency
+
+`ropex fairness` / `GET /api/v1/fairness` derive claim-wait and run-duration percentiles from queue timestamps, plus idle skew (`lastTaskAt`) and claim-count CV. Prometheus: `ropex_claim_wait_*`, `ropex_run_duration_*`, `ropex_fairness_*`.
+
 ## Observability
 
 - **Delivery journal** — every comment/check/PR appends to `state.deliveries` (`ropex journal`).

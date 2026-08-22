@@ -14,6 +14,12 @@ Record intended webhook POSTs offline; cordon workers out of the scheduler; evic
 
 **Shipped (2026-08-22 night):** `src/placement.ts`, `src/drift.ts`, scheduler wiring.
 
+## Queue latency + fairness
+
+Claim-wait / run-duration percentiles from queue timestamps; idle skew + claim-count CV for LRU fairness. Surfaces on `ropex fairness`, Prometheus gauges, `/api/v1/fairness`.
+
+**Shipped (2026-08-22 night):** `src/fairness.ts`, metrics wiring.
+
 ## Canary digest rolls + state snapshot
 
 Rolling canary strategy limits digest retire/create per agent; scheduler skips holdouts. Snapshot exports cluster checkpoints.

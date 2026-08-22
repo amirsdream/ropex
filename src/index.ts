@@ -56,6 +56,8 @@ export { cordonWorker, uncordonWorker, evictWorker, cordonedWorkers } from "./li
 export { detectDrift, formatDriftReport } from "./drift.js";
 export type { DriftReport, DriftFinding, DriftKind } from "./drift.js";
 export { canPlace, placementScore, labelsInclude, taskLabelMap } from "./placement.js";
+export { fairnessReport, formatFairnessReport, latencyStats, percentile } from "./fairness.js";
+export type { FairnessReport, LatencyStats, WorkerFairness } from "./fairness.js";
 export { selectCanaryRolls } from "./canary.js";
 export type { RolloutOptions, RolloutStrategy } from "./canary.js";
 export { exportSnapshot, writeSnapshot, snapshotMeta } from "./snapshot.js";

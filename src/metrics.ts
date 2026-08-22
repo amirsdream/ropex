@@ -6,6 +6,7 @@
 import { healthReport } from "./health.js";
 import { planAutoscale } from "./autoscale.js";
 import { budgetReport } from "./budget.js";
+import { fairnessReport } from "./fairness.js";
 import { queueSummary } from "./queue.js";
 import type { ClusterState } from "./types.js";
 
@@ -38,12 +39,20 @@ export type MetricsSnapshot = {
   budget_limit: number;
   backlog_oldest_age_ms: number;
   backlog_slo_breached: number;
+  claim_wait_p50_ms: number;
+  claim_wait_p95_ms: number;
+  claim_wait_max_ms: number;
+  run_duration_p50_ms: number;
+  run_duration_p95_ms: number;
+  fairness_idle_skew_ms: number;
+  fairness_claim_cv: number;
 };
 
 export function metricsSnapshot(state: ClusterState): MetricsSnapshot {
   const live = state.workers.filter((w) => w.status !== "retired");
   const q = queueSummary(state);
   const health = healthReport(state);
+  const fair = fairnessReport(state);
   return {
     workers_live: live.length,
     workers_idle: live.filter((w) => w.status === "idle").length,
@@ -79,6 +88,13 @@ export function metricsSnapshot(state: ClusterState): MetricsSnapshot {
     })(),
     backlog_oldest_age_ms: health.backlog.oldestPendingAgeMs ?? 0,
     backlog_slo_breached: health.backlog.breached ? 1 : 0,
+    claim_wait_p50_ms: fair.claimWait.p50Ms,
+    claim_wait_p95_ms: fair.claimWait.p95Ms,
+    claim_wait_max_ms: fair.claimWait.maxMs,
+    run_duration_p50_ms: fair.runDuration.p50Ms,
+    run_duration_p95_ms: fair.runDuration.p95Ms,
+    fairness_idle_skew_ms: fair.maxIdleSkewMs,
+    fairness_claim_cv: fair.claimCountCv,
   };
 }
 
@@ -146,6 +162,27 @@ export function metricsPrometheus(state: ClusterState): string {
     "# HELP ropex_backlog_slo_breached 1 if backlog age exceeds SLO.",
     "# TYPE ropex_backlog_slo_breached gauge",
     `ropex_backlog_slo_breached ${m.backlog_slo_breached}`,
+    "# HELP ropex_claim_wait_p50_ms Claim wait p50 (enqueued→claimed).",
+    "# TYPE ropex_claim_wait_p50_ms gauge",
+    `ropex_claim_wait_p50_ms ${m.claim_wait_p50_ms}`,
+    "# HELP ropex_claim_wait_p95_ms Claim wait p95 (enqueued→claimed).",
+    "# TYPE ropex_claim_wait_p95_ms gauge",
+    `ropex_claim_wait_p95_ms ${m.claim_wait_p95_ms}`,
+    "# HELP ropex_claim_wait_max_ms Claim wait max (enqueued→claimed).",
+    "# TYPE ropex_claim_wait_max_ms gauge",
+    `ropex_claim_wait_max_ms ${m.claim_wait_max_ms}`,
+    "# HELP ropex_run_duration_p50_ms Run duration p50 (claimed→finished).",
+    "# TYPE ropex_run_duration_p50_ms gauge",
+    `ropex_run_duration_p50_ms ${m.run_duration_p50_ms}`,
+    "# HELP ropex_run_duration_p95_ms Run duration p95 (claimed→finished).",
+    "# TYPE ropex_run_duration_p95_ms gauge",
+    `ropex_run_duration_p95_ms ${m.run_duration_p95_ms}`,
+    "# HELP ropex_fairness_idle_skew_ms Max lastTaskAt age gap among peers.",
+    "# TYPE ropex_fairness_idle_skew_ms gauge",
+    `ropex_fairness_idle_skew_ms ${m.fairness_idle_skew_ms}`,
+    "# HELP ropex_fairness_claim_cv Claim-count coefficient of variation.",
+    "# TYPE ropex_fairness_claim_cv gauge",
+    `ropex_fairness_claim_cv ${m.fairness_claim_cv}`,
   ];
   return `${lines.join("\n")}\n`;
 }

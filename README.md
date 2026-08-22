@@ -164,6 +164,7 @@ Control plane today (local, network-free tests):
 | Outbound webhook stub + cordon/evict | shipped |
 | Placement require/prefer + taints | shipped |
 | Config drift detector | shipped |
+| Queue latency + fairness metrics | shipped |
 | GitRepo local watch/sync | shipped (no remote clone yet) |
 | Live `@deepseek-ai/dsh` / Hermes process | not yet |
 
