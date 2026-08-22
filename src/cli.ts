@@ -7,6 +7,7 @@ import { buildControlPlaneView, startControlPlaneServer } from "./api.js";
 import { enqueueTask, queueSummary } from "./queue.js";
 import { runTask } from "./runtime.js";
 import { drainQueue } from "./scheduler.js";
+import { healthReport } from "./health.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { deliveriesFor, replayDelivery } from "./journal.js";
 import { shareSkill } from "./skills.js";
@@ -48,6 +49,7 @@ Usage:
   ropex watch <path> [--once] [--interval 5s]
                                      Reconcile manifests on an interval (Flux-style)
   ropex metrics [--prometheus]    Export cluster metrics
+  ropex health                    Worker probes + backlog SLO
   ropex journal                   Show delivery journal
   ropex skills [share <name> --to <agent>]
   ropex fanout --agent <name> <prompt>
@@ -389,6 +391,12 @@ async function main(argv: string[]): Promise<number> {
       }
       console.log(JSON.stringify(metricsSnapshot(state), null, 2));
       return 0;
+    }
+    case "health": {
+      const state = loadState(root);
+      const report = healthReport(state);
+      console.log(JSON.stringify(report, null, 2));
+      return report.ok ? 0 : 1;
     }
     case "journal": {
       const state = loadState(root);

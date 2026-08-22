@@ -199,7 +199,20 @@ GitHub webhooks (HMAC-verified), `github simulate`, and CLI enqueue into `Cluste
 
 - **Delivery journal** — every comment/check/PR appends to `state.deliveries` (`ropex journal`).
 - **Skill registry** — versioned skills with `shareSkill` across agents (`ropex skills`).
-- **Metrics** — JSON or Prometheus text (`ropex metrics --prometheus`, `/api/v1/metrics`).
+- **Metrics** — JSON or Prometheus text (`ropex metrics --prometheus`, `/api/v1/metrics`), including backlog age and unhealthy worker gauges.
+- **Health / SLO** — `ropex health` and `/api/v1/health` probe live workers (digest, worktree, stuck claim) and evaluate backlog depth/age SLOs. Unhealthy or breached → HTTP 503 / exit 1.
+
+```mermaid
+flowchart LR
+  Q["queue pending"] --> SLO["evaluateBacklogSlo"]
+  W["live workers"] --> PROBE["probeWorker"]
+  CLAIM["claimedAt on claim"] --> PROBE
+  SLO --> R["healthReport"]
+  PROBE --> R
+  R --> CLI["ropex health"]
+  R --> API["/api/v1/health"]
+  R --> M["metrics gauges"]
+```
 
 ## DeepSeek adapter seam
 
@@ -211,6 +224,23 @@ GitHub webhooks (HMAC-verified), `github simulate`, and CLI enqueue into `Cluste
 - `ropex sync` reconciles declared `GitRepo` local paths (clone still open).
 - `ropex replay <id>` re-appends a delivery with `[replay]`.
 - `ropex demo` runs apply → HMAC webhook → concurrent drain offline.
+
+## Overnight control-plane stack (2026-08-21 → 22)
+
+Shipped end-to-end offline:
+
+| Layer | Modules |
+| --- | --- |
+| Desired state | `fleets/**`, `spec`, `controller`, `image`, `worktree` |
+| Ingress | `webhook` (HMAC), `ratelimit`, `github` |
+| Schedule | fair LRU `queue`, concurrent `scheduler`, priority, `fanout` |
+| Brain / kernel | Hermes compose/plan/learn, `bootDsh` profile packs |
+| Governance | `admission`, `approval`, `policy` dry-run |
+| Memory / skills | scoped `SharedMemoryStore`, versioned `skillRegistry` |
+| Observability | journal, trajectories, metrics, **health/SLO** |
+| Surfaces | CLI, `/api/v1/*`, `ropex ui` |
+
+Still open for live adapters: remote GitRepo clone, `@deepseek-ai/dsh`, Hermes process.
 
 ## What is still simulated
 

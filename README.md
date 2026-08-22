@@ -68,6 +68,7 @@ npx tsx src/cli.ts status
 npx tsx src/cli.ts webhook simulate issues.opened --repo acme/app --title "login is broken" --secret test
 npx tsx src/cli.ts drain --concurrency 2
 npx tsx src/cli.ts metrics --prometheus
+npx tsx src/cli.ts health
 npx tsx src/cli.ts trajectories --jsonl
 npx tsx src/cli.ts ui
 ```
@@ -151,6 +152,7 @@ Control plane today (local, network-free tests):
 | HMAC webhooks + rate limit | shipped |
 | Policy admission + fan-out | shipped |
 | Journal, skills, metrics, trajectories | shipped |
+| Worker health probes + backlog SLO | shipped |
 | GitRepo local watch/sync | shipped (no remote clone yet) |
 | Live `@deepseek-ai/dsh` / Hermes process | not yet |
 

@@ -18,6 +18,7 @@ import {
 } from "./contracts.js";
 import { loopModeFor, toolsFor } from "./harness.js";
 import { memoryContextFor, resolveSharePolicy, SharedMemoryStore } from "./memory.js";
+import { healthReport } from "./health.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { ensureQueue, queueSummary } from "./queue.js";
 import { trajectoriesFor, exportTrajectoriesJsonl } from "./trajectory.js";
@@ -87,6 +88,7 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
 
   const hermes: HermesSurfaceView[] = state.desired.map((a) => hermesSurface(a));
   const harness: HarnessSurfaceView[] = state.desired.map((a) => harnessSurface(a));
+  const health = healthReport(state);
 
   return {
     brand: "ropex",
@@ -132,6 +134,8 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
       queuePending: q.pending,
       workersIdle: live.filter((w) => w.status === "idle").length,
       deliveries: state.deliveries?.length ?? 0,
+      workersUnhealthy: health.unhealthy,
+      backlogSloBreached: health.backlog.breached,
     },
     approvals: (state.approvals ?? [])
       .filter((a) => a.status === "pending")
@@ -235,7 +239,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
   const state = opts.loadState(opts.root);
 
   if (url.pathname === API_ROUTES.health) {
-    return json(res, { ok: true, brand: "ropex" });
+    const report = healthReport(state);
+    return json(res, { brand: "ropex", ...report }, report.ok ? 200 : 503);
   }
   if (url.pathname === API_ROUTES.view) {
     return json(res, buildControlPlaneView(state));
@@ -314,7 +319,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
   }
 }
 
-function json(res: ServerResponse, body: unknown): void {
-  res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+function json(res: ServerResponse, body: unknown, status = 200): void {
+  res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(body, null, 2));
 }

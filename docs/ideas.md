@@ -2,6 +2,12 @@
 
 Nightly capture. Newest first. Each entry should be one shippable idea, not a slogan.
 
+## Worker health probes + backlog SLO
+
+Probe live workers (digest, worktree presence, stuck claims via `claimedAt`) and evaluate pending depth/age SLOs. Surface via CLI, `/api/v1/health` (503 on breach), and Prometheus gauges.
+
+**Shipped (2026-08-22 night):** `src/health.ts`, `ropex health`, enriched metrics + API health.
+
 ## Concurrent drain + delivery replay + GitRepo sync
 
 Parallel drain with `--concurrency`, replay journal entries, and local GitRepo sync stub.

@@ -273,6 +273,8 @@ export type QueuedTask = {
   enqueuedAt: string;
   status: "pending" | "claimed" | "done" | "failed";
   workerId?: string;
+  /** Set when a worker claims the item (stuck-probe input). */
+  claimedAt?: string;
   attempts: number;
   source: "cli" | "github" | "webhook";
   /** Higher runs first (default 0). */

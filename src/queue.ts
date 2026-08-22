@@ -115,6 +115,7 @@ export function claimPending(
     if (!worker) continue;
     item.status = "claimed";
     item.workerId = worker.id;
+    item.claimedAt = new Date().toISOString();
     item.attempts += 1;
     worker.status = "running";
     claimed.push({ queueId: item.id, workerId: worker.id, task: item.task });

@@ -45,6 +45,7 @@ export { bootDsh, profilePack, DSH_PROFILE_PACKS } from "./dsh.js";
 export { recordDelivery, deliveriesFor } from "./journal.js";
 export { registerSkill, shareSkill, skillsForAgent, latestSkill } from "./skills.js";
 export { metricsSnapshot, metricsPrometheus } from "./metrics.js";
+export { healthReport, probeWorker, evaluateBacklogSlo } from "./health.js";
 export { admitTool, admitCalls, admitTask, effectivePermissions } from "./admission.js";
 export { fanOutTask, shouldFanOut, shardCount } from "./fanout.js";
 export { syncGitRepos, resolveGitRepoPath, gitRepoIntervalMs } from "./gitrepo.js";

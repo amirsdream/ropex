@@ -8,11 +8,13 @@ async function loadView() {
 
 function renderPulse(view) {
   const el = $("#pulse");
-    const items = [
+  const items = [
     ["live", view.counts.workersLive],
     ["memory", view.counts.memoryFacts],
     ["queue", view.counts.queuePending],
     ["done", view.counts.tasksCompleted],
+    ["unhealthy", view.metrics?.workersUnhealthy ?? 0],
+    ["slo", view.metrics?.backlogSloBreached ? "breach" : "ok"],
   ];
   el.innerHTML = items
     .map(
@@ -181,7 +183,9 @@ function renderMeta(view) {
     `revision ${view.revision}`,
     view.source ? `source ${view.source}` : null,
     view.lastReconcile ? `reconciled ${formatTime(view.lastReconcile)}` : null,
-    view.metrics ? `idle ${view.metrics.workersIdle} · failed tasks ${view.metrics.tasksFailed}` : null,
+    view.metrics
+      ? `idle ${view.metrics.workersIdle} · failed tasks ${view.metrics.tasksFailed} · unhealthy ${view.metrics.workersUnhealthy ?? 0}`
+      : null,
   ]
     .filter(Boolean)
     .join(" · ");

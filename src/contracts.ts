@@ -182,6 +182,8 @@ export type ControlPlaneView = {
     queuePending: number;
     workersIdle: number;
     deliveries: number;
+    workersUnhealthy: number;
+    backlogSloBreached: boolean;
   };
   approvals: Array<{ id: string; status: string; tool: string; agent: string; taskId: string; reason: string }>;
 };
