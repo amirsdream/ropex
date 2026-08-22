@@ -71,18 +71,27 @@ export function expandDesired(manifests: Manifest[]): DesiredAgent[] {
     if (m.kind !== "Fleet") continue;
     const replicas = Math.max(0, m.spec.replicas);
     for (let i = 0; i < replicas; i++) {
+      const tpl = m.spec.template.spec;
       const spec: AgentSpec = {
-        ...m.spec.template.spec,
+        ...tpl,
         replicas: 1,
-        harness: { ...m.spec.template.spec.harness },
+        harness: { ...tpl.harness },
         hermes: {
-          ...m.spec.template.spec.hermes,
-          skills: [...m.spec.template.spec.hermes.skills],
+          ...tpl.hermes,
+          skills: [...tpl.hermes.skills],
         },
-        github: m.spec.template.spec.github
-          ? { ...m.spec.template.spec.github, events: [...m.spec.template.spec.github.events] }
+        github: tpl.github
+          ? { ...tpl.github, events: [...tpl.github.events] }
           : undefined,
-        selector: m.spec.template.spec.selector,
+        selector: tpl.selector,
+        placement: tpl.placement
+          ? {
+              require: tpl.placement.require ? { ...tpl.placement.require } : undefined,
+              prefer: tpl.placement.prefer ? { ...tpl.placement.prefer } : undefined,
+              taints: tpl.placement.taints?.map((t) => ({ ...t })),
+              tolerations: tpl.placement.tolerations?.map((t) => ({ ...t })),
+            }
+          : undefined,
       };
       agents.push({
         apiVersion: API_VERSION,

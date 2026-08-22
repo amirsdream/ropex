@@ -8,6 +8,7 @@ import { buildAgentImage } from "./image.js";
 import { admitTask } from "./admission.js";
 import { recordAudit } from "./audit.js";
 import { chargeBudget } from "./budget.js";
+import { canPlace, placementScore } from "./placement.js";
 import type { ClusterMetrics, ClusterState, QueuedTask, Task, Worker } from "./types.js";
 
 /** Default max claim attempts before dead-letter. */
@@ -88,14 +89,16 @@ export function enqueueTask(
 
 /** Idle workers only, least-recently-used first, with optional fleet affinity.
  * Prefers workers whose imageDigest matches the desired agent image (canary-safe).
+ * Honors placement require/prefer/taints when the desired agent declares them.
  */
 export function pickIdleWorker(
   state: ClusterState,
   agentName: string,
-  opts: { preferFleet?: string } = {},
+  opts: { preferFleet?: string; task?: Task } = {},
 ): Worker | undefined {
   const agent = state.desired.find((a) => a.metadata.name === agentName);
   const desiredDigest = agent ? buildAgentImage(agent).digest : undefined;
+  const placement = agent?.spec.placement;
   const idle = state.workers.filter(
     (w) => w.agent === agentName && (w.status === "idle" || w.status === "running" || w.status === "pending"),
   );
@@ -109,6 +112,10 @@ export function pickIdleWorker(
     const aIdle = a.status === "idle" || a.status === "pending" ? 0 : 1;
     const bIdle = b.status === "idle" || b.status === "pending" ? 0 : 1;
     if (aIdle !== bIdle) return aIdle - bIdle;
+    // Soft placement prefer (higher score first).
+    const aScore = placementScore(a, placement, opts.task);
+    const bScore = placementScore(b, placement, opts.task);
+    if (aScore !== bScore) return bScore - aScore;
     // Fleet affinity: prefer workers in the requested fleet.
     if (opts.preferFleet) {
       const aFleet = a.fleet === opts.preferFleet ? 0 : 1;
@@ -123,6 +130,7 @@ export function pickIdleWorker(
   const candidates = ranked.filter((w) => {
     if (!(w.status === "idle" || w.status === "pending")) return false;
     if (w.cordoned) return false;
+    if (!canPlace(w, placement, opts.task)) return false;
     return true;
   });
   if (!desiredDigest) return candidates[0];
@@ -180,7 +188,10 @@ export function claimPending(
       opts.preferFleet ??
       state.workers.find((w) => w.agent === item.task.agent)?.fleet ??
       agent?.derivedFrom?.fleet;
-    const worker = pickIdleWorker(state, item.task.agent, { preferFleet: fleetHint });
+    const worker = pickIdleWorker(state, item.task.agent, {
+      preferFleet: fleetHint,
+      task: item.task,
+    });
     if (!worker) continue;
     item.status = "claimed";
     item.workerId = worker.id;

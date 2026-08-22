@@ -134,6 +134,9 @@ export function planReconcile(
       skills: [...new Set([...prev.skills, ...next.skills])],
       worktree: prev.worktree,
       lastTaskAt: prev.lastTaskAt,
+      labels: next.labels ? { ...next.labels } : prev.labels,
+      taints: next.taints ? next.taints.map((t) => ({ ...t })) : prev.taints,
+      cordoned: prev.cordoned,
     });
   }
 

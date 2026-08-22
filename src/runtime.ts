@@ -165,6 +165,8 @@ export function workerFromDesired(
   opts: ImageResolveOptions = {},
 ): Worker {
   const image = buildAgentImage(agent, opts);
+  const labels = agent.metadata.labels ? { ...agent.metadata.labels } : undefined;
+  const taints = agent.spec.placement?.taints?.map((t) => ({ ...t }));
   return {
     id: `${agent.metadata.name}:${replica}`,
     agent: agent.metadata.name,
@@ -176,6 +178,8 @@ export function workerFromDesired(
     plugins: [...image.harness.plugins],
     skills: [...image.hermes.skills],
     model: image.harness.model ?? "deepseek-v4-flash",
+    labels,
+    taints: taints?.length ? taints : undefined,
   };
 }
 

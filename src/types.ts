@@ -51,12 +51,28 @@ export type GithubSpec = {
   deliver: "comment" | "pull_request" | "check";
 };
 
+export type PlacementSpec = {
+  /** Hard: worker labels must include these. */
+  require?: Record<string, string>;
+  /** Soft: prefer workers whose labels match. */
+  prefer?: Record<string, string>;
+  /**
+   * Taints on the agent/worker slot (NoSchedule = tasks without matching
+   * toleration cannot claim this worker).
+   */
+  taints?: Array<{ key: string; effect: "NoSchedule" }>;
+  /** Task/event must tolerate these keys (Exists) or key=value. */
+  tolerations?: Array<{ key: string; operator: "Exists" | "Equal"; value?: string }>;
+};
+
 export type AgentSpec = {
   harness: HarnessSpec;
   hermes: HermesSpec;
   github?: GithubSpec;
   replicas: number;
   selector?: LabelSelector;
+  /** Scheduling constraints for claim / placement. */
+  placement?: PlacementSpec;
 };
 
 export type Agent = {
@@ -144,6 +160,10 @@ export type Worker = {
   lastTaskAt?: string;
   /** When true, scheduler will not claim this worker (drain/cordon). */
   cordoned?: boolean;
+  /** Scheduling labels (from agent metadata / fleet template). */
+  labels?: Record<string, string>;
+  /** NoSchedule taints inherited from Agent.spec.placement.taints. */
+  taints?: Array<{ key: string; effect: "NoSchedule" }>;
 };
 
 export type MemoryFact = {

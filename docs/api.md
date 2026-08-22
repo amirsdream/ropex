@@ -18,5 +18,6 @@ Stable routes from `API_ROUTES` in `src/contracts.ts`. All JSON unless noted. Ne
 | GET | `/api/v1/audit` | Audit trail (`?kind=&format=jsonl`) |
 | GET | `/api/v1/autoscale` | GitOps scale recommendations |
 | GET | `/api/v1/budget` | Policy.budget spend windows |
+| GET | `/api/v1/drift` | Live vs desired config drift report |
 
 Serve with `ropex ui` (static UI + these routes on one port).

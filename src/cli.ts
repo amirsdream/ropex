@@ -3,6 +3,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { applyManifestText, loadState, planReconcile, saveState } from "./controller.js";
 import { writeSnapshot } from "./snapshot.js";
+import { detectDrift, formatDriftReport } from "./drift.js";
 import { deliverOutbound, outboundFor } from "./deliver.js";
 import { cordonWorker, uncordonWorker, evictWorker, cordonedWorkers } from "./lifecycle.js";
 import { agentsForEvent, eventToTask, pickWorker } from "./github.js";
@@ -38,6 +39,7 @@ Usage:
   ropex apply <path> [--canary] [--canary-count N]
                                      Reconcile YAML (file or directory) into workers
   ropex diff <path> [--canary]        Show create/retire without writing state
+  ropex drift [path]              Report live vs desired config drift
   ropex snapshot                  Export cluster state checkpoint
   ropex cordon <worker-id>        Stop scheduling onto a worker
   ropex uncordon <worker-id>      Allow scheduling again
@@ -124,6 +126,18 @@ async function main(argv: string[]): Promise<number> {
       const out = writeSnapshot(root, state);
       console.log(`snapshot ${out.path}  rev=${out.meta.revision} live=${out.meta.workersLive}`);
       return 0;
+    }
+    case "drift": {
+      const state = loadState(root);
+      const path = rest[0];
+      const report = path
+        ? detectDrift(state, {
+            manifests: parseManifests(readManifests(resolve(root, path))),
+            root,
+          })
+        : detectDrift(state, { root });
+      console.log(formatDriftReport(report));
+      return report.ok ? 0 : 1;
     }
     case "cordon": {
       const id = rest[0];

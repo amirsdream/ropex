@@ -244,6 +244,10 @@ Optional `Policy.spec.budget` (`maxUnits`, `windowMs`, `scope: cluster|fleet|age
 
 `ropex cordon` / `uncordon` / `evict` control scheduling. `ropex deliver <id> --stub` records an outbound webhook intent (live HTTPS fails closed). See [api.md](./api.md).
 
+## Placement + drift
+
+`Agent.spec.placement` (`require` / `prefer` / `taints` / `tolerations`) gates and scores claims. Workers carry `labels` (from metadata) and `taints`. Placement is part of the agent image digest. `ropex drift [path]` and `GET /api/v1/drift` report missing/extra/digest/replica/label/taint/cordoned findings without writing state (complements `ropex diff`).
+
 ## Observability
 
 - **Delivery journal** — every comment/check/PR appends to `state.deliveries` (`ropex journal`).

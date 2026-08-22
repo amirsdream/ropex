@@ -162,6 +162,8 @@ Control plane today (local, network-free tests):
 | Policy budget / cost accounting | shipped |
 | Canary digest rolls + snapshots | shipped |
 | Outbound webhook stub + cordon/evict | shipped |
+| Placement require/prefer + taints | shipped |
+| Config drift detector | shipped |
 | GitRepo local watch/sync | shipped (no remote clone yet) |
 | Live `@deepseek-ai/dsh` / Hermes process | not yet |
 

@@ -8,6 +8,12 @@ Record intended webhook POSTs offline; cordon workers out of the scheduler; evic
 
 **Shipped (2026-08-22 night):** `deliverOutbound`, `lifecycle` cordon/evict, `docs/api.md`.
 
+## Placement constraints + config drift
+
+`Agent.spec.placement` require/prefer labels and NoSchedule taints; workers inherit metadata labels + taints; claim honors `canPlace` / soft prefer score. `ropex drift` / `/api/v1/drift` report live vs desired without applying.
+
+**Shipped (2026-08-22 night):** `src/placement.ts`, `src/drift.ts`, scheduler wiring.
+
 ## Canary digest rolls + state snapshot
 
 Rolling canary strategy limits digest retire/create per agent; scheduler skips holdouts. Snapshot exports cluster checkpoints.

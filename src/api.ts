@@ -22,6 +22,7 @@ import { healthReport } from "./health.js";
 import { planAutoscale } from "./autoscale.js";
 import { budgetReport } from "./budget.js";
 import { outboundFor } from "./deliver.js";
+import { detectDrift } from "./drift.js";
 import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { ensureQueue, queueSummary } from "./queue.js";
@@ -393,6 +394,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
         limit: url.searchParams.get("limit") ? Number(url.searchParams.get("limit")) : 50,
       }),
     );
+  }
+  if (url.pathname === API_ROUTES.drift) {
+    return json(res, detectDrift(state));
   }
 
   // Static UI
