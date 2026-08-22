@@ -253,6 +253,10 @@ export type RateLimitBucket = {
   key: string;
   windowStartedAt: string;
   count: number;
+  /** Cap applied when this window was opened (defaults assumed if absent). */
+  limit?: number;
+  /** Window length in ms when opened. */
+  windowMs?: number;
 };
 
 /** Human/agent approval for Policy.requireApproval tools. */

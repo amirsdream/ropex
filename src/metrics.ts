@@ -8,8 +8,9 @@ import { planAutoscale } from "./autoscale.js";
 import { budgetReport } from "./budget.js";
 import { fairnessReport } from "./fairness.js";
 import { queueSummary } from "./queue.js";
+import { rateLimitReport } from "./ratelimit.js";
 import type { ClusterState } from "./types.js";
-import { workflowStageCounts } from "./trajectory.js";
+import { ensureTrajectories, workflowStageCounts } from "./trajectory.js";
 
 export type MetricsSnapshot = {
   workers_live: number;
@@ -53,6 +54,10 @@ export type MetricsSnapshot = {
   workflow_deliver_total: number;
   workflow_learn_total: number;
   webhook_duplicates_total: number;
+  trajectories_total: number;
+  ratelimit_buckets: number;
+  ratelimit_near_limit: number;
+  ratelimit_saturated: number;
 };
 
 export function metricsSnapshot(state: ClusterState): MetricsSnapshot {
@@ -109,6 +114,18 @@ export function metricsSnapshot(state: ClusterState): MetricsSnapshot {
     workflow_deliver_total: stages.deliver ?? 0,
     workflow_learn_total: stages.learn ?? 0,
     webhook_duplicates_total: state.metrics?.webhookDuplicates ?? 0,
+    trajectories_total: (() => {
+      ensureTrajectories(state);
+      return state.trajectories?.length ?? 0;
+    })(),
+    ...(() => {
+      const r = rateLimitReport(state);
+      return {
+        ratelimit_buckets: r.buckets,
+        ratelimit_near_limit: r.nearLimit,
+        ratelimit_saturated: r.rows.filter((row) => row.saturated).length,
+      };
+    })(),
   };
 }
 
@@ -215,6 +232,18 @@ export function metricsPrometheus(state: ClusterState): string {
     "# HELP ropex_webhook_duplicates_total Duplicate x-github-delivery skips.",
     "# TYPE ropex_webhook_duplicates_total counter",
     `ropex_webhook_duplicates_total ${m.webhook_duplicates_total}`,
+    "# HELP ropex_trajectories_total Stored Hermes→DeepSeek trajectories.",
+    "# TYPE ropex_trajectories_total gauge",
+    `ropex_trajectories_total ${m.trajectories_total}`,
+    "# HELP ropex_ratelimit_buckets Active rate-limit windows.",
+    "# TYPE ropex_ratelimit_buckets gauge",
+    `ropex_ratelimit_buckets ${m.ratelimit_buckets}`,
+    "# HELP ropex_ratelimit_near_limit Buckets within 10% of capacity.",
+    "# TYPE ropex_ratelimit_near_limit gauge",
+    `ropex_ratelimit_near_limit ${m.ratelimit_near_limit}`,
+    "# HELP ropex_ratelimit_saturated Fully saturated rate-limit buckets.",
+    "# TYPE ropex_ratelimit_saturated gauge",
+    `ropex_ratelimit_saturated ${m.ratelimit_saturated}`,
   ];
   return `${lines.join("\n")}\n`;
 }

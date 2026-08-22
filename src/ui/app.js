@@ -17,6 +17,8 @@ function renderPulse(view) {
     ["slo", view.metrics?.backlogSloBreached ? "breach" : "ok"],
     ["drift", view.drift?.ok === false ? "yes" : "ok"],
     ["queue", view.queuePaused ? "paused" : "run"],
+    ["traj", view.trajectories?.total ?? 0],
+    ["rl", view.rateLimits?.nearLimit ?? 0],
   ];
   el.innerHTML = items
     .map(
@@ -549,6 +551,76 @@ async function decide(id, decision) {
   location.reload();
 }
 
+function renderTrajectories(view) {
+  const el = $("#trajectories-rail");
+  const t = view.trajectories;
+  if (!t) {
+    el.innerHTML = `<p class="empty">Trajectories unavailable.</p>`;
+    return;
+  }
+  const head = `
+    <div class="worker-row">
+      <div>
+        <div class="worker-id">stored</div>
+        <div class="digest">${t.total} trajectories · recent ${t.recent?.length ?? 0}</div>
+      </div>
+      <div class="status status-idle">learn</div>
+      <div class="digest">export /api/v1/trajectories?format=jsonl</div>
+      <div class="digest"></div>
+    </div>`;
+  const rows = (t.recent ?? [])
+    .map(
+      (r, i) => `
+      <div class="worker-row" style="animation-delay:${Math.min(i, 12) * 0.03}s">
+        <div>
+          <div class="worker-id">${escapeHtml(r.id)}</div>
+          <div class="digest">${escapeHtml(r.agent)} · ${escapeHtml(r.taskId)}</div>
+        </div>
+        <div class="status status-running">${r.steps} steps</div>
+        <div class="digest">${escapeHtml((r.stages ?? []).join(" → ") || "—")}</div>
+        <div class="digest">${formatTime(r.at)}</div>
+      </div>`,
+    )
+    .join("");
+  el.innerHTML =
+    head + (rows || `<p class="empty">No trajectories yet. Drain a task to record one.</p>`);
+}
+
+function renderRateLimits(view) {
+  const el = $("#ratelimits-rail");
+  const r = view.rateLimits;
+  if (!r) {
+    el.innerHTML = `<p class="empty">Rate-limit data unavailable.</p>`;
+    return;
+  }
+  const head = `
+    <div class="worker-row">
+      <div>
+        <div class="worker-id">windows</div>
+        <div class="digest">limit ${r.limit} / ${Math.round(r.windowMs / 1000)}s · buckets ${r.buckets} · near ${r.nearLimit}</div>
+      </div>
+      <div class="status status-${r.nearLimit > 0 ? "failed" : "idle"}">${r.nearLimit > 0 ? "hot" : "ok"}</div>
+      <div class="digest">GET /api/v1/ratelimits</div>
+      <div class="digest"></div>
+    </div>`;
+  const rows = (r.rows ?? [])
+    .map(
+      (b, i) => `
+      <div class="worker-row" style="animation-delay:${Math.min(i, 12) * 0.03}s">
+        <div>
+          <div class="worker-id">${escapeHtml(b.key)}</div>
+          <div class="digest">since ${formatTime(b.windowStartedAt)}</div>
+        </div>
+        <div class="status status-${b.saturated ? "failed" : "idle"}">${b.saturated ? "saturated" : "ok"}</div>
+        <div class="digest">count ${b.count}/${b.limit ?? "?"} · rem ${b.remaining}</div>
+        <div class="digest"></div>
+      </div>`,
+    )
+    .join("");
+  el.innerHTML =
+    head + (rows || `<p class="empty">No active webhook buckets in the current window.</p>`);
+}
+
 function renderAudit(view) {
   const el = $("#audit-stream");
   if (!view.audit?.length) {
@@ -648,6 +720,8 @@ async function main() {
     renderDsh(view);
     renderJournal(view);
     renderApprovals(view);
+    renderTrajectories(view);
+    renderRateLimits(view);
     renderAudit(view);
     renderSurfaces(view);
   } catch (err) {

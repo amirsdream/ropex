@@ -254,7 +254,7 @@ Optional `Policy.spec.budget` (`maxUnits`, `windowMs`, `scope: cluster|fleet|age
 
 ## Skill promote + workflow stage metrics
 
-`ropex skills promote <name>` shares the latest registry version with every desired agent; `versions` lists history. Trajectories persist `stages` from the run workflow; Prometheus counters `ropex_workflow_{compose,plan,execute,deliver,learn}_total`.
+`ropex skills promote <name>` shares the latest registry version with every desired agent; `versions` lists history. Trajectories persist `stages` from the run workflow; Prometheus counters `ropex_workflow_{compose,plan,execute,deliver,learn}_total`. `rateLimitReport` / `ropex ratelimits` / `GET /api/v1/ratelimits` surface active webhook windows; Prometheus `ropex_trajectories_total`, `ropex_ratelimit_*`. Trajectories and rate limits also appear on `GET /api/v1/view` and the control-plane UI.
 
 ## Clone progress
 

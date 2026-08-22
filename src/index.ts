@@ -114,7 +114,7 @@ export { runSandboxDemo } from "./demo.js";
 export { recordTrajectory, trajectoriesFor, exportTrajectoriesJsonl, learnFromTrajectory, workflowStageCounts } from "./trajectory.js";
 export { policyDryRun } from "./policy.js";
 export { runReconcileChaos, assertChaosInvariants } from "./chaos.js";
-export { checkRateLimit } from "./ratelimit.js";
+export { checkRateLimit, rateLimitReport } from "./ratelimit.js";
 export {
   requestApprovals,
   decideApproval,

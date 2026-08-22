@@ -128,6 +128,8 @@ Persist Hermes→DeepSeek trajectories (JSONL export) and sliding-window rate li
 
 **Shipped (2026-08-21 night):** `recordTrajectory`, `ropex trajectories --jsonl`, `/api/v1/trajectories`, `checkRateLimit` on ingest.
 
+**Shipped (2026-08-22 night):** `rateLimitReport`, view/UI Trajectories + Rate limits panels, `/api/v1/ratelimits`, Prometheus gauges, `ropex ratelimits`.
+
 ## Approval workflow + fleet affinity
 
 `requireApproval` tools create durable `ApprovalRequest`s; `ropex approve` / `reject` decide them. Scheduler prefers fleet-affine idle workers.

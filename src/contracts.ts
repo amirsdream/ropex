@@ -303,6 +303,34 @@ export type ControlPlaneView = {
     scaffoldHint: string;
     steps: string[];
   };
+  trajectories: {
+    total: number;
+    recent: Array<{
+      id: string;
+      at: string;
+      agent: string;
+      workerId: string;
+      taskId: string;
+      steps: number;
+      stages: string[];
+      output: string;
+    }>;
+  };
+  rateLimits: {
+    limit: number;
+    windowMs: number;
+    buckets: number;
+    nearLimit: number;
+    rows: Array<{
+      key: string;
+      count: number;
+      remaining: number;
+      limit: number;
+      windowMs: number;
+      windowStartedAt: string;
+      saturated: boolean;
+    }>;
+  };
 };
 
 /** Stable API routes the UI and CLI share. */
@@ -325,4 +353,5 @@ export const API_ROUTES = {
   fairness: "/api/v1/fairness",
   clone: "/api/v1/clone",
   affinity: "/api/v1/affinity",
+  ratelimits: "/api/v1/ratelimits",
 } as const;

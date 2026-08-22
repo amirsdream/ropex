@@ -29,6 +29,7 @@ import { fanOutTask } from "./fanout.js";
 import { syncGitRepos, syncDueGitRepos, syncMultiRepo } from "./gitrepo.js";
 import { runSandboxDemo } from "./demo.js";
 import { exportTrajectoriesJsonl, trajectoriesFor, learnFromTrajectory } from "./trajectory.js";
+import { rateLimitReport } from "./ratelimit.js";
 import { decideApproval, pendingApprovals } from "./approval.js";
 import { policyDryRun } from "./policy.js";
 import { runReconcileChaos, assertChaosInvariants } from "./chaos.js";
@@ -69,6 +70,7 @@ Usage:
   ropex replay <delivery-id>          Replay a delivery into the journal
   ropex demo [--root path]            End-to-end sandbox demo (no network)
   ropex trajectories [--agent a] [--jsonl]
+  ropex ratelimits                Show active webhook rate-limit buckets
   ropex approvals                 List pending approval requests
   ropex approve <id>              Approve a gated tool (re-enqueue task)
   ropex reject <id>               Reject a gated tool
@@ -485,6 +487,23 @@ async function main(argv: string[]): Promise<number> {
         );
       }
       return 0;
+    }
+    case "ratelimits": {
+      const state = loadState(root);
+      const report = rateLimitReport(state);
+      console.log(
+        `rate limits  limit=${report.limit}  windowMs=${report.windowMs}  buckets=${report.buckets}  near=${report.nearLimit}`,
+      );
+      if (!report.rows.length) {
+        console.log("no active buckets");
+        return 0;
+      }
+      for (const row of report.rows) {
+        console.log(
+          `${row.saturated ? "[sat]" : "[ok ]"} ${row.key}  count=${row.count}  rem=${row.remaining}  since=${row.windowStartedAt}`,
+        );
+      }
+      return report.rows.some((r) => r.saturated) ? 1 : 0;
     }
     case "approvals": {
       const state = loadState(root);

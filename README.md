@@ -174,6 +174,7 @@ Control plane today (local, network-free tests):
 | Queue pause/resume + sticky affinity + tick hooks | shipped |
 | Pause/affinity/dsh UI + live scaffold docs | shipped |
 | Snapshot restore + hermes seam + approval UI | shipped |
+| Trajectory + rate-limit UI / metrics | shipped |
 | GitRepo local watch/sync | shipped (no remote clone yet) |
 | Live `@deepseek-ai/dsh` / Hermes process | not yet |
 

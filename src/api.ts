@@ -30,10 +30,11 @@ import { decideApproval } from "./approval.js";
 import { pruneAffinity } from "./affinity.js";
 import { DSH_PROFILE_PACKS, liveDshScaffold } from "./dsh.js";
 import { liveHermesScaffold } from "./hermes.js";
+import { rateLimitReport } from "./ratelimit.js";
 import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { ensureQueue, queueSummary } from "./queue.js";
-import { trajectoriesFor, exportTrajectoriesJsonl } from "./trajectory.js";
+import { trajectoriesFor, exportTrajectoriesJsonl, ensureTrajectories } from "./trajectory.js";
 import { WORKFLOW_STAGES } from "./workflow.js";
 import type { ClusterState, DesiredAgent } from "./types.js";
 
@@ -342,6 +343,33 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
         steps: [...scaffold.steps],
       };
     })(),
+    trajectories: (() => {
+      ensureTrajectories(state);
+      const rows = trajectoriesFor(state, { limit: 20 });
+      return {
+        total: state.trajectories?.length ?? 0,
+        recent: rows.map((t) => ({
+          id: t.id,
+          at: t.at,
+          agent: t.agent,
+          workerId: t.workerId,
+          taskId: t.taskId,
+          steps: t.steps?.length ?? 0,
+          stages: t.stages ? [...t.stages] : [],
+          output: (t.output ?? "").slice(0, 120),
+        })),
+      };
+    })(),
+    rateLimits: (() => {
+      const r = rateLimitReport(state);
+      return {
+        limit: r.limit,
+        windowMs: r.windowMs,
+        buckets: r.buckets,
+        nearLimit: r.nearLimit,
+        rows: r.rows,
+      };
+    })(),
   };
 }
 
@@ -576,6 +604,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
       active: state.affinity?.length ?? 0,
       bindings: state.affinity ?? [],
     });
+  }
+  if (url.pathname === API_ROUTES.ratelimits) {
+    return json(res, rateLimitReport(state));
   }
 
   // Static UI
