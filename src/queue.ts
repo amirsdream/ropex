@@ -9,6 +9,7 @@ import { admitTask } from "./admission.js";
 import { recordAudit } from "./audit.js";
 import { chargeBudget } from "./budget.js";
 import { canPlace, placementScore } from "./placement.js";
+import { lookupAffinity, rememberAffinity } from "./affinity.js";
 import type { ClusterMetrics, ClusterState, QueuedTask, Task, Worker } from "./types.js";
 
 /** Default max claim attempts before dead-letter. */
@@ -94,11 +95,14 @@ export function enqueueTask(
 export function pickIdleWorker(
   state: ClusterState,
   agentName: string,
-  opts: { preferFleet?: string; task?: Task } = {},
+  opts: { preferFleet?: string; task?: Task; preferWorkerId?: string } = {},
 ): Worker | undefined {
   const agent = state.desired.find((a) => a.metadata.name === agentName);
   const desiredDigest = agent ? buildAgentImage(agent).digest : undefined;
   const placement = agent?.spec.placement;
+  const stickyId =
+    opts.preferWorkerId ??
+    (opts.task ? lookupAffinity(state, opts.task)?.workerId : undefined);
   const idle = state.workers.filter(
     (w) => w.agent === agentName && (w.status === "idle" || w.status === "running" || w.status === "pending"),
   );
@@ -108,6 +112,12 @@ export function pickIdleWorker(
       const aMatch = a.imageDigest === desiredDigest ? 0 : 1;
       const bMatch = b.imageDigest === desiredDigest ? 0 : 1;
       if (aMatch !== bMatch) return aMatch - bMatch;
+    }
+    // Sticky affinity (soft).
+    if (stickyId) {
+      const aStick = a.id === stickyId ? 0 : 1;
+      const bStick = b.id === stickyId ? 0 : 1;
+      if (aStick !== bStick) return aStick - bStick;
     }
     const aIdle = a.status === "idle" || a.status === "pending" ? 0 : 1;
     const bIdle = b.status === "idle" || b.status === "pending" ? 0 : 1;
@@ -135,6 +145,20 @@ export function pickIdleWorker(
   });
   if (!desiredDigest) return candidates[0];
   return candidates.find((w) => w.imageDigest === desiredDigest);
+}
+
+export function pauseQueue(state: ClusterState): void {
+  state.queuePaused = true;
+  recordAudit(state, { kind: "info", message: "queue paused" });
+}
+
+export function resumeQueue(state: ClusterState): void {
+  state.queuePaused = false;
+  recordAudit(state, { kind: "info", message: "queue resumed" });
+}
+
+export function isQueuePaused(state: ClusterState): boolean {
+  return Boolean(state.queuePaused);
 }
 
 export type DrainResult = {
@@ -216,6 +240,12 @@ export function claimPending(
 ): DrainResult {
   ensureQueue(state);
   const now = opts.now ?? Date.now();
+  if (state.queuePaused) {
+    return {
+      claimed: [],
+      remaining: state.queue.filter((q) => q.status === "pending").length,
+    };
+  }
   if (opts.agePriorities !== false) {
     ageQueuePriorities(state, {
       now,
@@ -322,6 +352,7 @@ export function completeQueued(
     state.metrics.lastDrainAt = item.finishedAt;
     if (opts.releaseWorker !== false) releaseWorker(state, workerId);
     chargeBudget(state, item.task, { now, workerId });
+    if (workerId) rememberAffinity(state, item.task, workerId, { now });
     recordAudit(state, {
       kind: "complete",
       message: "task completed",

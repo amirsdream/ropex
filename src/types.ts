@@ -331,7 +331,19 @@ export type ClusterState = {
    * Soft-capped; oldest dropped first.
    */
   webhookSeen?: string[];
+  /** When true, claimPending / drain will not take new work. */
+  queuePaused?: boolean;
+  /** Sticky worker affinity hints (repo/agent → worker) with TTL. */
+  affinity?: AffinityBinding[];
   lastReconcile?: string;
+};
+
+/** Sticky scheduling hint — prefer the same worker for a key until expiry. */
+export type AffinityBinding = {
+  key: string;
+  workerId: string;
+  agent: string;
+  expiresAt: string;
 };
 
 /** Rolling window spend counter for budget admission. */

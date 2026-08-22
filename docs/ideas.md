@@ -38,6 +38,18 @@ Clone attempts emit phase logs (`resolve`→`done`/`failed`) with progress %; re
 
 **Shipped (2026-08-22 night):** `planCloneAll`, `cloneStatusReport`, outbound/clone UI rails.
 
+## Worktree GC + webhook idempotency + priority aging
+
+`ropex gc` removes orphan sandbox worktrees. Webhook `x-github-delivery` remembered on `webhookSeen` (duplicate → no re-enqueue). Pending queue priorities age (+1/min, cap +10) via `effectivePriority` / `ropex age`. Example Policy includes `budget`. `ropex memory promote`.
+
+**Shipped (2026-08-22 night):** `gcOrphanWorktrees`, webhook seen set, age boosts, memory promote CLI.
+
+## Queue pause + sticky affinity + tick hooks
+
+`ropex pause`/`resume` gates claims. Sticky worker affinity (agent+repo) with TTL on successful complete. `ropex compact` journal soft-cap. `ropex tick --gc --age --clone --compact N` runs hygiene hooks.
+
+**Shipped (2026-08-22 night):** pause/resume, `src/affinity.ts`, `compactJournal`, tick options.
+
 ## Canary digest rolls + state snapshot
 
 Rolling canary strategy limits digest retire/create per agent; scheduler skips holdouts. Snapshot exports cluster checkpoints.

@@ -260,6 +260,17 @@ Optional `Policy.spec.budget` (`maxUnits`, `windowMs`, `scope: cluster|fleet|age
 
 `ropex clone [--dry-run] [--force]` walks resolve → local-present/copy → done, or remote-blocked → failed (https/git fail closed). Progress stamps land on `gitRepoStatus` (`clonePhase`, `cloneProgressPct`). `GET /api/v1/clone` and the UI Clone section surface them.
 
+## Ops hygiene
+
+- `ropex gc` — orphan worktree cleanup under `sandbox/worktrees/`.
+- Webhook idempotency — `x-github-delivery` stored in `state.webhookSeen` (cap 2k); duplicates counted in metrics.
+- Priority aging — claim sort uses `effectivePriority` (base + wait boost); `ropex age` persists boosts.
+- `ropex memory promote <id> --scope …` widens a fact for fleet/cluster share.
+- `ropex pause` / `resume` — stop claiming without draining in-flight work.
+- Sticky affinity — `state.affinity` prefers last successful worker for `agent:repo` until TTL (default 30m).
+- `ropex compact [--keep N]` — soft-cap delivery journal.
+- `ropex tick --gc --age --clone --compact N` — optional heartbeat hooks.
+
 ## Observability
 
 - **Delivery journal** — every comment/check/PR appends to `state.deliveries` (`ropex journal`).

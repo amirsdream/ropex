@@ -65,3 +65,29 @@ export function replayDelivery(
   state.deliveries.push(replay);
   return replay;
 }
+
+export const JOURNAL_DEFAULT_KEEP = 500;
+
+export type CompactJournalResult = {
+  before: number;
+  after: number;
+  removed: number;
+};
+
+/**
+ * Soft-cap the delivery journal, keeping the newest `keep` entries.
+ */
+export function compactJournal(
+  state: ClusterState,
+  opts: { keep?: number } = {},
+): CompactJournalResult {
+  ensureJournal(state);
+  const keep = opts.keep ?? JOURNAL_DEFAULT_KEEP;
+  const before = state.deliveries.length;
+  if (before <= keep) {
+    return { before, after: before, removed: 0 };
+  }
+  const sorted = [...state.deliveries].sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+  state.deliveries = sorted.slice(-keep);
+  return { before, after: state.deliveries.length, removed: before - state.deliveries.length };
+}

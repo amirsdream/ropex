@@ -9,9 +9,10 @@ import { deliverOutbound, outboundFor } from "./deliver.js";
 import { cordonWorker, uncordonWorker, evictWorker, cordonedWorkers } from "./lifecycle.js";
 import { agentsForEvent, eventToTask, pickWorker } from "./github.js";
 import { buildControlPlaneView, startControlPlaneServer } from "./api.js";
-import { enqueueTask, queueSummary, deadLetters, requeueDead, reclaimExpiredLeases, ageQueuePriorities } from "./queue.js";
+import { enqueueTask, queueSummary, deadLetters, requeueDead, reclaimExpiredLeases, ageQueuePriorities, pauseQueue, resumeQueue, isQueuePaused } from "./queue.js";
 import { gcOrphanWorktrees } from "./worktree.js";
 import { promoteMemoryFact } from "./memory.js";
+import { compactJournal } from "./journal.js";
 import { runTask } from "./runtime.js";
 import { drainQueue } from "./scheduler.js";
 import { budgetReport } from "./budget.js";
@@ -57,6 +58,9 @@ Usage:
   ropex retry <id>|--all          Re-queue dead-letter item(s)
   ropex reclaim                   Reclaim expired claim leases
   ropex age                       Boost pending priorities by wait age
+  ropex pause                     Stop claiming new queue work
+  ropex resume                    Allow claims again
+  ropex compact [--keep N]        Soft-cap delivery journal
   ropex gc                        Remove orphan worker worktrees
   ropex drain [--limit N] [--concurrency N]
                                      Claim idle workers and run pending queue
@@ -87,7 +91,8 @@ Usage:
   ropex scale <fleet> --replicas N
                                      Print YAML to commit (Git is source of truth)
   ropex autoscale                 Recommend replica YAML from backlog SLO
-  ropex tick [--concurrency N]    Control-plane heartbeat (reclaim/sync/drain)
+  ropex tick [--concurrency N] [--gc] [--age] [--clone] [--compact N]
+                                     Control-plane heartbeat + optional hooks
   ropex clone [--force] [--dry-run]   Prepare GitRepo checkouts (file:// / local)
   ropex budget                    Show task-unit budget spend
   ropex memory [promote <id> --scope fleet|cluster|agent]
@@ -358,6 +363,28 @@ async function main(argv: string[]): Promise<number> {
       const bumped = ageQueuePriorities(state);
       saveState(root, state);
       console.log(`aged ${bumped} pending task(s)`);
+      return 0;
+    }
+    case "pause": {
+      const state = loadState(root);
+      pauseQueue(state);
+      saveState(root, state);
+      console.log("queue paused");
+      return 0;
+    }
+    case "resume": {
+      const state = loadState(root);
+      resumeQueue(state);
+      saveState(root, state);
+      console.log("queue resumed");
+      return 0;
+    }
+    case "compact": {
+      const state = loadState(root);
+      const keep = Number(flag(rest, "--keep") ?? "500");
+      const result = compactJournal(state, { keep });
+      saveState(root, state);
+      console.log(`compact journal ${result.before}→${result.after} removed=${result.removed}`);
       return 0;
     }
     case "gc": {
@@ -731,12 +758,20 @@ async function main(argv: string[]): Promise<number> {
       const state = loadState(root);
       const concurrency = Number(flag(rest, "--concurrency") ?? "2");
       const limit = Number(flag(rest, "--limit") ?? "32");
-      const result = await controlPlaneTick(root, state, { concurrency, limit });
+      const compactN = flag(rest, "--compact");
+      const result = await controlPlaneTick(root, state, {
+        concurrency,
+        limit,
+        gc: rest.includes("--gc"),
+        age: rest.includes("--age"),
+        clone: rest.includes("--clone"),
+        compactJournalKeep: compactN !== undefined ? Number(compactN) : undefined,
+      });
       console.log(
-        `tick reclaim=${result.reclaimed.length} drain=${result.drained.length} sync=${result.sync?.synced ? "yes" : result.sync?.skippedDue ? "due-skip" : "n/a"} autoscale=${result.autoscale?.recommendations.length ?? 0}`,
+        `tick reclaim=${result.reclaimed.length} drain=${result.drained.length} sync=${result.sync?.synced ? "yes" : result.sync?.skippedDue ? "due-skip" : "n/a"} autoscale=${result.autoscale?.recommendations.length ?? 0}${result.paused ? " PAUSED" : ""}`,
       );
       console.log(
-        `queue pending=${result.queue.pending} claimed=${result.queue.claimed} dead=${result.queue.dead}`,
+        `queue pending=${result.queue.pending} claimed=${result.queue.claimed} dead=${result.queue.dead}  gcRemoved=${result.gc?.removed.length ?? 0} aged=${result.aged} journalRemoved=${result.journal?.removed ?? 0}`,
       );
       if (result.autoscale?.recommendations.length) {
         for (const r of result.autoscale.recommendations) {

@@ -170,6 +170,8 @@ Control plane today (local, network-free tests):
 | Workflow stage trajectory metrics | shipped |
 | Chaos invariants + budget/policy UI | shipped |
 | Clone progress + outbound UI | shipped |
+| Worktree GC + webhook idempotency + priority aging | shipped |
+| Queue pause/resume + sticky affinity + tick hooks | shipped |
 | GitRepo local watch/sync | shipped (no remote clone yet) |
 | Live `@deepseek-ai/dsh` / Hermes process | not yet |
 

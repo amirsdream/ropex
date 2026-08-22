@@ -41,6 +41,9 @@ export {
   reclaimExpiredLeases,
   effectivePriority,
   ageQueuePriorities,
+  pauseQueue,
+  resumeQueue,
+  isQueuePaused,
   DEFAULT_MAX_ATTEMPTS,
   DEFAULT_LEASE_MS,
   DEFAULT_AGE_BOOST_MS,
@@ -55,9 +58,11 @@ export {
   rememberWebhookDelivery,
   hasSeenWebhookDelivery,
 } from "./webhook.js";
+export { rememberAffinity, lookupAffinity, pruneAffinity, affinityKey } from "./affinity.js";
+export type { AffinityBinding } from "./types.js";
 export { watchOnce, watchLoop, parseInterval, readManifestTree } from "./watch.js";
 export { bootDsh, profilePack, DSH_PROFILE_PACKS } from "./dsh.js";
-export { recordDelivery, deliveriesFor } from "./journal.js";
+export { recordDelivery, deliveriesFor, compactJournal, replayDelivery, JOURNAL_DEFAULT_KEEP } from "./journal.js";
 export { registerSkill, shareSkill, promoteSkill, skillVersions, skillsForAgent, latestSkill } from "./skills.js";
 export { deliverOutbound, outboundFor, signOutboundBody, ensureOutbound } from "./deliver.js";
 export { cordonWorker, uncordonWorker, evictWorker, cordonedWorkers } from "./lifecycle.js";
@@ -102,7 +107,6 @@ export {
   isRepoDue,
   gitRepoIntervalMs,
 } from "./gitrepo.js";
-export { replayDelivery } from "./journal.js";
 export { runSandboxDemo } from "./demo.js";
 export { recordTrajectory, trajectoriesFor, exportTrajectoriesJsonl, learnFromTrajectory, workflowStageCounts } from "./trajectory.js";
 export { policyDryRun } from "./policy.js";
