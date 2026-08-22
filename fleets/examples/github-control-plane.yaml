@@ -14,6 +14,10 @@ metadata:
   name: default-guardrails
 spec:
   maxReplicas: 1000
+  budget:
+    maxUnits: 5000
+    windowMs: 3600000
+    scope: cluster
   permissions:
     deny:
       - exfiltrate

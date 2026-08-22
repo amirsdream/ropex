@@ -83,10 +83,34 @@ export type IngestResult = {
   enqueued: QueuedTask[];
   rateLimited?: boolean;
   remaining?: number;
+  /** True when x-github-delivery was already processed. */
+  duplicate?: boolean;
 };
 
+export const WEBHOOK_SEEN_MAX = 2_000;
+
+export function ensureWebhookSeen(state: ClusterState): void {
+  if (!state.webhookSeen) state.webhookSeen = [];
+  if (!state.metrics) state.metrics = { tasksCompleted: 0, tasksFailed: 0, tasksEnqueued: 0 };
+  if (state.metrics.webhookDuplicates === undefined) state.metrics.webhookDuplicates = 0;
+}
+
+export function rememberWebhookDelivery(state: ClusterState, deliveryId: string): void {
+  ensureWebhookSeen(state);
+  if (state.webhookSeen!.includes(deliveryId)) return;
+  state.webhookSeen!.push(deliveryId);
+  if (state.webhookSeen!.length > WEBHOOK_SEEN_MAX) {
+    state.webhookSeen = state.webhookSeen!.slice(-WEBHOOK_SEEN_MAX);
+  }
+}
+
+export function hasSeenWebhookDelivery(state: ClusterState, deliveryId: string): boolean {
+  ensureWebhookSeen(state);
+  return state.webhookSeen!.includes(deliveryId);
+}
+
 /**
- * Verify HMAC (when secret set), rate-limit, parse event, match agents, enqueue.
+ * Verify HMAC (when secret set), rate-limit, idempotency, parse event, match agents, enqueue.
  * When `secret` is empty, signature check is skipped (local simulate).
  */
 export function ingestGithubWebhook(
@@ -96,11 +120,28 @@ export function ingestGithubWebhook(
   secret = "",
   rateLimit: RateLimitOptions = {},
 ): IngestResult {
+  ensureWebhookSeen(state);
   if (secret) {
     const sig = headers["x-hub-signature-256"];
     if (!verifyGithubSignature(secret, rawBody, sig)) {
       return { ok: false, reason: "invalid signature", enqueued: [] };
     }
+  }
+
+  const deliveryId = headers["x-github-delivery"];
+  if (deliveryId && hasSeenWebhookDelivery(state, deliveryId)) {
+    state.metrics.webhookDuplicates = (state.metrics.webhookDuplicates ?? 0) + 1;
+    recordAudit(state, {
+      kind: "webhook",
+      message: `duplicate delivery ${deliveryId}`,
+      meta: { delivery: deliveryId, duplicate: true },
+    });
+    return {
+      ok: true,
+      reason: `duplicate delivery ${deliveryId}`,
+      enqueued: [],
+      duplicate: true,
+    };
   }
 
   let payload: unknown;
@@ -116,7 +157,7 @@ export function ingestGithubWebhook(
     return { ok: false, reason: "unrecognized payload", enqueued: [] };
   }
 
-  const rateKey = event.repo || headers["x-github-delivery"] || "default";
+  const rateKey = event.repo || deliveryId || "default";
   const rl = checkRateLimit(state, rateKey, rateLimit);
   if (!rl.allowed) {
     return {
@@ -131,18 +172,20 @@ export function ingestGithubWebhook(
 
   const matched = agentsForEvent(state, event);
   if (!matched.length) {
+    if (deliveryId) rememberWebhookDelivery(state, deliveryId);
     return { ok: true, reason: "no matching agents", event, enqueued: [], remaining: rl.remaining };
   }
 
   const enqueued: QueuedTask[] = [];
   for (const agent of matched) {
     const task = eventToTask(agent, event);
-    const delivery = headers["x-github-delivery"];
-    if (delivery) {
-      task.id = `${delivery}:${agent.metadata.name}`;
+    if (deliveryId) {
+      task.id = `${deliveryId}:${agent.metadata.name}`;
     }
     enqueued.push(enqueueTask(state, task, "webhook"));
   }
+
+  if (deliveryId) rememberWebhookDelivery(state, deliveryId);
 
   recordAudit(state, {
     kind: "webhook",
@@ -151,7 +194,7 @@ export function ingestGithubWebhook(
       event: event.type,
       repo: event.repo,
       enqueued: enqueued.length,
-      delivery: headers["x-github-delivery"] ?? null,
+      delivery: deliveryId ?? null,
     },
   });
 

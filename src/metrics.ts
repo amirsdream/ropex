@@ -52,6 +52,7 @@ export type MetricsSnapshot = {
   workflow_execute_total: number;
   workflow_deliver_total: number;
   workflow_learn_total: number;
+  webhook_duplicates_total: number;
 };
 
 export function metricsSnapshot(state: ClusterState): MetricsSnapshot {
@@ -107,6 +108,7 @@ export function metricsSnapshot(state: ClusterState): MetricsSnapshot {
     workflow_execute_total: stages.execute ?? 0,
     workflow_deliver_total: stages.deliver ?? 0,
     workflow_learn_total: stages.learn ?? 0,
+    webhook_duplicates_total: state.metrics?.webhookDuplicates ?? 0,
   };
 }
 
@@ -210,6 +212,9 @@ export function metricsPrometheus(state: ClusterState): string {
     "# HELP ropex_workflow_learn_total Trajectory learn stages.",
     "# TYPE ropex_workflow_learn_total counter",
     `ropex_workflow_learn_total ${m.workflow_learn_total}`,
+    "# HELP ropex_webhook_duplicates_total Duplicate x-github-delivery skips.",
+    "# TYPE ropex_webhook_duplicates_total counter",
+    `ropex_webhook_duplicates_total ${m.webhook_duplicates_total}`,
   ];
   return `${lines.join("\n")}\n`;
 }

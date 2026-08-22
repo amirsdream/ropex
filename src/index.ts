@@ -17,6 +17,7 @@ export {
   resolveSharePolicy,
   defaultSharePolicy,
   memoryContextFor,
+  promoteMemoryFact,
 } from "./memory.js";
 export { buildControlPlaneView, memoryForWorker, startControlPlaneServer } from "./api.js";
 export {
@@ -24,6 +25,7 @@ export {
   removeWorktree,
   worktreePath,
   applyWorktrees,
+  gcOrphanWorktrees,
 } from "./worktree.js";
 export {
   enqueueTask,
@@ -37,8 +39,12 @@ export {
   retryBackoffMs,
   heartbeatClaim,
   reclaimExpiredLeases,
+  effectivePriority,
+  ageQueuePriorities,
   DEFAULT_MAX_ATTEMPTS,
   DEFAULT_LEASE_MS,
+  DEFAULT_AGE_BOOST_MS,
+  DEFAULT_AGE_BOOST_MAX,
 } from "./queue.js";
 export { drainQueue } from "./scheduler.js";
 export {
@@ -46,6 +52,8 @@ export {
   verifyGithubSignature,
   signGithubPayload,
   parseGithubWebhook,
+  rememberWebhookDelivery,
+  hasSeenWebhookDelivery,
 } from "./webhook.js";
 export { watchOnce, watchLoop, parseInterval, readManifestTree } from "./watch.js";
 export { bootDsh, profilePack, DSH_PROFILE_PACKS } from "./dsh.js";

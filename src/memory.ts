@@ -194,3 +194,25 @@ export function memoryContextFor(
     policy: resolveSharePolicy(hermes),
   };
 }
+
+/**
+ * Promote a fact to a wider scope using a control-plane context that may write
+ * up to `cluster` (operator CLI / reconcile). Returns undefined if missing.
+ */
+export function promoteMemoryFact(
+  state: ClusterState,
+  id: string,
+  scope: MemoryScope,
+): SharedMemoryFact | undefined {
+  const store = SharedMemoryStore.fromState(state);
+  const fact = state.memory.find((f) => f.id === id);
+  if (!fact) return undefined;
+  const ctx: MemoryContext = {
+    agent: fact.agent,
+    worker: fact.worker ?? fact.sourceWorker ?? `${fact.agent}:0`,
+    fleet: fact.fleet,
+    policy: { read: ["worker", "agent", "fleet", "cluster"], write: "cluster" },
+  };
+  const next = store.promote(ctx, id, scope);
+  return next;
+}

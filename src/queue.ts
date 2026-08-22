@@ -148,6 +148,47 @@ export function retryBackoffMs(attempts: number): number {
   return Math.min(1_000 * 2 ** exp, 15 * 60_000);
 }
 
+/** Default: +1 priority every 60s waiting, capped at +10. */
+export const DEFAULT_AGE_BOOST_MS = 60_000;
+export const DEFAULT_AGE_BOOST_MAX = 10;
+
+/** Effective claim priority = base + age boost (starvation prevention). */
+export function effectivePriority(
+  item: QueuedTask,
+  now = Date.now(),
+  opts: { ageBoostMs?: number; ageBoostMax?: number } = {},
+): number {
+  const base = item.priority ?? 0;
+  const ageBoostMs = opts.ageBoostMs ?? DEFAULT_AGE_BOOST_MS;
+  const ageBoostMax = opts.ageBoostMax ?? DEFAULT_AGE_BOOST_MAX;
+  const enq = Date.parse(item.enqueuedAt);
+  if (!Number.isFinite(enq) || ageBoostMs <= 0) return base;
+  const boost = Math.min(ageBoostMax, Math.floor((now - enq) / ageBoostMs));
+  return base + Math.max(0, boost);
+}
+
+/**
+ * Mutate pending items: raise stored priority by accrued age boost (durable aging).
+ * Returns number of items bumped.
+ */
+export function ageQueuePriorities(
+  state: ClusterState,
+  opts: { now?: number; ageBoostMs?: number; ageBoostMax?: number } = {},
+): number {
+  ensureQueue(state);
+  const now = opts.now ?? Date.now();
+  let bumped = 0;
+  for (const item of state.queue) {
+    if (item.status !== "pending") continue;
+    const next = effectivePriority(item, now, opts);
+    if (next > (item.priority ?? 0)) {
+      item.priority = next;
+      bumped += 1;
+    }
+  }
+  return bumped;
+}
+
 function isClaimablePending(item: QueuedTask, now: number): boolean {
   if (item.status !== "pending") return false;
   if (!item.nextRetryAt) return true;
@@ -162,10 +203,26 @@ function isClaimablePending(item: QueuedTask, now: number): boolean {
 export function claimPending(
   state: ClusterState,
   limit = 32,
-  opts: { preferFleet?: string; now?: number; leaseMs?: number; maxAttempts?: number } = {},
+  opts: {
+    preferFleet?: string;
+    now?: number;
+    leaseMs?: number;
+    maxAttempts?: number;
+    ageBoostMs?: number;
+    ageBoostMax?: number;
+    /** When true (default), persist age boosts onto pending items before claim. */
+    agePriorities?: boolean;
+  } = {},
 ): DrainResult {
   ensureQueue(state);
   const now = opts.now ?? Date.now();
+  if (opts.agePriorities !== false) {
+    ageQueuePriorities(state, {
+      now,
+      ageBoostMs: opts.ageBoostMs,
+      ageBoostMax: opts.ageBoostMax,
+    });
+  }
   reclaimExpiredLeases(state, {
     now,
     maxAttempts: opts.maxAttempts,
@@ -175,8 +232,8 @@ export function claimPending(
   const pending = state.queue
     .filter((q) => isClaimablePending(q, now))
     .sort((a, b) => {
-      const pa = a.priority ?? 0;
-      const pb = b.priority ?? 0;
+      const pa = effectivePriority(a, now, opts);
+      const pb = effectivePriority(b, now, opts);
       if (pa !== pb) return pb - pa; // higher priority first
       return a.enqueuedAt < b.enqueuedAt ? -1 : a.enqueuedAt > b.enqueuedAt ? 1 : 0;
     });

@@ -326,6 +326,11 @@ export type ClusterState = {
   gitRepoStatus: GitRepoSyncStatus[];
   /** Rolling task-unit spend for Policy.budget. */
   budgets: BudgetLedger[];
+  /**
+   * Seen GitHub webhook delivery IDs (x-github-delivery) for idempotent ingest.
+   * Soft-capped; oldest dropped first.
+   */
+  webhookSeen?: string[];
   lastReconcile?: string;
 };
 
@@ -408,6 +413,8 @@ export type ClusterMetrics = {
   tasksDead?: number;
   /** Claimed tasks reclaimed after lease expiry. */
   leasesReclaimed?: number;
+  /** Webhook deliveries skipped as duplicates. */
+  webhookDuplicates?: number;
   lastEventAt?: string;
   lastDrainAt?: string;
 };

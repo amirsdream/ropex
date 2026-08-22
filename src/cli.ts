@@ -9,7 +9,9 @@ import { deliverOutbound, outboundFor } from "./deliver.js";
 import { cordonWorker, uncordonWorker, evictWorker, cordonedWorkers } from "./lifecycle.js";
 import { agentsForEvent, eventToTask, pickWorker } from "./github.js";
 import { buildControlPlaneView, startControlPlaneServer } from "./api.js";
-import { enqueueTask, queueSummary, deadLetters, requeueDead, reclaimExpiredLeases } from "./queue.js";
+import { enqueueTask, queueSummary, deadLetters, requeueDead, reclaimExpiredLeases, ageQueuePriorities } from "./queue.js";
+import { gcOrphanWorktrees } from "./worktree.js";
+import { promoteMemoryFact } from "./memory.js";
 import { runTask } from "./runtime.js";
 import { drainQueue } from "./scheduler.js";
 import { budgetReport } from "./budget.js";
@@ -54,6 +56,8 @@ Usage:
   ropex queue                     Show work queue + metrics
   ropex retry <id>|--all          Re-queue dead-letter item(s)
   ropex reclaim                   Reclaim expired claim leases
+  ropex age                       Boost pending priorities by wait age
+  ropex gc                        Remove orphan worker worktrees
   ropex drain [--limit N] [--concurrency N]
                                      Claim idle workers and run pending queue
   ropex sync [--due]                  Sync declared GitRepos (multi-repo union)
@@ -86,7 +90,8 @@ Usage:
   ropex tick [--concurrency N]    Control-plane heartbeat (reclaim/sync/drain)
   ropex clone [--force] [--dry-run]   Prepare GitRepo checkouts (file:// / local)
   ropex budget                    Show task-unit budget spend
-  ropex memory                    Show shared memory stream
+  ropex memory [promote <id> --scope fleet|cluster|agent]
+                                     Show shared memory; promote a fact wider
   ropex ui [--port N]             Serve control-plane UI + /api/v1/*
   ropex help
 `;
@@ -346,6 +351,22 @@ async function main(argv: string[]): Promise<number> {
       for (const item of reclaimed) {
         console.log(`  [${item.status}] ${item.id}  ${item.error ?? ""}`);
       }
+      return 0;
+    }
+    case "age": {
+      const state = loadState(root);
+      const bumped = ageQueuePriorities(state);
+      saveState(root, state);
+      console.log(`aged ${bumped} pending task(s)`);
+      return 0;
+    }
+    case "gc": {
+      const state = loadState(root);
+      const result = gcOrphanWorktrees(root, state);
+      console.log(
+        `gc worktrees kept=${result.kept.length} removed=${result.removed.length} root=${result.root}`,
+      );
+      for (const id of result.removed) console.log(`  removed ${id}`);
       return 0;
     }
     case "drain": {
@@ -762,13 +783,28 @@ async function main(argv: string[]): Promise<number> {
     }
     case "memory": {
       const state = loadState(root);
+      if (rest[0] === "promote") {
+        const id = rest[1];
+        const scope = flag(rest, "--scope") as "worker" | "agent" | "fleet" | "cluster" | undefined;
+        if (!id || !scope) {
+          return fail("usage: ropex memory promote <id> --scope agent|fleet|cluster");
+        }
+        if (!["agent", "fleet", "cluster", "worker"].includes(scope)) {
+          return fail("scope must be worker|agent|fleet|cluster");
+        }
+        const next = promoteMemoryFact(state, id, scope);
+        if (!next) return fail(`memory fact not found: ${id}`);
+        saveState(root, state);
+        console.log(`promoted ${next.id} → ${next.scope}`);
+        return 0;
+      }
       const view = buildControlPlaneView(state);
       if (!view.memory.length) {
         console.log("no shared memory facts yet");
         return 0;
       }
       for (const m of view.memory) {
-        console.log(`[${m.scope}] ${m.agent}${m.fleet ? `@${m.fleet}` : ""}  ${m.text}`);
+        console.log(`[${m.scope}] ${m.agent}${m.fleet ? `@${m.fleet}` : ""}  ${m.id}  ${m.text}`);
       }
       return 0;
     }
