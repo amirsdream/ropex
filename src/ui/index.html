@@ -1,189 +1,298 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
     <title>Ropex — control plane</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Syne:wght@600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <div class="atmosphere" aria-hidden="true"></div>
-    <div class="rope-line" aria-hidden="true"></div>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Control plane navigation">
+        <div class="sidebar-brand">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div>
+            <p class="brand-name" id="brand">Ropex</p>
+            <p class="brand-sub">control plane</p>
+          </div>
+        </div>
 
-    <header class="hero">
-      <p class="brand" id="brand">ROPEX</p>
-      <h1 class="tagline" id="tagline">One git sequence. Many workers in position.</h1>
-      <p class="lede">
-        Hermes plans. DeepSeek executes. Shared memory keeps the fleet coherent.
-      </p>
-      <div class="cta-row">
-        <a class="cta" href="#memory">Memory stream</a>
-        <a class="cta cta-ghost" href="#health">Health</a>
-        <a class="cta cta-ghost" href="#drift">Drift</a>
+        <nav class="sidebar-nav">
+          <p class="nav-group">Overview</p>
+          <a class="nav-link" href="#workflow">Workflow</a>
+          <a class="nav-link" href="#memory">Memory</a>
+          <a class="nav-link" href="#workers">Workers</a>
+          <a class="nav-link" href="#health">Health</a>
+
+          <p class="nav-group">Fleet</p>
+          <a class="nav-link" href="#hygiene">Hygiene</a>
+          <a class="nav-link" href="#drift">Drift</a>
+          <a class="nav-link" href="#fairness">Fairness</a>
+          <a class="nav-link" href="#canary">Canary</a>
+          <a class="nav-link" href="#skills">Skills</a>
+
+          <p class="nav-group">Queue</p>
+          <a class="nav-link" href="#queue">Queue</a>
+          <a class="nav-link" href="#affinity">Affinity</a>
+          <a class="nav-link" href="#approvals">Approvals</a>
+
+          <p class="nav-group">Ops</p>
+          <a class="nav-link" href="#budget">Budget</a>
+          <a class="nav-link" href="#policy">Policy</a>
+          <a class="nav-link" href="#outbound">Outbound</a>
+          <a class="nav-link" href="#clone">Clone</a>
+          <a class="nav-link" href="#autoscale">Autoscale</a>
+
+          <p class="nav-group">Observe</p>
+          <a class="nav-link" href="#trajectories">Trajectories</a>
+          <a class="nav-link" href="#ratelimits">Rate limits</a>
+          <a class="nav-link" href="#journal">Deliveries</a>
+          <a class="nav-link" href="#audit">Audit</a>
+          <a class="nav-link" href="#dsh">Harness</a>
+
+          <p class="nav-group">Agents</p>
+          <a class="nav-link" href="#surfaces">Hermes &amp; DeepSeek</a>
+        </nav>
+
+        <div class="sidebar-foot">
+          <button type="button" class="btn btn-ghost btn-block" id="theme-toggle" aria-label="Toggle theme">
+            Toggle theme
+          </button>
+        </div>
+      </aside>
+
+      <div class="main-column">
+        <header class="topbar hero">
+          <div class="topbar-copy">
+            <h1 class="tagline" id="tagline">One git sequence. Many workers in position.</h1>
+            <p class="lede">
+              Hermes plans. DeepSeek executes. Git-backed memory keeps the fleet coherent.
+            </p>
+          </div>
+          <div class="topbar-actions">
+            <span class="live-pill" id="live-pill" title="Auto-refresh every 5s">
+              <span class="live-dot"></span> Live
+            </span>
+            <button type="button" class="btn btn-primary" id="refresh-btn">Refresh</button>
+          </div>
+          <dl class="pulse stat-grid" id="pulse" aria-label="Cluster pulse"></dl>
+        </header>
+
+        <main class="content">
+          <section id="workflow" class="section card">
+            <div class="section-head">
+              <h2>Workflow</h2>
+              <p class="section-lede">Hermes brain and DeepSeek harness, one fixed pipeline.</p>
+            </div>
+            <ol class="workflow" id="workflow-list"></ol>
+          </section>
+
+          <section id="memory" class="section card">
+            <div class="section-head">
+              <h2>Memory rope</h2>
+              <p class="section-lede">Scoped facts across worker · agent · fleet · cluster. Git-backed via <code>memory/</code> YAML.</p>
+            </div>
+            <div class="memory-toolbar panel" id="memory-toolbar"></div>
+            <div class="memory-stream" id="memory-stream"></div>
+          </section>
+
+          <section id="workers" class="section card">
+            <div class="section-head">
+              <h2>Workers</h2>
+              <p class="section-lede">Immutable image digests. Learned skills ride as volume.</p>
+            </div>
+            <div class="data-table worker-rail" id="worker-rail"></div>
+          </section>
+
+          <section id="health" class="section card">
+            <div class="section-head">
+              <h2>Health</h2>
+              <p class="section-lede">Worker probes and backlog SLO — the control plane pulse.</p>
+            </div>
+            <div id="health-panel" class="data-table worker-rail"></div>
+          </section>
+
+          <section id="hygiene" class="section card">
+            <div class="section-head">
+              <h2>Hygiene + pool</h2>
+              <p class="section-lede">Worker heatmap, queue depth, webhook idempotency, reclaim / GC / age.</p>
+            </div>
+            <div id="hygiene-rail" class="data-table worker-rail"></div>
+            <div id="pool-heatmap" class="heatmap" aria-label="Worker pool heatmap"></div>
+            <div id="queue-depth" class="depth-bars" aria-label="Queue depth bars"></div>
+          </section>
+
+          <section id="drift" class="section card">
+            <div class="section-head">
+              <h2>Drift</h2>
+              <p class="section-lede">Live workers vs desired digests, replicas, labels, and taints.</p>
+            </div>
+            <div id="drift-rail" class="data-table worker-rail"></div>
+          </section>
+
+          <section id="fairness" class="section card">
+            <div class="section-head">
+              <h2>Fairness</h2>
+              <p class="section-lede">Claim-wait latency and LRU skew across the worker pool.</p>
+            </div>
+            <div id="fairness-rail" class="data-table worker-rail"></div>
+          </section>
+
+          <section id="budget" class="section card">
+            <div class="section-head">
+              <h2>Budget</h2>
+              <p class="section-lede">Policy task-unit spend windows — exhausted scopes deny enqueue.</p>
+            </div>
+            <div id="budget-rail" class="data-table worker-rail"></div>
+          </section>
+
+          <section id="canary" class="section card">
+            <div class="section-head">
+              <h2>Canary</h2>
+              <p class="section-lede">Live digest coverage vs desired agent images during rolls.</p>
+            </div>
+            <div id="canary-rail" class="data-table worker-rail"></div>
+          </section>
+
+          <section id="skills" class="section card">
+            <div class="section-head">
+              <h2>Skills</h2>
+              <p class="section-lede">Registry versions and fleet promote coverage.</p>
+            </div>
+            <div id="skills-rail" class="data-table worker-rail"></div>
+          </section>
+
+          <section id="policy" class="section card">
+            <div class="section-head">
+              <h2>Policy simulate</h2>
+              <p class="section-lede">Fleet-wide dry-run of admission and approval gates.</p>
+            </div>
+            <div id="policy-rail" class="data-table worker-rail"></div>
+          </section>
+
+          <section id="outbound" class="section card">
+            <div class="section-head">
+              <h2>Outbound</h2>
+              <p class="section-lede">Stubbed webhook POSTs — live HTTPS fails closed.</p>
+            </div>
+            <div id="outbound-rail" class="data-table worker-rail"></div>
+          </section>
+
+          <section id="clone" class="section card">
+            <div class="section-head">
+              <h2>Clone</h2>
+              <p class="section-lede">GitRepo materialization — <code>ropex clone --remote</code> for https/git.</p>
+            </div>
+            <div id="clone-rail" class="data-table worker-rail"></div>
+          </section>
+
+          <section id="autoscale" class="section card">
+            <div class="section-head">
+              <h2>Autoscale</h2>
+              <p class="section-lede">GitOps replica recommendations from backlog — commit the YAML.</p>
+            </div>
+            <div id="autoscale-rail" class="data-table worker-rail"></div>
+          </section>
+
+          <section id="queue" class="section card">
+            <div class="section-head">
+              <h2>Queue</h2>
+              <p class="section-lede">Webhook and CLI work waiting for idle workers. Drain with bounded concurrency.</p>
+            </div>
+            <div id="drain-controls" class="panel worker-rail"></div>
+            <div class="data-table worker-rail" id="queue-rail"></div>
+          </section>
+
+          <section id="affinity" class="section card">
+            <div class="section-head">
+              <h2>Affinity</h2>
+              <p class="section-lede">Sticky worker bindings for agent:repo until TTL expiry.</p>
+            </div>
+            <div id="affinity-rail" class="data-table worker-rail"></div>
+          </section>
+
+          <section id="dsh" class="section card">
+            <div class="section-head">
+              <h2>DeepSeek harness</h2>
+              <p class="section-lede">Profile packs — live when <code>@deepseek-ai/dsh</code> is installed.</p>
+            </div>
+            <div id="dsh-rail" class="data-table worker-rail"></div>
+          </section>
+
+          <section id="journal" class="section card">
+            <div class="section-head">
+              <h2>Deliveries</h2>
+              <p class="section-lede">Append-only journal of comments, checks, and pull requests.</p>
+            </div>
+            <div class="memory-stream timeline" id="journal-stream"></div>
+          </section>
+
+          <section id="approvals" class="section card">
+            <div class="section-head">
+              <h2>Approvals</h2>
+              <p class="section-lede">Policy-gated tools waiting for approve or reject.</p>
+            </div>
+            <div class="data-table worker-rail" id="approvals-rail"></div>
+          </section>
+
+          <section id="trajectories" class="section card">
+            <div class="section-head">
+              <h2>Trajectories</h2>
+              <p class="section-lede">Recent Hermes→DeepSeek runs for export and learning.</p>
+            </div>
+            <div class="data-table worker-rail" id="trajectories-rail"></div>
+          </section>
+
+          <section id="ratelimits" class="section card">
+            <div class="section-head">
+              <h2>Rate limits</h2>
+              <p class="section-lede">Sliding-window webhook buckets — saturated keys deny ingest.</p>
+            </div>
+            <div class="data-table worker-rail" id="ratelimits-rail"></div>
+          </section>
+
+          <section id="audit" class="section card">
+            <div class="section-head">
+              <h2>Audit</h2>
+              <p class="section-lede">Event-sourced control-plane trail — reconcile, queue, leases.</p>
+            </div>
+            <div class="memory-stream timeline" id="audit-stream"></div>
+          </section>
+
+          <section id="surfaces" class="section card surfaces">
+            <div class="section-head">
+              <h2>Agent surfaces</h2>
+              <p class="section-lede">Hermes brain and DeepSeek harness configuration per agent.</p>
+            </div>
+            <div class="surfaces-grid">
+              <div>
+                <h3 class="surface-title">Hermes</h3>
+                <p class="section-lede">Soul, skills, share policy.</p>
+                <div id="hermes-list" class="surface-list"></div>
+              </div>
+              <div>
+                <h3 class="surface-title">DeepSeek</h3>
+                <p class="section-lede">Profile, loop, tools, plugins.</p>
+                <div id="harness-list" class="surface-list"></div>
+              </div>
+            </div>
+          </section>
+        </main>
+
+        <footer class="foot">
+          <span id="meta"></span>
+        </footer>
       </div>
-      <dl class="pulse" id="pulse" aria-label="Cluster pulse"></dl>
-    </header>
+    </div>
 
-    <main>
-      <section id="workflow" class="section">
-        <h2>Workflow</h2>
-        <p class="section-lede">Hermes brain and DeepSeek harness, one fixed pipeline.</p>
-        <ol class="workflow" id="workflow-list"></ol>
-      </section>
-
-      <section id="memory" class="section">
-        <h2>Memory rope</h2>
-        <p class="section-lede">Scoped facts shared across worker · agent · fleet · cluster. Git-backed via <code>memory/</code> YAML.</p>
-        <div class="memory-toolbar worker-rail" id="memory-toolbar"></div>
-        <div class="memory-stream" id="memory-stream"></div>
-      </section>
-
-      <section id="workers" class="section">
-        <h2>Workers</h2>
-        <p class="section-lede">Immutable image digests. Learned skills ride as volume.</p>
-        <div class="worker-rail" id="worker-rail"></div>
-      </section>
-
-      <section id="health" class="section">
-        <h2>Health</h2>
-        <p class="section-lede">Worker probes and backlog SLO — the control plane pulse.</p>
-        <div id="health-panel" class="worker-rail"></div>
-      </section>
-
-      <section id="hygiene" class="section">
-        <h2>Hygiene + pool</h2>
-        <p class="section-lede">Worker heatmap, queue depth, webhook idempotency, reclaim / GC / age.</p>
-        <div id="hygiene-rail" class="worker-rail"></div>
-        <div id="pool-heatmap" class="heatmap" aria-label="Worker pool heatmap"></div>
-        <div id="queue-depth" class="depth-bars" aria-label="Queue depth bars"></div>
-      </section>
-
-      <section id="drift" class="section">
-        <h2>Drift</h2>
-        <p class="section-lede">Live workers vs desired digests, replicas, labels, and taints.</p>
-        <div id="drift-rail" class="worker-rail"></div>
-      </section>
-
-      <section id="fairness" class="section">
-        <h2>Fairness</h2>
-        <p class="section-lede">Claim-wait latency and LRU skew across the worker pool.</p>
-        <div id="fairness-rail" class="worker-rail"></div>
-      </section>
-
-      <section id="budget" class="section">
-        <h2>Budget</h2>
-        <p class="section-lede">Policy task-unit spend windows — exhausted scopes deny enqueue.</p>
-        <div id="budget-rail" class="worker-rail"></div>
-      </section>
-
-      <section id="canary" class="section">
-        <h2>Canary</h2>
-        <p class="section-lede">Live digest coverage vs desired agent images during rolls.</p>
-        <div id="canary-rail" class="worker-rail"></div>
-      </section>
-
-      <section id="skills" class="section">
-        <h2>Skills</h2>
-        <p class="section-lede">Registry versions and fleet promote coverage.</p>
-        <div id="skills-rail" class="worker-rail"></div>
-      </section>
-
-      <section id="policy" class="section">
-        <h2>Policy simulate</h2>
-        <p class="section-lede">Fleet-wide dry-run of admission and approval gates.</p>
-        <div id="policy-rail" class="worker-rail"></div>
-      </section>
-
-      <section id="outbound" class="section">
-        <h2>Outbound</h2>
-        <p class="section-lede">Stubbed webhook POSTs — live HTTPS fails closed.</p>
-        <div id="outbound-rail" class="worker-rail"></div>
-      </section>
-
-      <section id="clone" class="section">
-        <h2>Clone</h2>
-        <p class="section-lede">GitRepo materialization progress — remote stays fail-closed.</p>
-        <div id="clone-rail" class="worker-rail"></div>
-      </section>
-
-      <section id="autoscale" class="section">
-        <h2>Autoscale</h2>
-        <p class="section-lede">GitOps replica recommendations from backlog — commit the YAML.</p>
-        <div id="autoscale-rail" class="worker-rail"></div>
-      </section>
-
-      <section id="queue" class="section">
-        <h2>Queue</h2>
-        <p class="section-lede">Webhook and CLI work waiting for idle workers. Drain with bounded concurrency.</p>
-        <div id="drain-controls" class="worker-rail"></div>
-        <div class="worker-rail" id="queue-rail"></div>
-      </section>
-
-      <section id="affinity" class="section">
-        <h2>Affinity</h2>
-        <p class="section-lede">Sticky worker bindings for agent:repo until TTL expiry.</p>
-        <div id="affinity-rail" class="worker-rail"></div>
-      </section>
-
-      <section id="dsh" class="section">
-        <h2>DeepSeek harness</h2>
-        <p class="section-lede">Profile packs today; live @deepseek-ai/dsh scaffold stays fail-closed.</p>
-        <div id="dsh-rail" class="worker-rail"></div>
-      </section>
-
-      <section id="journal" class="section">
-        <h2>Deliveries</h2>
-        <p class="section-lede">Append-only journal of comments, checks, and pull requests.</p>
-        <div class="memory-stream" id="journal-stream"></div>
-      </section>
-
-      <section id="approvals" class="section">
-        <h2>Approvals</h2>
-        <p class="section-lede">Policy-gated tools waiting for approve or reject.</p>
-        <div class="worker-rail" id="approvals-rail"></div>
-      </section>
-
-      <section id="trajectories" class="section">
-        <h2>Trajectories</h2>
-        <p class="section-lede">Recent Hermes→DeepSeek runs for export and learning.</p>
-        <div class="worker-rail" id="trajectories-rail"></div>
-      </section>
-
-      <section id="ratelimits" class="section">
-        <h2>Rate limits</h2>
-        <p class="section-lede">Sliding-window webhook buckets — saturated keys deny ingest.</p>
-        <div class="worker-rail" id="ratelimits-rail"></div>
-      </section>
-
-      <section id="audit" class="section">
-        <h2>Audit</h2>
-        <p class="section-lede">Event-sourced control-plane trail — reconcile, queue, leases.</p>
-        <div class="memory-stream" id="audit-stream"></div>
-      </section>
-
-      <section id="surfaces" class="section surfaces">
-        <div>
-          <h2>Hermes</h2>
-          <p class="section-lede">Soul, skills, share policy.</p>
-          <div id="hermes-list" class="surface-list"></div>
-        </div>
-        <div>
-          <h2>DeepSeek</h2>
-          <p class="section-lede">Profile, loop, tools, plugins.</p>
-          <div id="harness-list" class="surface-list"></div>
-        </div>
-      </section>
-    </main>
-
-    <footer class="foot">
-      <span id="meta"></span>
-    </footer>
+    <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
 
     <script type="module" src="/app.js"></script>
   </body>

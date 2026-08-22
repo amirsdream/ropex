@@ -1,5 +1,48 @@
 const $ = (sel) => document.querySelector(sel);
 
+const REFRESH_MS = 5000;
+
+function showToast(message, kind = "ok") {
+  const stack = $("#toast-stack");
+  if (!stack) return;
+  const el = document.createElement("div");
+  el.className = `toast toast-${kind}`;
+  el.textContent = message;
+  stack.appendChild(el);
+  setTimeout(() => el.remove(), 3200);
+}
+
+function initTheme() {
+  const root = document.documentElement;
+  const saved = localStorage.getItem("ropex-theme");
+  if (saved === "light" || saved === "dark") root.setAttribute("data-theme", saved);
+  $("#theme-toggle")?.addEventListener("click", () => {
+    const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    root.setAttribute("data-theme", next);
+    localStorage.setItem("ropex-theme", next);
+    showToast(`Theme: ${next}`);
+  });
+}
+
+function initNav() {
+  const links = [...document.querySelectorAll(".nav-link")];
+  const sections = links
+    .map((a) => document.querySelector(a.getAttribute("href")))
+    .filter(Boolean);
+  const sync = () => {
+    const y = window.scrollY + 120;
+    let current = sections[0];
+    for (const s of sections) {
+      if (s.offsetTop <= y) current = s;
+    }
+    links.forEach((a) => {
+      a.classList.toggle("is-active", a.getAttribute("href") === `#${current?.id}`);
+    });
+  };
+  window.addEventListener("scroll", sync, { passive: true });
+  sync();
+}
+
 async function loadView() {
   const res = await fetch("/api/v1/view");
   if (!res.ok) throw new Error(`view ${res.status}`);
@@ -8,6 +51,14 @@ async function loadView() {
 
 function renderPulse(view) {
   const el = $("#pulse");
+  const tone = (k, v) => {
+    if (k === "slo" && v === "breach") return "bad";
+    if (k === "drift" && v === "yes") return "bad";
+    if (k === "unhealthy" && Number(v) > 0) return "warn";
+    if (k === "canary" && v !== "ok") return "warn";
+    if (k === "queue" && v === "paused") return "warn";
+    return "ok";
+  };
   const items = [
     ["live", view.counts.workersLive],
     ["memory", view.counts.memoryFacts],
@@ -16,7 +67,7 @@ function renderPulse(view) {
     ["unhealthy", view.metrics?.workersUnhealthy ?? 0],
     ["slo", view.metrics?.backlogSloBreached ? "breach" : "ok"],
     ["drift", view.drift?.ok === false ? "yes" : "ok"],
-    ["queue", view.queuePaused ? "paused" : "run"],
+    ["state", view.queuePaused ? "paused" : "run"],
     ["traj", view.trajectories?.total ?? 0],
     ["rl", view.rateLimits?.nearLimit ?? 0],
     ["dup", view.webhookDuplicates ?? 0],
@@ -24,7 +75,8 @@ function renderPulse(view) {
   ];
   el.innerHTML = items
     .map(
-      ([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`,
+      ([k, v]) =>
+        `<div><dt>${k}</dt><dd data-tone="${tone(k, v)}">${escapeHtml(String(v))}</dd></div>`,
     )
     .join("");
 }
@@ -51,11 +103,11 @@ function renderMemory(view) {
   toolbar.innerHTML = `
     <div class="worker-row">
       <div>
-        <div class="worker-id">git memory</div>
-        <div class="digest">${mg.gitBacked} in git · ${mg.runtimeOnly} runtime-only · dir ${escapeHtml(mg.defaultDir)}/</div>
+        <div class="worker-id">Git memory</div>
+        <div class="digest">${mg.gitBacked} in git · ${mg.runtimeOnly} runtime-only · <code>${escapeHtml(mg.defaultDir)}/</code></div>
       </div>
-      <button type="button" class="cta cta-sm" data-memory-action="sync">Sync from git</button>
-      <button type="button" class="cta cta-sm" data-memory-action="export">Export all</button>
+      <button type="button" class="btn btn-secondary btn-sm" data-memory-action="sync">Sync from git</button>
+      <button type="button" class="btn btn-primary btn-sm" data-memory-action="export">Export all</button>
     </div>`;
   toolbar.querySelectorAll("[data-memory-action]").forEach((btn) => {
     btn.addEventListener("click", () => memoryAction(btn.getAttribute("data-memory-action")));
@@ -97,9 +149,15 @@ async function memoryAction(action) {
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    alert(await res.text());
+    showToast(`Memory ${action} failed`, "err");
     return;
   }
+  const result = await res.json().catch(() => ({}));
+  showToast(
+    action === "sync"
+      ? `Synced ${result.synced?.length ?? 0} memory facts`
+      : `Exported ${result.exported?.length ?? 0} files`,
+  );
   await refresh();
 }
 
@@ -1059,6 +1117,10 @@ function formatTime(iso) {
   }
 }
 
+async function refresh() {
+  await main();
+}
+
 async function main() {
   try {
     const view = await loadView();
@@ -1090,7 +1152,12 @@ async function main() {
   } catch (err) {
     $("#tagline").textContent = "Control plane unreachable";
     $("#meta").textContent = String(err);
+    showToast(String(err), "err");
   }
 }
 
+initTheme();
+initNav();
+$("#refresh-btn")?.addEventListener("click", () => refresh());
 main();
+setInterval(refresh, REFRESH_MS);
