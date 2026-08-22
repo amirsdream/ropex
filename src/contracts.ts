@@ -364,4 +364,5 @@ export const API_ROUTES = {
   affinity: "/api/v1/affinity",
   ratelimits: "/api/v1/ratelimits",
   drain: "/api/v1/drain",
+  policySim: "/api/v1/policy/simulate",
 } as const;

@@ -21,23 +21,28 @@ Ropex is the missing control plane that multiplies those two runtimes across Git
 ```mermaid
 flowchart TB
   subgraph git["Git — desired state"]
-    M["Agent / Fleet / Policy YAML"]
+    M["Agent / Fleet / Policy / GitRepo YAML"]
   end
 
   subgraph gh["GitHub — work queue"]
     E["issues · PRs · checks"]
+    WH["HMAC webhook + rate limit"]
   end
 
   subgraph cp["Ropex control plane"]
-    C["Controller\nexpand · cap · reconcile"]
+    C["Controller\nexpand · cap · reconcile · canary"]
+    Q["Queue\npause · DLQ · age · affinity"]
+    T["Tick\nreclaim · drain · sync · GC"]
     S[".ropex/state.json"]
     C --> S
+    Q --> S
+    T --> S
   end
 
   subgraph workers["Immutable workers"]
     W1["triage:0\nimage=a1b2…"]
     W2["builder:3\nimage=c3d4…"]
-    W3["… N replicas"]
+    W3["… N replicas\nplacement · cordon"]
   end
 
   subgraph wf["Per-task workflow"]
@@ -49,13 +54,15 @@ flowchart TB
   end
 
   M --> C
-  E --> C
+  E --> WH --> Q
   C -->|"stamp imageDigest"| workers
+  Q -->|"claim idle"| workers
+  T -->|"bounded drain"| workers
   workers --> wf
   wf -->|"comment / check / PR"| E
 ```
 
-Scale is a git commit: change `spec.replicas` from `20` to `2000`. The controller creates workers. Policy caps blast radius. No dashboard required.
+Scale is a git commit: change `spec.replicas` from `20` to `2000`. The controller creates workers. Policy caps blast radius. Operators pause, drain, and retry from CLI or `ropex ui`.
 
 ## Quick start
 
@@ -176,6 +183,7 @@ Control plane today (local, network-free tests):
 | Snapshot restore + hermes seam + approval UI | shipped |
 | Trajectory + rate-limit UI / metrics | shipped |
 | Drain concurrency preference + UI | shipped |
+| Operator pause/retry + policy sim UI | shipped |
 | GitRepo local watch/sync | shipped (no remote clone yet) |
 | Live `@deepseek-ai/dsh` / Hermes process | not yet |
 

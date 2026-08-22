@@ -17,6 +17,7 @@ flowchart TB
     ISS["issues.*"]
     PR["pull_request.*"]
     CHK["checks"]
+    RL["rate limit + idempotency"]
   end
 
   subgraph Control["Ropex control plane"]
@@ -24,20 +25,26 @@ flowchart TB
     EXP["expand Fleet → DesiredAgent"]
     CAP["apply Policy.maxReplicas"]
     IMG["buildAgentImage → imageDigest"]
-    REC["reconcile workers\ncreate / retire / roll"]
+    REC["reconcile workers\ncreate / retire / roll / canary"]
+    SCH["queue · pause · DLQ\naffinity · drain c=N"]
+    TICK["tick: reclaim → drain → sync"]
     STATE[".ropex/state.json"]
     PARSE --> EXP --> CAP --> IMG --> REC --> STATE
+    SCH --> STATE
+    TICK --> STATE
   end
 
   subgraph Data["Data plane"]
     W["Worker slot\nagent:replica + imageDigest"]
-    RT["runTask"]
+    RT["runTask\nHermes → DeepSeek → learn"]
     W --> RT
   end
 
   Desired --> PARSE
-  Queue -->|"match events + selectors"| RT
+  Queue --> RL --> SCH
   REC -->|"immutable stamp"| W
+  SCH -->|"claim idle"| RT
+  TICK -->|"bounded drain"| RT
   RT -->|"comment / check / PR"| Queue
 ```
 

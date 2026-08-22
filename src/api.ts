@@ -34,7 +34,7 @@ import { rateLimitReport } from "./ratelimit.js";
 import { drainQueue, drainStatus, setDrainConcurrency } from "./scheduler.js";
 import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
-import { ensureQueue, queueSummary } from "./queue.js";
+import { ensureQueue, queueSummary, pauseQueue, resumeQueue, requeueDead, deadLetters, isQueuePaused } from "./queue.js";
 import { trajectoriesFor, exportTrajectoriesJsonl, ensureTrajectories } from "./trajectory.js";
 import { WORKFLOW_STAGES } from "./workflow.js";
 import type { ClusterState, DesiredAgent } from "./types.js";
@@ -482,12 +482,55 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
     return json(res, buildControlPlaneView(state).workers);
   }
   if (url.pathname === API_ROUTES.queue) {
+    if (req.method === "POST") {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      let body: { action?: string; id?: string; all?: boolean } = {};
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as {
+          action?: string;
+          id?: string;
+          all?: boolean;
+        };
+      } catch {
+        return json(res, { error: "invalid json" }, 400);
+      }
+      const action = body.action ?? url.searchParams.get("action") ?? "";
+      if (action === "pause") {
+        pauseQueue(state);
+        opts.saveState?.(opts.root, state);
+        return json(res, { ok: true, action: "pause", paused: true });
+      }
+      if (action === "resume") {
+        resumeQueue(state);
+        opts.saveState?.(opts.root, state);
+        return json(res, { ok: true, action: "resume", paused: false });
+      }
+      if (action === "retry") {
+        const targets = body.all
+          ? deadLetters(state).map((d) => d.id)
+          : body.id
+            ? [body.id]
+            : [];
+        if (!targets.length) {
+          return json(res, { error: "need id or all=true for retry" }, 400);
+        }
+        let n = 0;
+        for (const tid of targets) {
+          if (requeueDead(state, tid)) n += 1;
+        }
+        opts.saveState?.(opts.root, state);
+        return json(res, { ok: true, action: "retry", retried: n, ids: targets });
+      }
+      return json(res, { error: "action must be pause|resume|retry" }, 400);
+    }
     const summary = queueSummary(state);
     return json(res, {
       summary,
       metrics: state.metrics,
       items: state.queue,
-      deadLetters: state.queue.filter((q) => q.status === "dead"),
+      deadLetters: deadLetters(state),
+      paused: isQueuePaused(state),
     });
   }
   if (url.pathname === API_ROUTES.metrics) {
@@ -581,6 +624,34 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
   }
   if (url.pathname === API_ROUTES.budget) {
     return json(res, { budgets: budgetReport(state), ledgers: state.budgets ?? [] });
+  }
+  if (url.pathname === API_ROUTES.policySim) {
+    if (req.method === "POST") {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      let body: { prompts?: string[]; agents?: string[]; prompt?: string } = {};
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as {
+          prompts?: string[];
+          agents?: string[];
+          prompt?: string;
+        };
+      } catch {
+        return json(res, { error: "invalid json" }, 400);
+      }
+      const prompts =
+        body.prompts?.length
+          ? body.prompts
+          : body.prompt
+            ? [body.prompt]
+            : undefined;
+      const report = simulatePolicies(state, {
+        prompts,
+        agents: body.agents,
+      });
+      return json(res, report);
+    }
+    return json(res, simulatePolicies(state));
   }
   if (url.pathname === API_ROUTES.outbound) {
     return json(

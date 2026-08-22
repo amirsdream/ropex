@@ -136,6 +136,12 @@ Persist preferred parallel drain concurrency (capped at 32). `GET/PUT/POST /api/
 
 **Shipped (2026-08-22 night):** `setDrainConcurrency`, drain API, UI controls.
 
+## Operator queue + policy UI actions
+
+Pause/resume and DLQ retry from `POST /api/v1/queue`. Custom-prompt policy dry-run via `POST /api/v1/policy/simulate`. README + architecture diagrams refresh for tick/drain/rate-limit.
+
+**Shipped (2026-08-22 night):** queue operator API, policy simulate API, UI wiring, diagram refresh.
+
 ## Approval workflow + fleet affinity
 
 `requireApproval` tools create durable `ApprovalRequest`s; `ropex approve` / `reject` decide them. Scheduler prefers fleet-affine idle workers.

@@ -257,6 +257,15 @@ function renderPolicy(view) {
       <div class="status status-${p.deniedTasks || p.deniedCalls ? "failed" : "idle"}">gates</div>
       <div class="digest">approvals ${p.approvalCalls}</div>
       <div class="digest">rows ${p.rows?.length ?? 0}</div>
+    </div>
+    <div class="worker-row">
+      <div>
+        <div class="worker-id">custom prompt</div>
+        <div class="digest"><input id="policy-prompt" type="text" placeholder="probe: force-push main" style="width:min(28rem,70vw)" /></div>
+      </div>
+      <div class="status status-idle">dry-run</div>
+      <div class="digest"></div>
+      <div class="digest"><button type="button" id="policy-run">simulate</button></div>
     </div>`;
   const rows = (p.rows ?? [])
     .slice(0, 12)
@@ -274,6 +283,52 @@ function renderPolicy(view) {
     )
     .join("");
   el.innerHTML = head + rows;
+  $("#policy-run")?.addEventListener("click", () => {
+    const prompt = $("#policy-prompt")?.value?.trim();
+    runPolicySim(prompt || undefined);
+  });
+}
+
+async function runPolicySim(prompt) {
+  const res = await fetch("/api/v1/policy/simulate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(prompt ? { prompt } : {}),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    $("#meta").textContent = `policy sim failed: ${body.error || res.status}`;
+    return;
+  }
+  const el = $("#policy-rail");
+  if (!el) return;
+  const head = `
+    <div class="worker-row">
+      <div>
+        <div class="worker-id">simulate (live)</div>
+        <div class="digest">denied tasks ${body.deniedTasks} · denied calls ${body.deniedCalls}</div>
+      </div>
+      <div class="status status-${body.deniedTasks || body.deniedCalls ? "failed" : "idle"}">gates</div>
+      <div class="digest">approvals ${body.approvalCalls}</div>
+      <div class="digest">rows ${body.rows?.length ?? 0}</div>
+    </div>`;
+  const rows = (body.rows ?? [])
+    .slice(0, 20)
+    .map(
+      (r, i) => `
+      <div class="worker-row" style="animation-delay:${Math.min(i, 12) * 0.03}s">
+        <div>
+          <div class="worker-id">${escapeHtml(r.agent)}</div>
+          <div class="digest">${escapeHtml(r.prompt)}</div>
+        </div>
+        <div class="status status-${r.taskDenied ? "failed" : "idle"}">${r.taskDenied ? "deny" : "allow"}</div>
+        <div class="digest">${escapeHtml((r.callsDenied ?? []).join(",") || "—")}</div>
+        <div class="digest">${escapeHtml((r.callsNeedApproval ?? []).join(",") || "—")}</div>
+      </div>`,
+    )
+    .join("");
+  el.innerHTML = head + rows;
+  $("#meta").textContent = `policy simulate @ ${formatTime(body.at)}`;
 }
 
 function renderOutbound(view) {
@@ -387,6 +442,7 @@ function renderQueue(view) {
           <label>concurrency <input id="drain-concurrency" type="number" min="1" max="${d.maxConcurrency}" value="${d.concurrency}" style="width:3.5rem" /></label>
         </div>
         <div class="digest">
+          <button type="button" id="queue-pause">${d.paused ? "resume" : "pause"}</button>
           <button type="button" id="drain-prefer">save</button>
           <button type="button" id="drain-run" ${d.paused ? "disabled" : ""}>drain</button>
         </div>
@@ -394,18 +450,28 @@ function renderQueue(view) {
     const input = $("#drain-concurrency");
     $("#drain-prefer")?.addEventListener("click", () => preferDrain(Number(input?.value ?? d.concurrency)));
     $("#drain-run")?.addEventListener("click", () => runDrain(Number(input?.value ?? d.concurrency)));
+    $("#queue-pause")?.addEventListener("click", () =>
+      queueAction(d.paused ? "resume" : "pause"),
+    );
   }
   const paused = view.queuePaused
-    ? `<div class="worker-row"><div><div class="worker-id">scheduler</div><div class="digest">claims blocked — ropex resume</div></div><div class="status status-failed">paused</div><div class="digest">dupes ${view.webhookDuplicates ?? 0}</div><div class="digest"></div></div>`
+    ? `<div class="worker-row"><div><div class="worker-id">scheduler</div><div class="digest">claims blocked — resume above</div></div><div class="status status-failed">paused</div><div class="digest">dupes ${view.webhookDuplicates ?? 0}</div><div class="digest"></div></div>`
+    : "";
+  const dead = (view.queue ?? []).filter((q) => q.status === "dead");
+  const deadHead = dead.length
+    ? `<div class="worker-row"><div><div class="worker-id">dead letters</div><div class="digest">${dead.length} items</div></div><div class="status status-failed">dlq</div><div class="digest"></div><div class="digest"><button type="button" id="retry-all">retry all</button></div></div>`
     : "";
   if (!view.queue?.length) {
     el.innerHTML =
       paused +
+      deadHead +
       `<p class="empty">Queue empty. Webhook or simulate to enqueue.</p>`;
+    $("#retry-all")?.addEventListener("click", () => queueAction("retry", { all: true }));
     return;
   }
   el.innerHTML =
     paused +
+    deadHead +
     view.queue
       .slice()
       .reverse()
@@ -418,10 +484,34 @@ function renderQueue(view) {
         </div>
         <div class="status status-${q.status === "done" ? "idle" : q.status === "dead" ? "failed" : q.status}">${q.status}${q.attempts ? `·a${q.attempts}` : ""}</div>
         <div class="digest">${escapeHtml(q.source)}${q.nextRetryAt ? " · retry" : ""}${q.error ? ` · ${escapeHtml(q.error).slice(0, 40)}` : ""}</div>
-        <div class="digest">${escapeHtml(q.id)}</div>
+        <div class="digest">${
+          q.status === "dead"
+            ? `<button type="button" data-retry="${escapeHtml(q.id)}">retry</button>`
+            : escapeHtml(q.id)
+        }</div>
       </div>`,
       )
       .join("");
+  $("#retry-all")?.addEventListener("click", () => queueAction("retry", { all: true }));
+  el.querySelectorAll("[data-retry]").forEach((btn) => {
+    btn.addEventListener("click", () => queueAction("retry", { id: btn.getAttribute("data-retry") }));
+  });
+}
+
+async function queueAction(action, extra = {}) {
+  const res = await fetch("/api/v1/queue", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action, ...extra }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    $("#meta").textContent = `queue ${action} failed: ${body.error || res.status}`;
+    return;
+  }
+  $("#meta").textContent =
+    action === "retry" ? `retried ${body.retried ?? 0}` : `queue ${action}`;
+  location.reload();
 }
 
 async function preferDrain(concurrency) {
