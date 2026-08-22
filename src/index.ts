@@ -52,3 +52,9 @@ export { replayDelivery } from "./journal.js";
 export { runSandboxDemo } from "./demo.js";
 export { recordTrajectory, trajectoriesFor, exportTrajectoriesJsonl } from "./trajectory.js";
 export { checkRateLimit } from "./ratelimit.js";
+export {
+  requestApprovals,
+  decideApproval,
+  pendingApprovals,
+  isToolApproved,
+} from "./approval.js";

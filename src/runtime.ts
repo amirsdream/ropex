@@ -1,4 +1,5 @@
 import { admitCalls } from "./admission.js";
+import { requestApprovals } from "./approval.js";
 import { bootDsh } from "./dsh.js";
 import { createHermes } from "./hermes.js";
 import { buildAgentImage, type ImageResolveOptions } from "./image.js";
@@ -71,8 +72,23 @@ export async function runTask(
   // compose + plan (Hermes)
   const planned = hermes.plan(task);
 
-  // policy admission — deny fails closed; approval-gated tools are not executed
-  const admission = admitCalls(state.policies, planned.calls);
+  // policy admission — deny fails closed; approval-gated tools pause for approve/reject
+  const admission = admitCalls(state.policies, planned.calls, state, {
+    taskId: task.id,
+    agent: worker.agent,
+  });
+  if (admission.needsApproval.length) {
+    requestApprovals(state, {
+      taskId: task.id,
+      agent: worker.agent,
+      workerId: worker.id,
+      tools: admission.needsApproval.map((n) => ({
+        name: n.name,
+        reason: n.reason,
+        input: n.input,
+      })),
+    });
+  }
   const { steps: execSteps } = await dsh.execute({
     thoughts: planned.thoughts,
     calls: admission.allowed,

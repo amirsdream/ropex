@@ -3,6 +3,7 @@
  * Deny fails closed; requireApproval marks calls that need a human/agent ack.
  */
 
+import { isToolApproved } from "./approval.js";
 import type { ClusterState, Policy, Task } from "./types.js";
 
 export type AdmissionDecision =
@@ -30,12 +31,20 @@ export function effectivePermissions(policies: Policy[]): {
   };
 }
 
-export function admitTool(policies: Policy[], tool: string): AdmissionDecision {
+export function admitTool(
+  policies: Policy[],
+  tool: string,
+  state?: ClusterState,
+  ctx?: { taskId?: string; agent?: string },
+): AdmissionDecision {
   const perms = effectivePermissions(policies);
   if (perms.deny.includes(tool)) {
     return { status: "deny", reason: `tool denied by policy: ${tool}` };
   }
   if (perms.requireApproval.includes(tool)) {
+    if (state && ctx && isToolApproved(state, tool, ctx)) {
+      return { status: "allow" };
+    }
     return {
       status: "approval",
       tools: [tool],
@@ -48,21 +57,23 @@ export function admitTool(policies: Policy[], tool: string): AdmissionDecision {
 export function admitCalls(
   policies: Policy[],
   calls: Array<{ name: string; input: Record<string, unknown> }>,
+  state?: ClusterState,
+  ctx?: { taskId?: string; agent?: string },
 ): {
   allowed: Array<{ name: string; input: Record<string, unknown> }>;
   denied: Array<{ name: string; reason: string }>;
-  needsApproval: Array<{ name: string; reason: string }>;
+  needsApproval: Array<{ name: string; reason: string; input: Record<string, unknown> }>;
 } {
   const allowed: Array<{ name: string; input: Record<string, unknown> }> = [];
   const denied: Array<{ name: string; reason: string }> = [];
-  const needsApproval: Array<{ name: string; reason: string }> = [];
+  const needsApproval: Array<{ name: string; reason: string; input: Record<string, unknown> }> = [];
 
   for (const call of calls) {
-    const d = admitTool(policies, call.name);
+    const d = admitTool(policies, call.name, state, ctx);
     if (d.status === "deny") {
       denied.push({ name: call.name, reason: d.reason });
     } else if (d.status === "approval") {
-      needsApproval.push({ name: call.name, reason: d.reason });
+      needsApproval.push({ name: call.name, reason: d.reason, input: call.input });
     } else {
       allowed.push(call);
     }
@@ -73,7 +84,6 @@ export function admitCalls(
 /** Block enqueue of tasks that only target denied delivery surfaces (soft check). */
 export function admitTask(state: ClusterState, task: Task): AdmissionDecision {
   const perms = effectivePermissions(state.policies);
-  // If prompt explicitly asks for a denied tool, deny admission.
   for (const tool of perms.deny) {
     if (new RegExp(`\\b${escapeReg(tool)}\\b`, "i").test(task.prompt)) {
       return { status: "deny", reason: `task references denied tool: ${tool}` };
@@ -83,6 +93,7 @@ export function admitTask(state: ClusterState, task: Task): AdmissionDecision {
     new RegExp(`\\b${escapeReg(t)}\\b`, "i").test(task.prompt),
   );
   if (approvalHits.length) {
+    // Still enqueue — runtime will create ApprovalRequests; task itself may proceed for other tools.
     return {
       status: "approval",
       tools: approvalHits,

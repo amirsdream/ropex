@@ -45,22 +45,30 @@ export function enqueueTask(
   return item;
 }
 
-/** Idle workers only, least-recently-used first (fair across replicas). */
-export function pickIdleWorker(state: ClusterState, agentName: string): Worker | undefined {
+/** Idle workers only, least-recently-used first, with optional fleet affinity. */
+export function pickIdleWorker(
+  state: ClusterState,
+  agentName: string,
+  opts: { preferFleet?: string } = {},
+): Worker | undefined {
   const idle = state.workers.filter(
     (w) => w.agent === agentName && (w.status === "idle" || w.status === "running" || w.status === "pending"),
   );
-  // Prefer truly idle; among them, oldest lastTaskAt (or never used).
   const ranked = [...idle].sort((a, b) => {
     const aIdle = a.status === "idle" || a.status === "pending" ? 0 : 1;
     const bIdle = b.status === "idle" || b.status === "pending" ? 0 : 1;
     if (aIdle !== bIdle) return aIdle - bIdle;
+    // Fleet affinity: prefer workers in the requested fleet.
+    if (opts.preferFleet) {
+      const aFleet = a.fleet === opts.preferFleet ? 0 : 1;
+      const bFleet = b.fleet === opts.preferFleet ? 0 : 1;
+      if (aFleet !== bFleet) return aFleet - bFleet;
+    }
     const at = a.lastTaskAt ?? "";
     const bt = b.lastTaskAt ?? "";
     if (at !== bt) return at < bt ? -1 : 1;
     return a.replica - b.replica;
   });
-  // Only claim idle/pending — never steal a busy running worker.
   return ranked.find((w) => w.status === "idle" || w.status === "pending");
 }
 
@@ -73,14 +81,23 @@ export type DrainResult = {
  * Claim up to `limit` pending queue items onto idle workers.
  * Does not execute — caller runs `runTask` then `completeQueued`.
  */
-export function claimPending(state: ClusterState, limit = 32): DrainResult {
+export function claimPending(
+  state: ClusterState,
+  limit = 32,
+  opts: { preferFleet?: string } = {},
+): DrainResult {
   ensureQueue(state);
   const claimed: DrainResult["claimed"] = [];
   const pending = state.queue.filter((q) => q.status === "pending");
 
   for (const item of pending) {
     if (claimed.length >= limit) break;
-    const worker = pickIdleWorker(state, item.task.agent);
+    const agent = state.desired.find((a) => a.metadata.name === item.task.agent);
+    const fleetHint =
+      opts.preferFleet ??
+      state.workers.find((w) => w.agent === item.task.agent)?.fleet ??
+      agent?.derivedFrom?.fleet;
+    const worker = pickIdleWorker(state, item.task.agent, { preferFleet: fleetHint });
     if (!worker) continue;
     item.status = "claimed";
     item.workerId = worker.id;

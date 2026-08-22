@@ -203,6 +203,20 @@ export type RateLimitBucket = {
   count: number;
 };
 
+/** Human/agent approval for Policy.requireApproval tools. */
+export type ApprovalRequest = {
+  id: string;
+  at: string;
+  status: "pending" | "approved" | "rejected";
+  tool: string;
+  taskId: string;
+  agent: string;
+  workerId: string;
+  reason: string;
+  input?: Record<string, unknown>;
+  decidedAt?: string;
+};
+
 export type ClusterState = {
   revision: number;
   source: string;
@@ -221,6 +235,8 @@ export type ClusterState = {
   trajectories: TrajectoryRecord[];
   /** Webhook rate-limit buckets. */
   rateLimits: RateLimitBucket[];
+  /** Pending/decided approvals for gated tools. */
+  approvals: ApprovalRequest[];
   /** Durable work queue (webhook / simulate / CLI). */
   queue: QueuedTask[];
   metrics: ClusterMetrics;

@@ -14,6 +14,7 @@ import { fanOutTask } from "./fanout.js";
 import { syncGitRepos } from "./gitrepo.js";
 import { runSandboxDemo } from "./demo.js";
 import { exportTrajectoriesJsonl, trajectoriesFor } from "./trajectory.js";
+import { decideApproval, pendingApprovals } from "./approval.js";
 import { parseManifests } from "./spec.js";
 import { ingestGithubWebhook, signGithubPayload } from "./webhook.js";
 import { parseInterval, watchLoop, watchOnce } from "./watch.js";
@@ -35,6 +36,9 @@ Usage:
   ropex replay <delivery-id>          Replay a delivery into the journal
   ropex demo [--root path]            End-to-end sandbox demo (no network)
   ropex trajectories [--agent a] [--jsonl]
+  ropex approvals                 List pending approval requests
+  ropex approve <id>              Approve a gated tool (re-enqueue task)
+  ropex reject <id>               Reject a gated tool
   ropex watch <path> [--once] [--interval 5s]
                                      Reconcile manifests on an interval (Flux-style)
   ropex metrics [--prometheus]    Export cluster metrics
@@ -248,6 +252,40 @@ async function main(argv: string[]): Promise<number> {
           `${t.id}  ${t.agent}@${t.workerId}  steps=${t.steps.length}  ${t.output.slice(0, 60)}`,
         );
       }
+      return 0;
+    }
+    case "approvals": {
+      const state = loadState(root);
+      const pending = pendingApprovals(state);
+      if (!pending.length) {
+        console.log("no pending approvals");
+        return 0;
+      }
+      for (const a of pending) {
+        console.log(`[pending] ${a.id}  tool=${a.tool}  agent=${a.agent}  task=${a.taskId}`);
+        console.log(`  ${a.reason}`);
+      }
+      return 0;
+    }
+    case "approve":
+    case "reject": {
+      const id = rest[0];
+      if (!id) return fail(`usage: ropex ${cmd} <approval-id>`);
+      const state = loadState(root);
+      const decided = decideApproval(state, id, cmd === "approve" ? "approved" : "rejected");
+      if (!decided) return fail(`approval not found or not pending: ${id}`);
+      if (cmd === "approve") {
+        const task = state.queue.find((q) => q.id === decided.taskId)?.task ?? {
+          id: `${decided.taskId}-retry`,
+          agent: decided.agent,
+          prompt: `retry after approval of ${decided.tool}`,
+        };
+        enqueueTask(state, { ...task, id: `${decided.taskId}-after-approve` }, "cli");
+        console.log(`approved ${decided.tool}; re-enqueued ${decided.taskId}-after-approve`);
+      } else {
+        console.log(`rejected ${decided.tool}`);
+      }
+      saveState(root, state);
       return 0;
     }
     case "watch": {

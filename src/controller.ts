@@ -15,6 +15,7 @@ import { ensureJournal } from "./journal.js";
 import { ensureSkillRegistry } from "./skills.js";
 import { ensureTrajectories } from "./trajectory.js";
 import { ensureRateLimits } from "./ratelimit.js";
+import { ensureApprovals } from "./approval.js";
 import { applyWorktrees } from "./worktree.js";
 import type { ClusterState, Manifest, ReconcilePlan, SharedMemoryFact, Worker } from "./types.js";
 
@@ -34,6 +35,7 @@ export function emptyState(source = ""): ClusterState {
     deliveries: [],
     trajectories: [],
     rateLimits: [],
+    approvals: [],
     queue: [],
     metrics: emptyMetrics(),
   };
@@ -51,6 +53,7 @@ export function loadState(root: string): ClusterState {
     ensureSkillRegistry(state);
     ensureTrajectories(state);
     ensureRateLimits(state);
+    ensureApprovals(state);
     return state;
   } catch {
     return emptyState();
@@ -154,6 +157,7 @@ export function planReconcile(
     deliveries: current.deliveries ?? [],
     trajectories: current.trajectories ?? [],
     rateLimits: current.rateLimits ?? [],
+    approvals: current.approvals ?? [],
     lastReconcile: new Date().toISOString(),
   };
 
