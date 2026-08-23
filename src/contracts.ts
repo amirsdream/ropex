@@ -446,4 +446,6 @@ export const API_ROUTES = {
   drain: "/api/v1/drain",
   policySim: "/api/v1/policy/simulate",
   hygiene: "/api/v1/hygiene",
+  pipeline: "/api/v1/pipeline",
+  events: "/api/v1/events",
 } as const;

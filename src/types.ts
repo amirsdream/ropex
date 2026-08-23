@@ -342,6 +342,29 @@ export type AuditEvent = {
   meta?: Record<string, string | number | boolean | null>;
 };
 
+/** External executor pipeline run (engine-neutral API). */
+export type PipelineStageRun = {
+  id: string;
+  agent: string;
+  prompt: string;
+  role?: string;
+  taskId: string;
+  status: "pending" | "running" | "done" | "failed";
+  workerId?: string;
+  output?: string;
+  error?: string;
+};
+
+export type PipelineRun = {
+  id: string;
+  prompt: string;
+  createdAt: string;
+  updatedAt: string;
+  status: "pending" | "running" | "done" | "failed";
+  stages: PipelineStageRun[];
+  output?: string;
+};
+
 export type ClusterState = {
   revision: number;
   source: string;
@@ -384,6 +407,8 @@ export type ClusterState = {
   drainConcurrency?: number;
   /** Sticky worker affinity hints (repo/agent → worker) with TTL. */
   affinity?: AffinityBinding[];
+  /** Durable pipeline runs for external executor clients. */
+  pipelines?: PipelineRun[];
   lastReconcile?: string;
 };
 

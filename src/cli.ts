@@ -16,6 +16,7 @@ import { promoteMemoryFact } from "./memory.js";
 import { compactJournal } from "./journal.js";
 import { runTask } from "./runtime.js";
 import { drainQueue, setDrainConcurrency, getDrainConcurrency } from "./scheduler.js";
+import { submitPipeline } from "./executor.js";
 import { hygieneReport, runHygiene } from "./hygiene.js";
 import { budgetReport } from "./budget.js";
 import { planAutoscale } from "./autoscale.js";
@@ -83,6 +84,8 @@ Usage:
   ropex gc                        Remove orphan worker worktrees
   ropex drain [--limit N] [--concurrency N]
                                      Claim idle workers; --concurrency persists preference
+  ropex pipeline <prompt> [--no-drain] [--concurrency N]
+                                     Run multi-stage pipeline (executor API)
   ropex sync [--due]                  Sync declared GitRepos (multi-repo union)
   ropex replay <delivery-id>          Replay a delivery into the journal
   ropex demo [--root path]            End-to-end sandbox demo (no network)
@@ -485,6 +488,28 @@ async function main(argv: string[]): Promise<number> {
       );
       for (const r of results) console.log(`  ${r.worker.id}: ${r.output}`);
       return 0;
+    }
+    case "pipeline": {
+      const prompt = rest.filter((a) => !a.startsWith("--")).join(" ").trim();
+      if (!prompt) return fail("pipeline requires a prompt");
+      const state = loadState(root);
+      const drain = !rest.includes("--no-drain");
+      const concurrency = flag(rest, "--concurrency");
+      const result = await submitPipeline(state, {
+        prompt,
+        root,
+        drain,
+        concurrency: concurrency !== undefined ? Number(concurrency) : undefined,
+      });
+      saveState(root, state);
+      console.log(
+        `pipeline ${result.pipeline.id}  status=${result.pipeline.status}  stages=${result.pipeline.stages.length}${result.drained !== undefined ? `  drained=${result.drained}` : ""}`,
+      );
+      for (const s of result.pipeline.stages) {
+        console.log(`  ${s.id}→${s.agent}  ${s.status}${s.output ? `: ${s.output.slice(0, 120)}` : ""}`);
+      }
+      if (result.pipeline.output) console.log(`\n${result.pipeline.output.slice(0, 2000)}`);
+      return result.pipeline.status === "failed" ? 1 : 0;
     }
     case "sync": {
       const state = loadState(root);

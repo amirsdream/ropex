@@ -42,6 +42,14 @@ import { liveHermesScaffold, resolveHermesBackend } from "./hermes.js";
 import { githubAppScaffold } from "./github-app.js";
 import { rateLimitReport } from "./ratelimit.js";
 import { drainQueue, drainStatus, setDrainConcurrency } from "./scheduler.js";
+import {
+  getPipeline,
+  getExecutorEvents,
+  mapExecutorEventToUi,
+  submitPipeline,
+  subscribeExecutorEvents,
+  type SubmitPipelineOptions,
+} from "./executor.js";
 import { hygieneReport, runHygiene } from "./hygiene.js";
 import { promoteSkill, shareSkill, skillsCatalog } from "./skills.js";
 import { auditsFor, exportAuditJsonl } from "./audit.js";
@@ -938,6 +946,75 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
       return json(res, drainStatus(state));
     }
     return json(res, drainStatus(state));
+  }
+  if (url.pathname === API_ROUTES.pipeline) {
+    if (req.method === "POST") {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      let body: SubmitPipelineOptions = { prompt: "" };
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as SubmitPipelineOptions;
+      } catch {
+        return json(res, { error: "invalid json" }, 400);
+      }
+      if (!body.prompt?.trim()) return json(res, { error: "need prompt" }, 400);
+      const result = await submitPipeline(state, { ...body, root: opts.root });
+      opts.saveState?.(opts.root, state);
+      return json(res, {
+        ok: true,
+        pipeline: result.pipeline,
+        drained: result.drained,
+      });
+    }
+    const id = url.searchParams.get("id");
+    if (!id) return json(res, { error: "need id query param" }, 400);
+    const pipeline = getPipeline(state, id);
+    if (!pipeline) return json(res, { error: `pipeline not found: ${id}` }, 404);
+    return json(res, pipeline);
+  }
+  if (url.pathname === API_ROUTES.events) {
+    if (req.method !== "GET") {
+      res.writeHead(405, { "content-type": "text/plain" });
+      res.end("method not allowed");
+      return;
+    }
+    const pipelineId = url.searchParams.get("pipelineId") ?? "*";
+    const uiFormat = url.searchParams.get("format") === "ui";
+    res.writeHead(200, {
+      "content-type": "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache, no-transform",
+      connection: "keep-alive",
+    });
+    res.write(": connected\n\n");
+    const write = (chunk: string) => {
+      if (uiFormat) {
+        try {
+          const raw = chunk.trim().replace(/^data:\s*/, "");
+          if (raw) {
+            const event = JSON.parse(raw) as import("./executor.js").ExecutorEvent;
+            const mapped = mapExecutorEventToUi(event);
+            res.write(`data: ${JSON.stringify(mapped)}\n\n`);
+            return;
+          }
+        } catch {
+          /* fall through */
+        }
+      }
+      res.write(chunk);
+    };
+    const unsub = subscribeExecutorEvents(
+      pipelineId,
+      write,
+      () => {
+        try {
+          res.end();
+        } catch {
+          /* closed */
+        }
+      },
+    );
+    req.on("close", () => unsub());
+    return;
   }
   if (url.pathname === API_ROUTES.hygiene) {
     if (req.method === "POST") {
