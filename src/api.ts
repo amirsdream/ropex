@@ -47,7 +47,9 @@ import {
   getExecutorEvents,
   mapExecutorEventToUi,
   submitPipeline,
+  drainPipeline,
   subscribeExecutorEvents,
+  validatePipelineAgents,
   type SubmitPipelineOptions,
 } from "./executor.js";
 import { hygieneReport, runHygiene } from "./hygiene.js";
@@ -957,14 +959,28 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
       } catch {
         return json(res, { error: "invalid json" }, 400);
       }
+      if (body.action === "drain") {
+        if (!body.pipelineId) return json(res, { error: "need pipelineId for drain action" }, 400);
+        const result = await drainPipeline(state, body.pipelineId, {
+          root: opts.root,
+          concurrency: body.concurrency,
+        });
+        if (!result) return json(res, { error: `pipeline not found: ${body.pipelineId}` }, 404);
+        opts.saveState?.(opts.root, state);
+        return json(res, { ok: true, action: "drain", pipeline: result.pipeline, drained: result.drained });
+      }
       if (!body.prompt?.trim()) return json(res, { error: "need prompt" }, 400);
-      const result = await submitPipeline(state, { ...body, root: opts.root });
-      opts.saveState?.(opts.root, state);
-      return json(res, {
-        ok: true,
-        pipeline: result.pipeline,
-        drained: result.drained,
-      });
+      try {
+        const result = await submitPipeline(state, { ...body, root: opts.root });
+        opts.saveState?.(opts.root, state);
+        return json(res, {
+          ok: true,
+          pipeline: result.pipeline,
+          drained: result.drained,
+        });
+      } catch (err) {
+        return json(res, { error: err instanceof Error ? err.message : String(err) }, 400);
+      }
     }
     const id = url.searchParams.get("id");
     if (!id) return json(res, { error: "need id query param" }, 400);

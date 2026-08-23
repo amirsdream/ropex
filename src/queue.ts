@@ -236,6 +236,8 @@ export function claimPending(
     ageBoostMax?: number;
     /** When true (default), persist age boosts onto pending items before claim. */
     agePriorities?: boolean;
+    /** Only consider queue items whose id starts with this prefix. */
+    taskIdPrefix?: string;
   } = {},
 ): DrainResult {
   ensureQueue(state);
@@ -261,6 +263,7 @@ export function claimPending(
   const claimed: DrainResult["claimed"] = [];
   const pending = state.queue
     .filter((q) => isClaimablePending(q, now))
+    .filter((q) => !opts.taskIdPrefix || q.id.startsWith(opts.taskIdPrefix))
     .sort((a, b) => {
       const pa = effectivePriority(a, now, opts);
       const pb = effectivePriority(b, now, opts);

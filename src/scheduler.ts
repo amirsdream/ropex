@@ -25,6 +25,8 @@ export type DrainOptions = RunTaskOptions & {
   limit?: number;
   /** Max parallel runTask calls (default: state.drainConcurrency or 1). */
   concurrency?: number;
+  /** Only claim queue items whose id starts with this prefix (pipeline scope). */
+  taskIdPrefix?: string;
   /** Max claim attempts before dead-letter (default 3). */
   maxAttempts?: number;
   /** Claim lease duration in ms (default 5m). */
@@ -81,6 +83,7 @@ export async function drainQueue(
   const { claimed } = claimPending(state, opts.limit ?? 32, {
     leaseMs: opts.leaseMs,
     maxAttempts: opts.maxAttempts,
+    taskIdPrefix: opts.taskIdPrefix,
   });
   const concurrency = clampDrainConcurrency(opts.concurrency ?? getDrainConcurrency(state));
   const results: RunResult[] = [];

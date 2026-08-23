@@ -33,11 +33,14 @@ export {
 export { buildControlPlaneView, memoryForWorker, startControlPlaneServer } from "./api.js";
 export {
   submitPipeline,
+  drainPipeline,
+  drainPipelineStages,
   getPipeline,
   getExecutorEvents,
   subscribeExecutorEvents,
   emitExecutorEvent,
   mapExecutorEventToUi,
+  validatePipelineAgents,
 } from "./executor.js";
 export type { ExecutorEvent, ExecutorEventKind, SubmitPipelineOptions, SubmitPipelineResult } from "./executor.js";
 export { planPipeline } from "./pipeline.js";

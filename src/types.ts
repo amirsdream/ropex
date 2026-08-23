@@ -363,6 +363,22 @@ export type PipelineRun = {
   status: "pending" | "running" | "done" | "failed";
   stages: PipelineStageRun[];
   output?: string;
+  /** Recent executor events (persisted, capped). */
+  events?: PipelineEventRecord[];
+};
+
+/** Persisted executor event snapshot on a pipeline run. */
+export type PipelineEventRecord = {
+  pipelineId: string;
+  at: string;
+  kind: string;
+  stageId?: string;
+  agent?: string;
+  taskId?: string;
+  workerId?: string;
+  message?: string;
+  artifact?: string;
+  meta?: Record<string, string | number | boolean | null>;
 };
 
 export type ClusterState = {
