@@ -47,6 +47,7 @@ import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { ensureQueue, queueSummary, pauseQueue, resumeQueue, requeueDead, deadLetters, isQueuePaused } from "./queue.js";
 import { trajectoriesFor, exportTrajectoriesJsonl, ensureTrajectories } from "./trajectory.js";
+import { syncTasksFromDir, syncTasksFromGitRepos, taskGitSummaryFromRepos } from "./tasks.js";
 import { WORKFLOW_STAGES } from "./workflow.js";
 import type { ClusterState, DesiredAgent } from "./types.js";
 
@@ -69,7 +70,7 @@ const MIME: Record<string, string> = {
   ".json": "application/json",
 };
 
-export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
+export function buildControlPlaneView(state: ClusterState, root = process.cwd()): ControlPlaneView {
   ensureQueue(state);
   const live = state.workers.filter((w) => w.status !== "retired");
   const fleets = buildFleetViews(state);
@@ -113,6 +114,7 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
     }));
 
   const memGit = memoryGitSummary(state);
+  const taskGit = taskGitSummaryFromRepos(state, root);
 
   const hermes: HermesSurfaceView[] = state.desired.map((a) => hermesSurface(a));
   const harness: HarnessSurfaceView[] = state.desired.map((a) => harnessSurface(a));
@@ -140,6 +142,14 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
       gitBacked: memGit.gitBacked,
       runtimeOnly: memGit.runtimeOnly,
       defaultDir: DEFAULT_MEMORY_DIR,
+    },
+    taskGit: {
+      pending: taskGit.pending,
+      done: taskGit.done,
+      failed: taskGit.failed,
+      scanned: taskGit.scanned,
+      defaultDir: taskGit.defaultDir,
+      items: taskGit.items.map((t) => ({ ...t })),
     },
     hermes,
     harness,
@@ -376,9 +386,11 @@ export function buildControlPlaneView(state: ClusterState): ControlPlaneView {
           loop: p.loop,
           plugins: [...p.plugins],
           description: p.description,
+          dshProfile: p.dshProfile,
         })),
         liveReady: scaffold.liveReady,
         packageInstalled: scaffold.packageInstalled,
+        apiKeyPresent: scaffold.apiKeyPresent,
         scaffoldHint: scaffold.summary,
       };
     })(),
@@ -527,7 +539,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
     return json(res, { brand: "ropex", ...report }, report.ok ? 200 : 503);
   }
   if (url.pathname === API_ROUTES.view) {
-    return json(res, buildControlPlaneView(state));
+    return json(res, buildControlPlaneView(state, opts.root));
   }
   if (url.pathname === API_ROUTES.memory) {
     if (req.method === "POST") {
@@ -574,6 +586,34 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
     const workerId = url.searchParams.get("worker");
     if (workerId) return json(res, memoryForWorker(state, workerId));
     return json(res, { facts: state.memory, summary: memoryGitSummary(state) });
+  }
+  if (url.pathname === API_ROUTES.tasks) {
+    if (req.method === "POST") {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      let body: { action?: string; all?: boolean } = {};
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as typeof body;
+      } catch {
+        return json(res, { error: "invalid json" }, 400);
+      }
+      const action = body.action ?? url.searchParams.get("action") ?? "";
+      if (action === "sync") {
+        const fromRepos = url.searchParams.get("repos") === "1" || body.all;
+        const result = fromRepos
+          ? syncTasksFromGitRepos(state, opts.root)
+          : syncTasksFromDir(state, opts.root);
+        opts.saveState?.(opts.root, state);
+        return json(res, {
+          ok: true,
+          action: "sync",
+          ...result,
+          summary: taskGitSummaryFromRepos(state, opts.root),
+        });
+      }
+      return json(res, { error: "action must be sync" }, 400);
+    }
+    return json(res, { summary: taskGitSummaryFromRepos(state, opts.root) });
   }
   if (url.pathname === API_ROUTES.workers) {
     return json(res, buildControlPlaneView(state).workers);

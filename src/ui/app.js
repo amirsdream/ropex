@@ -62,6 +62,7 @@ function renderPulse(view) {
   const items = [
     ["live", view.counts.workersLive],
     ["memory", view.counts.memoryFacts],
+    ["tasks", view.taskGit?.pending ?? 0],
     ["queue", view.counts.queuePending],
     ["done", view.counts.tasksCompleted],
     ["unhealthy", view.metrics?.workersUnhealthy ?? 0],
@@ -133,6 +134,61 @@ function renderMemory(view) {
       </article>`,
     )
     .join("");
+}
+
+function renderTasks(view) {
+  const toolbar = $("#tasks-toolbar");
+  const tg = view.taskGit ?? { pending: 0, done: 0, failed: 0, scanned: 0, defaultDir: "tasks", items: [] };
+  toolbar.innerHTML = `
+    <div class="worker-row">
+      <div>
+        <div class="worker-id">Git tasks</div>
+        <div class="digest">${tg.pending} pending · ${tg.done} done · ${tg.failed} failed · <code>${escapeHtml(tg.defaultDir)}/</code></div>
+      </div>
+      <button type="button" class="btn btn-secondary btn-sm" data-task-action="sync">Sync from git</button>
+    </div>`;
+  toolbar.querySelectorAll("[data-task-action]").forEach((btn) => {
+    btn.addEventListener("click", () => taskAction(btn.getAttribute("data-task-action")));
+  });
+
+  const el = $("#tasks-stream");
+  if (!tg.items?.length) {
+    el.innerHTML = `<p class="empty">No Task YAML yet. Add files under <code>tasks/</code> or run <code>ropex tasks sync</code>.</p>`;
+    return;
+  }
+  el.innerHTML = tg.items
+    .map(
+      (t, i) => `
+      <article class="mem-item" style="animation-delay:${Math.min(i, 12) * 0.04}s">
+        <div class="mem-meta">
+          <span class="scope">${escapeHtml(t.status)}</span>
+          ${t.inQueue ? `<span class="scope" title="queue">${escapeHtml(t.queueStatus ?? "queued")}</span>` : ""}
+          <span>${escapeHtml(t.agent)}</span>
+          ${t.priority != null ? `<span>p${t.priority}</span>` : ""}
+        </div>
+        <p class="mem-text"><strong>${escapeHtml(t.id)}</strong> — ${escapeHtml(t.prompt)}</p>
+      </article>`,
+    )
+    .join("");
+}
+
+async function taskAction(action) {
+  const res = await fetch("/api/v1/tasks", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action }),
+  });
+  if (!res.ok) {
+    showToast(`Task ${action} failed`, "err");
+    return;
+  }
+  const result = await res.json().catch(() => ({}));
+  showToast(
+    action === "sync"
+      ? `Synced ${result.enqueued?.length ?? 0} tasks (${result.skipped?.length ?? 0} skipped)`
+      : `Task ${action} ok`,
+  );
+  await refresh();
 }
 
 async function memoryAction(action) {
@@ -881,7 +937,7 @@ function renderDsh(view) {
         <div class="digest">${escapeHtml(d.scaffoldHint)}</div>
       </div>
       <div class="status status-${d.liveReady ? "idle" : "failed"}">${d.liveReady ? "live" : "simulated"}</div>
-      <div class="digest">backend ${escapeHtml(d.backend)}</div>
+      <div class="digest">backend ${escapeHtml(d.backend)} · pkg ${d.packageInstalled ? "yes" : "no"} · key ${d.apiKeyPresent ? "yes" : "no"}</div>
       <div class="digest">profiles ${d.profiles?.length ?? 0}</div>
     </div>`;
   const rows = (d.profiles ?? [])
@@ -893,7 +949,7 @@ function renderDsh(view) {
           <div class="digest">${escapeHtml(p.description)}</div>
         </div>
         <div class="status status-idle">${escapeHtml(p.loop)}</div>
-        <div class="digest">${escapeHtml((p.plugins ?? []).join(", "))}</div>
+        <div class="digest">${escapeHtml((p.plugins ?? []).join(", "))} · dsh ${escapeHtml(p.dshProfile ?? "headless")}</div>
         <div class="digest"></div>
       </div>`,
     )
@@ -1128,6 +1184,7 @@ async function main() {
     renderPulse(view);
     renderWorkflow(view);
     renderMemory(view);
+    renderTasks(view);
     renderWorkers(view);
     renderHealth(view);
     renderHygiene(view);
