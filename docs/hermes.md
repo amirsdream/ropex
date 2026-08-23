@@ -13,9 +13,17 @@ Ropex plans through `createHermes` (`src/hermes.ts`) — soul, MemoryPort, skill
 
 Live hermes-agent is a **future process/RPC seam**. Do not require network or the package in CI.
 
+## Install
+
+```bash
+npm install          # core only — simulated brain by default
+```
+
+Install `hermes-agent` only when enabling live mode (`ROPEX_HERMES_BACKEND=live`). It is not part of the default `npm install` (keeps installs fast and network-light).
+
 ## Steps to wire live
 
-1. Optional peer: `hermes-agent` (never a hard CI dependency).
+1. Optional peer: `npm install hermes-agent` (never a hard CI dependency).
 2. Implement `createLiveHermes(spec)` returning `HermesContract` over stdio/RPC.
 3. Load `hermes.soul` (SOUL.md path) into the live process identity.
 4. Bridge MemoryPort to `SharedMemoryStore` with the same scope rules.

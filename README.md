@@ -79,6 +79,22 @@ Ropex is the control plane that multiplies those runtimes across repos and optio
 
 ## Quick start
 
+If `npm install` hangs, use the bootstrap script (skips the huge live DeepSeek tree):
+
+```bash
+bash scripts/bootstrap.sh
+```
+
+Or manually:
+
+```bash
+# edit package.json — delete the whole "optionalDependencies" block
+rm -rf node_modules package-lock.json
+npm install --no-fund --no-audit
+```
+
+Normal path (after PR #16 merge / on `cursor/npm-install-fast-4b15`):
+
 ```bash
 npm install
 npm test
@@ -89,7 +105,27 @@ npx tsx src/cli.ts demo --root /tmp/ropex-demo
 # Load example fleet + control-plane UI
 npx tsx src/cli.ts apply fleets/examples/github-control-plane.yaml
 npx tsx src/cli.ts ui                    # http://127.0.0.1:7780
+```
 
+`npm install` only pulls Ropex’s small deps (`yaml`, TypeScript, vitest). Live backends are **not** installed by default — `@deepseek-ai/dsh` is a huge tree and will make install look stuck. Simulated Hermes/DeepSeek work out of the box.
+
+For live backends later (optional):
+
+```bash
+npm install @deepseek-ai/dsh@^0.1.1-rc.2 hermes-agent@^0.20.5
+# then: ROPEX_DSH_BACKEND=live ROPEX_HERMES_BACKEND=live
+```
+
+If a previous install hung, cancel it (`Ctrl+C`) and run:
+
+```bash
+bash scripts/bootstrap.sh
+# or:
+rm -rf node_modules package-lock.json
+npm install
+```
+
+```bash
 # Executor API (CLI or UI Pipelines section)
 npx tsx src/cli.ts pipeline "Summarize the repo layout"
 
