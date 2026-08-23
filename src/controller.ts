@@ -64,8 +64,7 @@ export function loadState(root: string): ClusterState {
     ensureRateLimits(state);
     ensureApprovals(state);
     ensureAudit(state);
-    if (!state.gitRepoStatus) state.gitRepoStatus = [];
-    ensureBudgets(state);
+    if (!state.pipelines) state.pipelines = [];
     return state;
   } catch {
     return emptyState();

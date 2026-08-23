@@ -32,6 +32,17 @@ export {
 } from "./memory.js";
 export { buildControlPlaneView, memoryForWorker, startControlPlaneServer } from "./api.js";
 export {
+  submitPipeline,
+  getPipeline,
+  getExecutorEvents,
+  subscribeExecutorEvents,
+  emitExecutorEvent,
+  mapExecutorEventToUi,
+} from "./executor.js";
+export type { ExecutorEvent, ExecutorEventKind, SubmitPipelineOptions, SubmitPipelineResult } from "./executor.js";
+export { planPipeline } from "./pipeline.js";
+export type { PipelineStagePlan } from "./pipeline.js";
+export {
   ensureWorktree,
   removeWorktree,
   worktreePath,
