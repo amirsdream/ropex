@@ -58,7 +58,7 @@ export async function createHarness(
   opts: CreateHarnessOptions = {},
 ): Promise<Kernel> {
   const kernel = new Kernel();
-  const model = spec.harness.model ?? "deepseek-v4-flash";
+  const model = spec.harness.model ?? "gpt-4o-mini";
   const tools = toolsFor(spec);
   const memoryPort = opts.memory ?? opts.hermes?.port;
   if (memoryPort && !tools.includes("memory")) {

@@ -98,7 +98,7 @@ The **Harness** section shows backend readiness:
 | Component | Default | Live requires |
 | --- | --- | --- |
 | Hermes brain | `simulated` (`createHermes()`) | `ROPEX_HERMES_BACKEND=live`, `hermes-agent` |
-| DeepSeek harness | `simulated` (`bootDsh()`) | `ROPEX_DSH_BACKEND=live`, `@deepseek-ai/dsh`, `DEEPSEEK_API_KEY` |
+| DeepSeek harness | `simulated` (`bootDsh()`) | `ROPEX_DSH_BACKEND=live`, `@deepseek-ai/dsh`, **`OPENAI_API_KEY`** (preferred) or `DEEPSEEK_API_KEY` |
 
 The control plane itself is always **live** (real state, real drain). Agent backends stay simulated in CI and offline demos.
 
@@ -126,6 +126,8 @@ See [hermes.md](./hermes.md) and [dsh.md](./dsh.md) for wiring checklists.
 | `ROPEX_PIPELINE_PLANNER` | `heuristic` (default) or `hermes` for pipeline planning |
 | `ROPEX_HERMES_BACKEND` | `simulated` \| `live` |
 | `ROPEX_DSH_BACKEND` | `simulated` \| `live` |
+| `OPENAI_API_KEY` | Preferred live LLM key |
+| `DEEPSEEK_API_KEY` | Optional live LLM key fallback |
 
 ## What the UI is not
 

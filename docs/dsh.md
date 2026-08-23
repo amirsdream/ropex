@@ -25,6 +25,9 @@ Do **not** install `@deepseek-ai/dsh` unless you need live mode. That package pu
 ```bash
 # live only (optional, after core install works)
 npm install @deepseek-ai/dsh@^0.1.1-rc.2
+export OPENAI_API_KEY=sk-...          # preferred
+# export DEEPSEEK_API_KEY=...         # optional fallback
+export ROPEX_DSH_BACKEND=live
 ```
 
 ## Steps to wire live
@@ -40,12 +43,17 @@ npm install @deepseek-ai/dsh@^0.1.1-rc.2
 
 ```
 ROPEX_DSH_BACKEND=simulated|live
-DEEPSEEK_API_KEY=(live only)
+OPENAI_API_KEY=(preferred live key — default for Ropex)
+DEEPSEEK_API_KEY=(optional fallback)
 ```
+
+Live readiness prefers **`OPENAI_API_KEY`**. If both are set, OpenAI wins. Default harness model (when YAML omits `harness.model`) is `gpt-4o-mini`.
+
+Configure non-DeepSeek models in dsh provider settings (`llm-pi-ai`) so headless runs can call OpenAI (or any OpenAI-compatible endpoint).
 
 ## Surfaces
 
-- Control-plane UI **DeepSeek harness** section (from `/api/v1/view`.dsh)
-- `liveDshScaffold()` for CLI/docs/programmatic checks
+- Control-plane UI **DeepSeek harness** section (from `/api/v1/view`.dsh) shows `apiKeySource`
+- `liveDshScaffold()` / `resolveLlmApiKey()` for CLI/docs/programmatic checks
 
 See also [architecture.md](./architecture.md), [control-plane-ui.md](./control-plane-ui.md), and [executor-api.md](./executor-api.md).

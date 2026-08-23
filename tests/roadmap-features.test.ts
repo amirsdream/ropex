@@ -58,7 +58,9 @@ describe("roadmap: live dsh wiring", () => {
   });
 
   it("runHeadlessDsh fails closed without package or API key", async () => {
-    await expect(runHeadlessDsh("headless", "hello")).rejects.toThrow(/not installed|DEEPSEEK_API_KEY/);
+    await expect(runHeadlessDsh("headless", "hello")).rejects.toThrow(
+      /not installed|OPENAI_API_KEY|DEEPSEEK_API_KEY/,
+    );
   });
 });
 

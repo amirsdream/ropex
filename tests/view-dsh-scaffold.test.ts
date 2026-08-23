@@ -48,8 +48,19 @@ describe("live dsh scaffold", () => {
     const scaffold = liveDshScaffold();
     expect(scaffold.liveReady).toBe(false);
     expect(scaffold.steps.length).toBeGreaterThan(3);
+    expect(scaffold.env.some((e) => e.includes("OPENAI_API_KEY"))).toBe(true);
     const { next } = planReconcile(emptyState(), parseManifests(yaml), "t");
     const agent = next.desired[0];
     await expect(bootDsh(agent.spec, { backend: "live" })).rejects.toThrow(/live backend unavailable/);
+  });
+
+  it("prefers OPENAI_API_KEY over DEEPSEEK_API_KEY", async () => {
+    const { resolveLlmApiKey } = await import("../src/dsh.ts");
+    expect(resolveLlmApiKey({}).present).toBe(false);
+    expect(resolveLlmApiKey({ OPENAI_API_KEY: "sk-o" }).source).toBe("OPENAI_API_KEY");
+    expect(resolveLlmApiKey({ DEEPSEEK_API_KEY: "sk-d" }).source).toBe("DEEPSEEK_API_KEY");
+    expect(
+      resolveLlmApiKey({ OPENAI_API_KEY: "sk-o", DEEPSEEK_API_KEY: "sk-d" }).source,
+    ).toBe("OPENAI_API_KEY");
   });
 });

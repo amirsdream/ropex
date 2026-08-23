@@ -16,6 +16,33 @@ const require = createRequire(import.meta.url);
 
 export type DshBackend = "simulated" | "live";
 
+/** Preferred live LLM credential for Ropex (OpenAI first, DeepSeek fallback). */
+export type LlmApiKeySource = "OPENAI_API_KEY" | "DEEPSEEK_API_KEY";
+
+export type LlmApiKey = {
+  present: boolean;
+  source?: LlmApiKeySource;
+  /** Env var name that supplied the key (undefined when absent). */
+  env?: LlmApiKeySource;
+};
+
+/**
+ * Resolve live LLM API key. **OpenAI is the default** for Ropex;
+ * `DEEPSEEK_API_KEY` remains a supported fallback.
+ */
+export function resolveLlmApiKey(
+  env: NodeJS.ProcessEnv = process.env,
+): LlmApiKey {
+  const openai = env.OPENAI_API_KEY?.trim();
+  if (openai) return { present: true, source: "OPENAI_API_KEY", env: "OPENAI_API_KEY" };
+  const deepseek = env.DEEPSEEK_API_KEY?.trim();
+  if (deepseek) return { present: true, source: "DEEPSEEK_API_KEY", env: "DEEPSEEK_API_KEY" };
+  return { present: false };
+}
+
+/** Default harness model when Agent YAML omits `harness.model` (OpenAI-first). */
+export const DEFAULT_HARNESS_MODEL = "gpt-4o-mini";
+
 export type DshProfilePack = {
   profile: HarnessProfile;
   loop: "tool-calls" | "code";
@@ -110,8 +137,10 @@ export type LiveDshScaffold = {
   steps: string[];
   env: string[];
   profiles: HarnessProfile[];
-  /** True when DEEPSEEK_API_KEY is set for headless one-shot runs. */
+  /** True when OPENAI_API_KEY (preferred) or DEEPSEEK_API_KEY is set. */
   apiKeyPresent: boolean;
+  /** Which env supplied the live key (OpenAI preferred). */
+  apiKeySource?: LlmApiKeySource;
 };
 
 /**
@@ -119,27 +148,34 @@ export type LiveDshScaffold = {
  */
 export function liveDshScaffold(): LiveDshScaffold {
   const packageInstalled = dshPackageInstalled();
-  const apiKeyPresent = Boolean(process.env.DEEPSEEK_API_KEY?.trim());
+  const key = resolveLlmApiKey();
+  const apiKeyPresent = key.present;
   return {
     liveReady: packageInstalled && apiKeyPresent,
     packageInstalled,
     packageName: "@deepseek-ai/dsh",
     summary: packageInstalled
       ? apiKeyPresent
-        ? "Live dsh ready — set ROPEX_DSH_BACKEND=live to boot the headless adapter."
-        : "Live dsh package present — set DEEPSEEK_API_KEY then ROPEX_DSH_BACKEND=live."
+        ? `Live dsh ready (${key.source}) — set ROPEX_DSH_BACKEND=live to boot the headless adapter.`
+        : "Live dsh package present — set OPENAI_API_KEY (default) or DEEPSEEK_API_KEY, then ROPEX_DSH_BACKEND=live."
       : "Install @deepseek-ai/dsh for live backend; tests and default boot stay simulated.",
     steps: [
       "Add optional peer dependency @deepseek-ai/dsh (never required by tests).",
-      "Set ROPEX_DSH_BACKEND=live and DEEPSEEK_API_KEY for production runs.",
+      "Set OPENAI_API_KEY (preferred) or DEEPSEEK_API_KEY for live runs.",
+      "Set ROPEX_DSH_BACKEND=live to boot the headless adapter.",
       "bootLiveDsh runs `dsh --profile headless` for Hermes-planned tool programs.",
       "Map DSH_PROFILE_PACKS[profile].plugins onto Cordis pack loaders.",
       "Mount Policy deny/requireApproval as a permissions plugin before tools.",
       "Keep backend: simulated as the default for CI and network-free demos.",
     ],
-    env: ["ROPEX_DSH_BACKEND=simulated|live", "DEEPSEEK_API_KEY=(live only)"],
+    env: [
+      "ROPEX_DSH_BACKEND=simulated|live",
+      "OPENAI_API_KEY=(preferred live key)",
+      "DEEPSEEK_API_KEY=(optional fallback)",
+    ],
     profiles: Object.keys(DSH_PROFILE_PACKS) as HarnessProfile[],
     apiKeyPresent,
+    apiKeySource: key.source,
   };
 }
 
@@ -173,7 +209,7 @@ function planPrompt(plan: HermesPlan): string {
   return [thoughts, calls ? `Execute:\n${calls}` : ""].filter(Boolean).join("\n\n");
 }
 
-/** Run one headless dsh turn (requires package + DEEPSEEK_API_KEY). */
+/** Run one headless dsh turn (requires package + OPENAI_API_KEY or DEEPSEEK_API_KEY). */
 export function runHeadlessDsh(
   profile: string,
   task: string,
@@ -183,8 +219,11 @@ export function runHeadlessDsh(
   if (!bin) {
     return Promise.reject(new Error("dsh CLI not installed (@deepseek-ai/dsh)"));
   }
-  if (!process.env.DEEPSEEK_API_KEY?.trim()) {
-    return Promise.reject(new Error("dsh live backend requires DEEPSEEK_API_KEY"));
+  const key = resolveLlmApiKey();
+  if (!key.present) {
+    return Promise.reject(
+      new Error("dsh live backend requires OPENAI_API_KEY (preferred) or DEEPSEEK_API_KEY"),
+    );
   }
   const timeoutMs = opts.timeoutMs ?? 120_000;
   return new Promise((resolve, reject) => {
@@ -313,8 +352,10 @@ export async function bootDsh(spec: AgentSpec, opts: BootDshOptions = {}): Promi
         `dsh live backend unavailable — ${scaffold.summary} Install ${scaffold.packageName} first.`,
       );
     }
-    if (!process.env.DEEPSEEK_API_KEY?.trim()) {
-      throw new Error("dsh live backend requires DEEPSEEK_API_KEY");
+    if (!resolveLlmApiKey().present) {
+      throw new Error(
+        "dsh live backend requires OPENAI_API_KEY (preferred) or DEEPSEEK_API_KEY",
+      );
     }
     return bootLiveDsh(spec, opts);
   }
