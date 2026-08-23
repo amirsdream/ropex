@@ -132,7 +132,7 @@ describe("operator queue + policy UI actions", () => {
     expect(js).toContain("runPolicySim");
     expect(js).toContain("retry all");
     const readme = readFileSync(join(process.cwd(), "README.md"), "utf8");
-    expect(readme).toContain("HMAC webhook + rate limit");
+    expect(readme).toContain("HMAC + rate limit");
     expect(readme).toContain("bounded drain");
   });
 });
