@@ -1,8 +1,19 @@
-# Ropex architecture — Kubernetes for agents
+# Ropex architecture — orchestration for agent fleets
 
-Ropex is a GitOps orchestrator for agent fleets. Desired state lives in git. The controller derives **immutable workers** from agent code digests and runs a fixed **Hermes + DeepSeek Harness** workflow on each task.
+Ropex is a GitOps orchestrator for AI agents. Desired state in git holds **agent definitions and concurrency caps**, not warm replica farms. The control plane **admits → spawns → runs → destroys** workers under policy. Memory and skills live on a durable bus so learning survives ephemeral runners.
 
 External orchestrators (e.g. Magentic) call the **executor API** for multi-stage pipelines without reimplementing queue semantics.
+
+## Capacity model
+
+| Mode | Git declares | Reconcile | Claim |
+| --- | --- | --- | --- |
+| `onDemand` (preferred) | `maxConcurrent`, `idleTTLMs` | Definitions only — no idle pool | Spawn if under cap |
+| `static` (legacy/opt-in) | `replicas` | Standing workers | Pick idle |
+
+`Policy.maxReplicas` is the cluster ceiling on **live** workers (never uncapped spawn).
+
+Worker-scoped memory is promoted to agent scope on destroy (`src/scale.ts`). Prefer Hermes `share.write: agent` (or fleet) so facts never depended on a replica id.
 
 ## Big picture
 

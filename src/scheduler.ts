@@ -1,8 +1,7 @@
 /**
- * Drain the work queue: claim idle workers, run Hermes→DeepSeek, mark done/failed.
- * Supports bounded concurrency for parallel replica execution.
- * Transient failures release the worker and retry / dead-letter the queue item.
- * Heartbeats extend claim leases while a task runs.
+ * Drain the work queue: claim/spawn workers, run Hermes→DeepSeek, mark done/failed.
+ * Supports bounded concurrency. On-demand workers are destroyed after release (idleTTL=0).
+ * Transient failures release/destroy the worker and retry / dead-letter the queue item.
  */
 
 import {
@@ -15,6 +14,7 @@ import {
   reclaimExpiredLeases,
 } from "./queue.js";
 import { runTask, type RunTaskOptions } from "./runtime.js";
+import { sweepIdleWorkers } from "./scale.js";
 import { deliverGitTaskFromQueueItem } from "./tasks.js";
 import type { ClusterState, RunResult } from "./types.js";
 
@@ -31,6 +31,8 @@ export type DrainOptions = RunTaskOptions & {
   maxAttempts?: number;
   /** Claim lease duration in ms (default 5m). */
   leaseMs?: number;
+  /** Sweep on-demand idleTTL before claim (default true). */
+  sweepIdle?: boolean;
 };
 
 export function clampDrainConcurrency(n: number): number {
@@ -79,7 +81,10 @@ export async function drainQueue(
   opts: DrainOptions = {},
 ): Promise<RunResult[]> {
   ensureQueue(state);
-  reclaimExpiredLeases(state, { maxAttempts: opts.maxAttempts });
+  if (opts.sweepIdle !== false) {
+    sweepIdleWorkers(state, { root: opts.root });
+  }
+  reclaimExpiredLeases(state, { maxAttempts: opts.maxAttempts, root: opts.root });
   const { claimed } = claimPending(state, opts.limit ?? 32, {
     leaseMs: opts.leaseMs,
     maxAttempts: opts.maxAttempts,
@@ -98,6 +103,7 @@ export async function drainQueue(
           completeQueued(state, c.queueId, false, "worker missing", {
             maxAttempts: opts.maxAttempts,
             releaseWorker: false,
+            root: opts.root,
           });
           return undefined;
         }
@@ -106,12 +112,14 @@ export async function drainQueue(
           const result = await runTask(state, worker, c.task, opts);
           const updated = completeQueued(state, c.queueId, true, undefined, {
             maxAttempts: opts.maxAttempts,
+            root: opts.root,
           });
           if (updated) deliverGitTaskFromQueueItem(updated, result.output);
           return result;
         } catch (err) {
           const updated = completeQueued(state, c.queueId, false, err instanceof Error ? err.message : String(err), {
             maxAttempts: opts.maxAttempts,
+            root: opts.root,
           });
           if (updated) deliverGitTaskFromQueueItem(updated);
           return undefined;

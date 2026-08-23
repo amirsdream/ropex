@@ -1,8 +1,10 @@
 /**
- * Worker cordon / eviction — stop scheduling onto a replica, then retire when idle.
+ * Worker cordon / eviction — stop scheduling onto a worker, then retire when idle.
+ * Prefer destroyWorker from scale.ts for on-demand teardown (memory promote + worktree GC).
  */
 
 import { recordAudit } from "./audit.js";
+import { destroyWorker } from "./scale.js";
 import type { ClusterState, Worker } from "./types.js";
 
 export function cordonWorker(state: ClusterState, workerId: string): Worker | undefined {
@@ -57,15 +59,12 @@ export function evictWorker(state: ClusterState, workerId: string): EvictResult 
       reason: "worker running; cordoned until idle — re-evict when idle",
     };
   }
-  w.status = "retired";
-  w.cordoned = false;
-  recordAudit(state, {
-    kind: "info",
-    message: `evicted ${workerId}`,
-    agent: w.agent,
-    workerId,
-  });
-  return { worker: w, status: "retired", reason: "retired" };
+  const destroyed = destroyWorker(state, workerId, { reason: "evict" });
+  return {
+    worker: destroyed ?? w,
+    status: "retired",
+    reason: "retired",
+  };
 }
 
 export function cordonedWorkers(state: ClusterState): Worker[] {

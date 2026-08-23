@@ -67,11 +67,32 @@ export type PlacementSpec = {
   tolerations?: Array<{ key: string; operator: "Exists" | "Equal"; value?: string }>;
 };
 
+/** How agent capacity is materialised. */
+export type ScaleMode = "onDemand" | "static";
+
 export type AgentSpec = {
   harness: HarnessSpec;
   hermes: HermesSpec;
   github?: GithubSpec;
+  /**
+   * Standing warm pool size when `scale: static`.
+   * For `onDemand`, optional hint folded into maxConcurrent when maxConcurrent omitted.
+   */
   replicas: number;
+  /**
+   * Capacity model. Default: `static` when replicas set without maxConcurrent (legacy);
+   * otherwise `onDemand` (spawn on claim, destroy after task).
+   */
+  scale?: ScaleMode;
+  /**
+   * Max concurrent live workers for this agent when scale is onDemand.
+   * Defaults to `replicas` or 1. Policy.maxReplicas is the cluster ceiling.
+   */
+  maxConcurrent?: number;
+  /**
+   * Keep an idle onDemand worker warm for this many ms after a task (0 = destroy immediately).
+   */
+  idleTTLMs?: number;
   selector?: LabelSelector;
   /** Scheduling constraints for claim / placement. */
   placement?: PlacementSpec;
@@ -89,7 +110,14 @@ export type Fleet = {
   kind: "Fleet";
   metadata: ObjectMeta;
   spec: {
+    /**
+     * Static: expand into N derived agents (warm inventory).
+     * OnDemand: single agent definition with maxConcurrent = this value (or maxConcurrent).
+     */
     replicas: number;
+    scale?: ScaleMode;
+    maxConcurrent?: number;
+    idleTTLMs?: number;
     template: {
       metadata?: { labels?: Record<string, string> };
       spec: Omit<AgentSpec, "replicas"> & { replicas?: number };
@@ -153,6 +181,10 @@ export type Policy = {
   kind: "Policy";
   metadata: ObjectMeta;
   spec: {
+    /**
+     * Cluster-wide ceiling on live workers (static pools + on-demand spawns).
+     * Acts as max concurrent executors — never spawn uncapped fleets.
+     */
     maxReplicas: number;
     permissions: {
       deny: string[];

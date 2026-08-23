@@ -13,7 +13,8 @@ kind: Policy
 metadata:
   name: default-guardrails
 spec:
-  maxReplicas: 1000
+  # Cluster-wide ceiling on live workers (static + on-demand spawns).
+  maxReplicas: 64
   budget:
     maxUnits: 5000
     windowMs: 3600000
@@ -34,8 +35,10 @@ metadata:
     role: github
     zone: ingress
 spec:
-  replicas: 3
-  # Sticky affinity keys as agent:repo after successful completes (see src/affinity.ts).
+  # Request-driven: spawn on claim, destroy when idle (idleTTL 0).
+  scale: onDemand
+  maxConcurrent: 4
+  idleTTLMs: 0
   placement:
     require:
       role: github
@@ -74,7 +77,9 @@ metadata:
     role: github
     zone: review
 spec:
-  replicas: 5
+  scale: onDemand
+  maxConcurrent: 6
+  idleTTLMs: 0
   placement:
     require:
       role: github
@@ -119,7 +124,11 @@ metadata:
   labels:
     role: implement
 spec:
-  replicas: 20
+  # One agent definition; maxConcurrent is the spawn ceiling (not 20 warm replicas).
+  scale: onDemand
+  maxConcurrent: 8
+  idleTTLMs: 0
+  replicas: 8
   template:
     metadata:
       labels:
@@ -152,6 +161,7 @@ spec:
           read: [agent, fleet]
           write: agent
         learning: true
+        # Prefer agent/fleet writes so knowledge survives worker destroy.
         skills:
           - implement-issue
           - open-pr

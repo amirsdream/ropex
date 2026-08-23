@@ -135,13 +135,27 @@ export function assertChaosInvariants(
     if (n > 1) errors.push(`slot ${id} has ${n} live workers`);
   }
 
-  // Desired replica sum vs live count
+  // Desired capacity vs live count (static pools only; on-demand live ≤ maxConcurrent)
   let desiredSlots = 0;
   for (const a of state.desired) {
+    if (a.spec.scale === "onDemand") {
+      // On-demand: live workers may be 0..maxConcurrent; do not require equality.
+      continue;
+    }
     desiredSlots += a.derivedFrom ? 1 : a.spec.replicas;
   }
-  if (live.length !== desiredSlots) {
-    errors.push(`live=${live.length} desiredSlots=${desiredSlots}`);
+  const staticLive = live.filter((w) => {
+    const a = state.desired.find((d) => d.metadata.name === w.agent);
+    return a?.spec.scale !== "onDemand";
+  });
+  if (staticLive.length !== desiredSlots) {
+    errors.push(`live=${staticLive.length} desiredSlots=${desiredSlots}`);
+  }
+  for (const a of state.desired) {
+    if (a.spec.scale !== "onDemand") continue;
+    const n = live.filter((w) => w.agent === a.metadata.name).length;
+    const cap = a.spec.maxConcurrent ?? a.spec.replicas ?? 1;
+    if (n > cap) errors.push(`onDemand ${a.metadata.name} live=${n} > maxConcurrent=${cap}`);
   }
 
   // Digest + label alignment (unless canary holdouts allowed)

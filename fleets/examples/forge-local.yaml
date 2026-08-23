@@ -3,7 +3,9 @@ kind: Agent
 metadata:
   name: docbot
 spec:
-  replicas: 1
+  scale: onDemand
+  maxConcurrent: 1
+  idleTTLMs: 0
   harness:
     profile: minimal
     plugins: [fs]

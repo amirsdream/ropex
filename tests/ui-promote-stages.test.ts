@@ -136,7 +136,9 @@ describe("placement fleet example", () => {
     const agents = expandDesired(manifests);
     const triage = agents.find((a) => a.metadata.name === "triage");
     expect(triage?.spec.placement?.require?.role).toBe("github");
-    const factory = agents.find((a) => a.metadata.name === "pr-factory-0");
+    const factory = agents.find((a) => a.metadata.name === "pr-factory");
+    expect(factory?.spec.scale).toBe("onDemand");
+    expect(factory?.spec.maxConcurrent).toBe(8);
     expect(factory?.spec.placement?.taints?.[0]?.key).toBe("builder");
     expect(factory?.metadata.labels?.zone).toBe("build");
   });

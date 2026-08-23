@@ -1,10 +1,12 @@
 /**
- * Subagent fan-out — split a parent task across idle fleet (or agent) replicas.
+ * Subagent fan-out — split a parent task across shards under maxConcurrent.
  * World-class orchestrators scale work sideways, not just deeper loops.
+ * Shards enqueue; drain spawns/claims workers — no warm pool required.
  */
 
 import { enqueueTask } from "./queue.js";
 import { pickIdleWorker } from "./queue.js";
+import { resolveMaxConcurrent } from "./scale.js";
 import type { ClusterState, QueuedTask, Task, Worker } from "./types.js";
 
 export type FanOutPlan = {
@@ -25,24 +27,36 @@ export function shardCount(task: Task, available: number): number {
 }
 
 /**
- * Enqueue N child tasks for the same agent (prefer same fleet workers).
+ * Enqueue N child tasks for the same agent (prefer same fleet).
+ * Capacity = maxConcurrent − running (onDemand) or idle pool (static).
  * Does not execute — caller drains the queue.
  */
 export function fanOutTask(state: ClusterState, parent: Task): FanOutPlan {
+  const agent = state.desired.find((a) => a.metadata.name === parent.agent);
+  const running = state.workers.filter(
+    (w) => w.agent === parent.agent && w.status === "running",
+  ).length;
   const idlePool = state.workers.filter(
     (w) => w.agent === parent.agent && (w.status === "idle" || w.status === "pending"),
   );
-  // Prefer fleet siblings when parent worker has a fleet.
   const parentWorker = state.workers.find((w) => w.agent === parent.agent);
-  const fleet = parentWorker?.fleet;
+  const fleet = parentWorker?.fleet ?? agent?.derivedFrom?.fleet;
   const fleetIdle = fleet
     ? state.workers.filter(
         (w) => w.fleet === fleet && (w.status === "idle" || w.status === "pending"),
       )
     : idlePool;
 
-  const pool = fleetIdle.length ? fleetIdle : idlePool;
-  const n = shardCount(parent, Math.max(1, pool.length));
+  let available: number;
+  if (agent) {
+    const cap = resolveMaxConcurrent(agent.spec);
+    available = Math.max(1, cap - running);
+  } else {
+    const pool = fleetIdle.length ? fleetIdle : idlePool;
+    available = Math.max(1, pool.length);
+  }
+
+  const n = shardCount(parent, available);
   const shards: Task[] = [];
   const enqueued: QueuedTask[] = [];
 
@@ -71,12 +85,10 @@ export function assignShardWorkers(
   for (let i = 0; i < count; i++) {
     const w = pickIdleWorker(state, agent);
     if (!w || seen.has(w.id)) break;
-    // Temporarily mark running so next pick skips it.
     w.status = "running";
     seen.add(w.id);
     picked.push(w);
   }
-  // Reset to idle — claimPending/drain will re-claim properly.
   for (const w of picked) w.status = "idle";
   return picked;
 }

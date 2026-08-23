@@ -12,6 +12,7 @@ import { compactJournal, type CompactJournalResult } from "./journal.js";
 import { syncDueGitRepos, type MultiRepoSyncResult } from "./gitrepo.js";
 import { ageQueuePriorities, queueSummary, reclaimExpiredLeases } from "./queue.js";
 import { drainQueue, type DrainOptions } from "./scheduler.js";
+import { sweepIdleWorkers } from "./scale.js";
 import { gcOrphanWorktrees, type WorktreeGcResult } from "./worktree.js";
 import type { ClusterState, QueuedTask, RunResult } from "./types.js";
 
@@ -63,7 +64,10 @@ export async function controlPlaneTick(
   const { reclaimed } = reclaimExpiredLeases(state, {
     now,
     maxAttempts: opts.maxAttempts,
+    root,
   });
+
+  const swept = sweepIdleWorkers(state, { root, now, reason: "tick-idleTTL" });
 
   let gc: WorktreeGcResult | null = null;
   if (opts.gc) {
@@ -118,7 +122,7 @@ export async function controlPlaneTick(
 
   recordAudit(state, {
     kind: "info",
-    message: `tick reclaim=${reclaimed.length} drain=${drained.length} sync=${sync?.synced ? 1 : 0} gc=${gc?.removed.length ?? 0} age=${aged}`,
+    message: `tick reclaim=${reclaimed.length} drain=${drained.length} sync=${sync?.synced ? 1 : 0} gc=${gc?.removed.length ?? 0} age=${aged} sweep=${swept.length}`,
     meta: {
       reclaimed: reclaimed.length,
       drained: drained.length,
@@ -126,6 +130,7 @@ export async function controlPlaneTick(
       autoscale: autoscale?.recommendations.length ?? 0,
       gcRemoved: gc?.removed.length ?? 0,
       aged,
+      swept: swept.length,
       paused: Boolean(state.queuePaused),
       journalRemoved: journal?.removed ?? 0,
     },
