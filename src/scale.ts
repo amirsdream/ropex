@@ -13,15 +13,16 @@ import type { ClusterState, DesiredAgent, ScaleMode, Worker } from "./types.js";
 
 export const DEFAULT_IDLE_TTL_MS = 0;
 
-/** Resolve scale mode. Legacy YAML with `replicas` (no maxConcurrent) stays static. */
+/** Resolve scale mode. Default onDemand — standing pools require `scale: static`. */
 export function resolveScaleMode(spec: {
   scale?: ScaleMode;
   replicas?: number;
   maxConcurrent?: number;
 }): ScaleMode {
   if (spec.scale === "onDemand" || spec.scale === "static") return spec.scale;
+  // Explicit maxConcurrent without scale ⇒ onDemand
   if (spec.maxConcurrent != null) return "onDemand";
-  if (spec.replicas != null && spec.replicas > 0) return "static";
+  // Product default: request-driven workers (replicas folds into maxConcurrent).
   return "onDemand";
 }
 

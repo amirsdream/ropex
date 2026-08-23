@@ -506,25 +506,44 @@ function groupWorkers(workers) {
 function renderWorkers(view) {
   const el = $("#worker-rail");
   if (!el) return;
-  if (!view.workers.length) {
-    el.innerHTML = `<p class="empty">No workers. Apply fleets/examples, then refresh.</p>`;
+  const groups = groupWorkers(view.workers);
+  const desiredAgents = (view.hermes ?? []).map((h) => h.agent);
+  const fleetByName = new Map((view.fleets ?? []).map((f) => [f.name, f]));
+
+  if (!groups.length && !desiredAgents.length) {
+    el.innerHTML = `<p class="empty">No agent definitions. Apply fleets/examples, then refresh.</p>`;
     return;
   }
-  const groups = groupWorkers(view.workers);
+
+  for (const name of desiredAgents) {
+    if (!groups.some(([a]) => a === name)) groups.push([name, []]);
+  }
+  groups.sort((a, b) => a[0].localeCompare(b[0]));
+
   el.innerHTML = groups
     .map(([agent, replicas]) => {
       const open = expandedAgents.has(agent);
       const fleet = replicas[0]?.fleet;
-      const harness = replicas[0]?.harness ?? "";
-      const model = replicas[0]?.model ?? "";
+      const harnessRow = (view.harness ?? []).find((h) => h.agent === agent);
+      const harness = replicas[0]?.harness ?? harnessRow?.profile ?? "";
+      const model = replicas[0]?.model ?? harnessRow?.model ?? "";
+      const capInfo =
+        fleetByName.get(fleet ?? `solo:${agent}`) ?? fleetByName.get(`solo:${agent}`);
+      const capLabel =
+        capInfo?.maxConcurrent != null
+          ? ` · cap ${capInfo.maxConcurrent}`
+          : capInfo?.scale === "onDemand"
+            ? " · onDemand"
+            : "";
       const statusCounts = {};
       for (const r of replicas) statusCounts[r.status] = (statusCounts[r.status] || 0) + 1;
       const pills = Object.entries(statusCounts)
         .map(([st, n]) => `<span class="status-pill is-${escapeHtml(st)}">${n} ${escapeHtml(st)}</span>`)
         .join("");
-      const rows = replicas
-        .map(
-          (w) => `
+      const rows = replicas.length
+        ? replicas
+            .map(
+              (w) => `
         <div class="worker-row">
           <div>
             <div class="worker-id">${escapeHtml(w.id)}</div>
@@ -534,8 +553,9 @@ function renderWorkers(view) {
           <div class="digest" title="${escapeHtml(w.imageDigest)}">${escapeHtml(w.imageDigest.slice(0, 12))}…</div>
           <div class="digest">mem ${w.memoryReadable} · skills ${w.skills.length}</div>
         </div>`,
-        )
-        .join("");
+            )
+            .join("")
+        : `<div class="worker-row"><div class="digest">No active runners — spawn on next claim</div></div>`;
       return `
       <div class="agent-group ${open ? "is-open" : ""}" data-agent="${escapeHtml(agent)}">
         <button type="button" class="agent-group-head" data-toggle-agent="${escapeHtml(agent)}" aria-expanded="${open}">
@@ -544,7 +564,7 @@ function renderWorkers(view) {
             <div class="agent-name">${escapeHtml(agent)}${fleet ? ` <span class="agent-meta">fleet ${escapeHtml(fleet)}</span>` : ""}</div>
             <div class="agent-meta">${escapeHtml(harness)} · ${escapeHtml(model)}</div>
           </div>
-          <span class="replica-count">${replicas.length} runner${replicas.length === 1 ? "" : "s"}</span>
+          <span class="replica-count">${replicas.length} runner${replicas.length === 1 ? "" : "s"}${escapeHtml(capLabel)}</span>
           <div class="status-pills">${pills}</div>
         </button>
         <div class="agent-group-body">${rows}</div>

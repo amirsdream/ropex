@@ -27,6 +27,7 @@ kind: Agent
 metadata:
   name: sticky
 spec:
+  scale: static
   replicas: 2
   harness:
     profile: minimal

@@ -38,6 +38,7 @@ metadata:
     role: chaos
     zone: test
 spec:
+  scale: static
   replicas: ${replicas}
   placement:
     require:

@@ -21,6 +21,7 @@ kind: Agent
 metadata:
   name: triage
 spec:
+  scale: static
   replicas: 2
   harness:
     profile: minimal

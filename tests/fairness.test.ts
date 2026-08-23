@@ -16,6 +16,7 @@ kind: Agent
 metadata:
   name: fair
 spec:
+  scale: static
   replicas: 2
   harness:
     profile: minimal

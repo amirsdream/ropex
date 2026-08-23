@@ -12,6 +12,7 @@ kind: Agent
 metadata:
   name: ui
 spec:
+  scale: static
   replicas: 1
   harness:
     profile: minimal

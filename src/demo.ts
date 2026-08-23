@@ -110,7 +110,9 @@ kind: Agent
 metadata:
   name: triage
 spec:
-  replicas: 2
+  scale: onDemand
+  maxConcurrent: 2
+  idleTTLMs: 0
   harness:
     profile: minimal
     plugins: [github]

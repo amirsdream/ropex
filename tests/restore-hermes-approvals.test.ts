@@ -20,6 +20,7 @@ kind: Agent
 metadata:
   name: snap
 spec:
+  scale: static
   replicas: 1
   harness:
     profile: minimal

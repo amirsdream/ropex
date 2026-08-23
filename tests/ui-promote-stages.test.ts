@@ -14,6 +14,7 @@ kind: Agent
 metadata:
   name: a
 spec:
+  scale: static
   replicas: 1
   harness:
     profile: minimal
@@ -28,6 +29,7 @@ kind: Agent
 metadata:
   name: b
 spec:
+  scale: static
   replicas: 1
   harness:
     profile: minimal

@@ -126,8 +126,12 @@ export type WorkerView = {
 
 export type FleetView = {
   name: string;
+  /** Live runners (ephemeral or standing). */
   replicas: number;
   live: number;
+  /** Declared concurrency / standing size. */
+  maxConcurrent?: number;
+  scale?: "onDemand" | "static";
   profile?: HarnessProfile;
   memoryFacts: number;
 };

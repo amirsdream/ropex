@@ -19,6 +19,7 @@ kind: Agent
 metadata:
   name: ops
 spec:
+  scale: static
   replicas: 1
   harness:
     profile: minimal

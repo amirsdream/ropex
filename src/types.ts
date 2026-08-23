@@ -80,8 +80,8 @@ export type AgentSpec = {
    */
   replicas: number;
   /**
-   * Capacity model. Default: `static` when replicas set without maxConcurrent (legacy);
-   * otherwise `onDemand` (spawn on claim, destroy after task).
+   * Capacity model. Default `onDemand` (spawn on claim, destroy after task).
+   * Set `scale: static` for an explicit standing warm pool.
    */
   scale?: ScaleMode;
   /**

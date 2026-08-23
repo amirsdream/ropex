@@ -8,6 +8,7 @@ kind: Agent
 metadata:
   name: triage
 spec:
+  scale: static
   replicas: 3
   harness:
     profile: minimal
@@ -22,6 +23,7 @@ kind: Fleet
 metadata:
   name: swarm
 spec:
+  scale: static
   replicas: 5
   template:
     spec:

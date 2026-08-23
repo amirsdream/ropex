@@ -15,6 +15,7 @@ metadata:
     zone: west
     tier: hot
 spec:
+  scale: static
   replicas: 2
   placement:
     require:
