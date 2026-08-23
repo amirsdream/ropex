@@ -53,6 +53,7 @@ export async function runTask(
   const hermes = bootHermes(agent.spec, {
     store,
     worker,
+    cwd: worktree,
     skills: [
       ...workflow.brain.skills,
       ...worker.skills,

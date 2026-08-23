@@ -8,7 +8,7 @@ import { recordAudit } from "./audit.js";
 import { enqueueTask } from "./queue.js";
 import { drainQueue, type DrainOptions } from "./scheduler.js";
 import { planPipeline, type PipelineStagePlan } from "./pipeline.js";
-import type { ClusterState, PipelineRun, PipelineStageRun, Task } from "./types.js";
+import type { ClusterState, PipelineRun, PipelineStageRun, RunResult, Task } from "./types.js";
 
 export type ExecutorEventKind =
   | "pipeline.start"
@@ -53,6 +53,7 @@ export type SubmitPipelineResult = {
 
 const MAX_EVENT_BUFFER = 400;
 const MAX_PIPELINE_EVENTS = 120;
+const MAX_PIPELINE_RUNS = 64;
 const eventBuffer = new Map<string, ExecutorEvent[]>();
 
 type SseSubscriber = {
@@ -145,6 +146,7 @@ export function subscribeExecutorEvents(
 
 function ensurePipelines(state: ClusterState): PipelineRun[] {
   if (!state.pipelines) state.pipelines = [];
+  while (state.pipelines.length > MAX_PIPELINE_RUNS) state.pipelines.shift();
   return state.pipelines;
 }
 
@@ -236,6 +238,61 @@ function emitStageComplete(
   );
 }
 
+function emitStageLogs(
+  state: ClusterState,
+  pipelineId: string,
+  stage: PipelineStageRun,
+  result: RunResult,
+): void {
+  for (const thought of result.plan.slice(0, 6)) {
+    emitExecutorEvent(
+      {
+        pipelineId,
+        at: nowIso(),
+        kind: "stage.log",
+        stageId: stage.id,
+        taskId: stage.taskId,
+        agent: stage.agent,
+        message: thought.slice(0, 800),
+        meta: { role: stage.role ?? stage.id, log_type: "plan" },
+      },
+      state,
+    );
+  }
+  for (const step of result.steps.slice(0, 24)) {
+    if (step.thought) {
+      emitExecutorEvent(
+        {
+          pipelineId,
+          at: nowIso(),
+          kind: "stage.log",
+          stageId: stage.id,
+          taskId: stage.taskId,
+          agent: stage.agent,
+          message: step.thought.slice(0, 800),
+          meta: { role: stage.role ?? stage.id, log_type: "thought" },
+        },
+        state,
+      );
+    }
+    if (step.observation) {
+      emitExecutorEvent(
+        {
+          pipelineId,
+          at: nowIso(),
+          kind: "stage.log",
+          stageId: stage.id,
+          taskId: stage.taskId,
+          agent: stage.agent,
+          message: step.observation.slice(0, 800),
+          meta: { role: stage.role ?? stage.id, log_type: "observation" },
+        },
+        state,
+      );
+    }
+  }
+}
+
 function queueItemForTask(state: ClusterState, taskId: string) {
   const items = state.queue.filter((q) => q.id === taskId);
   return items[items.length - 1];
@@ -311,6 +368,7 @@ export async function drainPipelineStages(
       stage.workerId = hit.worker.id;
       stage.output = hit.output;
       drained += 1;
+      emitStageLogs(state, pipeline.id, stage, hit);
       emitStageComplete(state, pipeline.id, stage, hit.worker.id, hit.output, false);
       continue;
     }
@@ -498,7 +556,15 @@ export function mapExecutorEventToUi(event: ExecutorEvent): { type: string; data
         },
       };
     case "stage.log":
-      return { type: "agent_log", data: { message: event.message, stage_id: event.stageId } };
+      return {
+        type: "agent_log",
+        data: {
+          message: event.message,
+          stage_id: event.stageId,
+          log_type: event.meta?.log_type ?? "log",
+          agent_id: event.taskId,
+        },
+      };
     case "stage.complete":
     case "stage.failed":
       return {

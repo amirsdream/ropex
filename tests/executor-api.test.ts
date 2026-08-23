@@ -108,17 +108,18 @@ describe("executor API", () => {
     expect(next.queue.find((q) => q.id === "other-task")?.status).toBe("pending");
   });
 
-  it("mapExecutorEventToUi includes plan agents and failure flag", () => {
-    const mapped = mapExecutorEventToUi({
-      pipelineId: "p1",
-      at: new Date().toISOString(),
-      kind: "stage.start",
-      stageId: "research",
-      taskId: "p1:research",
-      agent: "researcher",
-      meta: { role: "researcher" },
-    });
-    expect(mapped.type).toBe("agent_start");
+  it("mapExecutorEventToUi includes plan agents, failure flag, and agent_log", () => {
+    expect(
+      mapExecutorEventToUi({
+        pipelineId: "p1",
+        at: new Date().toISOString(),
+        kind: "stage.start",
+        stageId: "research",
+        taskId: "p1:research",
+        agent: "researcher",
+        meta: { role: "researcher" },
+      }).type,
+    ).toBe("agent_start");
 
     const failed = mapExecutorEventToUi({
       pipelineId: "p1",
@@ -132,18 +133,31 @@ describe("executor API", () => {
     expect(failed.type).toBe("agent_complete");
     expect(failed.data.error).toBe(true);
 
-    const plan = mapExecutorEventToUi({
+    const log = mapExecutorEventToUi({
       pipelineId: "p1",
       at: new Date().toISOString(),
-      kind: "pipeline.plan",
-      message: "research→researcher",
-      meta: {
-        stages: 1,
-        agents: JSON.stringify([{ agent_id: "p1:research", role: "researcher" }]),
-      },
+      kind: "stage.log",
+      stageId: "research",
+      taskId: "p1:research",
+      message: "thinking…",
+      meta: { log_type: "thought" },
     });
-    expect(plan.type).toBe("plan");
-    expect((plan.data.agents as unknown[]).length).toBe(1);
+    expect(log.type).toBe("agent_log");
+    expect(log.data.log_type).toBe("thought");
+  });
+
+  it("emits stage.log events from trajectory steps", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ropex-log-"));
+    temps.push(root);
+    const { next } = planReconcile(emptyState(), parseManifests(yaml), "fleets/");
+    const result = await submitPipeline(next, {
+      prompt: "Compare React vs Vue",
+      root,
+      drain: true,
+      stages: [{ id: "only", agent: "researcher", prompt: "quick compare" }],
+    });
+    const logs = getExecutorEvents(result.pipeline.id).filter((e) => e.kind === "stage.log");
+    expect(logs.length).toBeGreaterThan(0);
   });
 
   it("POST /api/v1/pipeline and GET pipeline by id", async () => {

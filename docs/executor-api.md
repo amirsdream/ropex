@@ -77,6 +77,15 @@ With `format=ui`, events map to Magentic WebSocket names (`plan`, `agent_start`,
 
 Events are persisted on `pipeline.events` (capped) in cluster state.
 
+## Planners
+
+| `ROPEX_PIPELINE_PLANNER` | Behavior |
+|--------------------------|----------|
+| `heuristic` (default) | Regex multi-stage planner in `src/pipeline.ts` |
+| `hermes` | Seed stages from Hermes offline `plan()` on the first fleet agent |
+
+Per-task execution still runs Hermes → harness inside `runTask()`.
+
 ## Magentic integration
 
 ```env
