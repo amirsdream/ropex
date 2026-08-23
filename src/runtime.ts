@@ -230,8 +230,15 @@ export function workerFromDesired(
   };
 }
 
+/**
+ * Standing workers for GitOps reconcile (`scale: static` only).
+ * On-demand agents materialize workers at claim time via `spawnWorker` in scale.ts.
+ */
 export function expandWorkers(agent: DesiredAgent, opts: ImageResolveOptions = {}): Worker[] {
-  const n = agent.derivedFrom ? 1 : agent.spec.replicas;
+  if (agent.spec.scale === "onDemand") return [];
+  // Un-normalized fixtures: maxConcurrent without static ⇒ onDemand
+  if (agent.spec.scale !== "static" && agent.spec.maxConcurrent != null) return [];
+  const n = agent.derivedFrom ? 1 : Math.max(0, agent.spec.replicas ?? 0);
   return Array.from({ length: n }, (_, i) => workerFromDesired(agent, i, opts));
 }
 

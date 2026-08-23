@@ -8,7 +8,8 @@ import {
   maxReplicas,
   parseManifests,
 } from "./spec.js";
-import { expandWorkers, runTask } from "./runtime.js";
+import { expandWorkers } from "./runtime.js";
+import { buildAgentImage } from "./image.js";
 import { normalizeFact } from "./memory.js";
 import { ensureAudit, recordAudit } from "./audit.js";
 import { emptyMetrics, ensureQueue } from "./queue.js";
@@ -78,9 +79,10 @@ export function saveState(root: string, state: ClusterState): void {
 }
 
 /**
- * Kubernetes-style reconcile: workers are immutable for a given agent image digest.
- * Spec/code change → new digest → retire old worker + create replacement (no in-place mutate).
- * With `rollout.strategy: "canary"`, only `canaryCount` mismatch slots per agent roll each pass.
+ * GitOps reconcile of agent definitions + standing (static) workers.
+ * On-demand agents do not create warm idle inventory — spawn happens at claim.
+ * Digest change retires standing workers (canary optional); ephemeral runners
+ * with stale digests are cordoned while running, retired when idle.
  */
 export function planReconcile(
   current: ClusterState,
@@ -100,6 +102,7 @@ export function planReconcile(
 
   const desiredWorkers = agents.flatMap((a) => expandWorkers(a, opts));
   const desiredIds = new Set(desiredWorkers.map((w) => w.id));
+  const desiredByName = new Map(agents.map((a) => [a.metadata.name, a]));
   const currentById = new Map(
     current.workers.filter((w) => w.status !== "retired").map((w) => [w.id, w]),
   );
@@ -119,7 +122,6 @@ export function planReconcile(
       mismatches.push({ prev, next });
       continue;
     }
-    // Same image: keep identity; only lifecycle status may change.
     update.push({
       ...prev,
       status:
@@ -127,9 +129,7 @@ export function planReconcile(
           ? "failed"
           : prev.status === "running"
             ? "running"
-            : prev.status === "idle"
-              ? "idle"
-              : "idle",
+            : "idle",
       skills: [...new Set([...prev.skills, ...next.skills])],
       worktree: prev.worktree,
       lastTaskAt: prev.lastTaskAt,
@@ -149,7 +149,6 @@ export function planReconcile(
     });
   }
   for (const m of hold) {
-    // Keep old digest until a later canary pass; still counts as live capacity.
     update.push({
       ...m.prev,
       skills: [...new Set([...m.prev.skills, ...m.next.skills])],
@@ -158,11 +157,34 @@ export function planReconcile(
     });
   }
 
+  const handled = new Set([...desiredIds, ...update.map((w) => w.id), ...create.map((w) => w.id)]);
+
   for (const prev of current.workers) {
     if (prev.status === "retired") continue;
-    if (!desiredIds.has(prev.id)) {
-      retire.push({ ...prev, status: "retired" });
+    if (desiredIds.has(prev.id) || handled.has(prev.id)) continue;
+
+    const agent = desiredByName.get(prev.agent);
+    if (agent?.spec.scale === "onDemand") {
+      const digest = buildAgentImage(agent, opts).digest;
+      if (prev.imageDigest !== digest) {
+        if (prev.status === "running") {
+          update.push({ ...prev, cordoned: true });
+          handled.add(prev.id);
+        } else {
+          retire.push({ ...prev, status: "retired" });
+        }
+        continue;
+      }
+      update.push({
+        ...prev,
+        skills: [...new Set([...prev.skills, ...agent.spec.hermes.skills])],
+        labels: agent.metadata.labels ? { ...agent.metadata.labels } : prev.labels,
+      });
+      handled.add(prev.id);
+      continue;
     }
+
+    retire.push({ ...prev, status: "retired" });
   }
 
   const retiredHistory = current.workers.filter((w) => w.status === "retired");
@@ -206,6 +228,8 @@ export function planReconcile(
       canaryHeld: hold.length,
       strategy: opts.rollout?.strategy ?? "recreate",
       source,
+      onDemand: agents.filter((a) => a.spec.scale === "onDemand").length,
+      static: agents.filter((a) => a.spec.scale !== "onDemand").length,
     },
   });
 

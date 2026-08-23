@@ -544,7 +544,7 @@ function renderWorkers(view) {
             <div class="agent-name">${escapeHtml(agent)}${fleet ? ` <span class="agent-meta">fleet ${escapeHtml(fleet)}</span>` : ""}</div>
             <div class="agent-meta">${escapeHtml(harness)} · ${escapeHtml(model)}</div>
           </div>
-          <span class="replica-count">${replicas.length} replica${replicas.length === 1 ? "" : "s"}</span>
+          <span class="replica-count">${replicas.length} runner${replicas.length === 1 ? "" : "s"}</span>
           <div class="status-pills">${pills}</div>
         </button>
         <div class="agent-group-body">${rows}</div>

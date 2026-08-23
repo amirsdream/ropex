@@ -4,12 +4,14 @@ This repo is a GitOps control plane for agent fleets.
 
 ## Core rules
 
-- Desired state lives in `fleets/**/*.yaml`.
-- The controller derives workers; do not hard-code replica lists.
+- Desired state lives in `fleets/**/*.yaml` as agent/fleet **definitions** + policy caps — not warm replica inventory.
+- Default capacity model is **on-demand**: admit → spawn under `maxConcurrent` ∩ `Policy.maxReplicas` → run → destroy (`idleTTLMs: 0`). Use `scale: static` + `replicas` only when you explicitly want a standing pool.
+- The controller reconciles definitions; the queue spawns ephemeral workers. Do not hard-code replica lists.
+- Memory and skills outlive workers: write to agent/fleet/cluster scopes (`src/memory.ts`, `src/gitmemory.ts`, skill registry). Worker-local facts are promoted on destroy.
 - Hermes plans (`src/hermes.ts`). DeepSeek-style harness executes via `bootDsh` (`src/dsh.ts` → `src/harness.ts`, `src/plugins.ts`).
 - GitHub events, Task YAML, CLI, and **executor API** are work ingress (`src/github.ts`, `src/webhook.ts`, `src/tasks.ts`, `src/executor.ts`).
 - Delivery is comment / check / pull request / git writeback (`src/journal.ts`).
-- Policy is mandatory for scale: never spawn uncapped fleets (`src/admission.ts`, `src/approval.ts`).
+- Policy is mandatory for scale: never spawn uncapped fleets (`src/admission.ts`, `src/scale.ts`, `src/approval.ts`).
 - Keep the CLI thin. New behavior belongs in spec, controller, or runtime.
 - Tests in `tests/` must stay runnable without network or API keys.
 
@@ -21,7 +23,7 @@ This repo is a GitOps control plane for agent fleets.
 | Brain / execute | `hermes.ts`, `dsh.ts`, `harness.ts`, `plugins.ts`, `workflow.ts`, `runtime.ts` |
 | Executor API | `pipeline.ts`, `executor.ts` — multi-stage pipelines, SSE, scoped drain |
 | Memory / skills | `memory.ts`, `skills.ts`, `gitmemory.ts`, `contracts.ts` |
-| Queue / scale | `queue.ts`, `scheduler.ts`, `fanout.ts`, `admission.ts`, `approval.ts`, `autoscale.ts`, `budget.ts`, `placement.ts`, `fairness.ts` |
+| Queue / scale | `queue.ts`, `scheduler.ts`, `scale.ts` (on-demand spawn/destroy), `fanout.ts`, `admission.ts`, `approval.ts`, `autoscale.ts`, `budget.ts`, `placement.ts`, `fairness.ts` |
 | Ingress / audit | `webhook.ts`, `ratelimit.ts`, `journal.ts`, `deliver.ts`, `trajectory.ts`, `metrics.ts`, `health.ts`, `audit.ts` |
 | Lifecycle | `lifecycle.ts` (cordon/evict), `hygiene.ts`, `chaos.ts` |
 | Surfaces | `api.ts`, `ui/` (control-plane + deep-dive drawer), `cli.ts`, `demo.ts` |

@@ -114,9 +114,10 @@ Usage:
   ropex skills versions <name>        List registered versions of a skill
   ropex fanout --agent <name> <prompt>
                                      Shard a task across idle replicas
-  ropex scale <fleet> --replicas N
+  ropex scale <fleet> --max-concurrent N   Emit onDemand Fleet YAML (default)
+  ropex scale <fleet> --replicas N --scale static
                                      Print YAML to commit (Git is source of truth)
-  ropex autoscale                 Recommend replica YAML from backlog SLO
+  ropex autoscale                 Recommend maxConcurrent / replica YAML from backlog
   ropex tick [--concurrency N] [--gc] [--age] [--clone] [--compact N]
                                      Control-plane heartbeat + optional hooks
   ropex clone [--force] [--dry-run] [--remote]   Prepare GitRepo checkouts (file:// / git remote)
@@ -913,17 +914,34 @@ async function main(argv: string[]): Promise<number> {
     }
     case "scale": {
       const name = rest[0];
-      const n = Number(flag(rest, "--replicas"));
-      if (!name || !Number.isFinite(n)) return fail("usage: ropex scale <fleet> --replicas N");
-      const yaml = [
-        "apiVersion: ropex.dev/v1",
-        "kind: Fleet",
-        "metadata:",
-        `  name: ${name}`,
-        "spec:",
-        `  replicas: ${n}`,
-        "# commit this to git — the controller derives workers from the repo",
-      ].join("\n");
+      const n = Number(flag(rest, "--replicas") ?? flag(rest, "--max-concurrent"));
+      const mode = flag(rest, "--scale") === "static" ? "static" : "onDemand";
+      if (!name || !Number.isFinite(n)) {
+        return fail("usage: ropex scale <fleet> (--max-concurrent|--replicas) N [--scale onDemand|static]");
+      }
+      const yaml =
+        mode === "static"
+          ? [
+              "apiVersion: ropex.dev/v1",
+              "kind: Fleet",
+              "metadata:",
+              `  name: ${name}`,
+              "spec:",
+              "  scale: static",
+              `  replicas: ${n}`,
+              "# commit this to git — standing workers derived from the repo",
+            ].join("\n")
+          : [
+              "apiVersion: ropex.dev/v1",
+              "kind: Fleet",
+              "metadata:",
+              `  name: ${name}`,
+              "spec:",
+              "  scale: onDemand",
+              `  maxConcurrent: ${n}`,
+              "  idleTTLMs: 0",
+              "# commit this to git — spawn ceiling; workers are ephemeral",
+            ].join("\n");
       console.log(yaml);
       return 0;
     }

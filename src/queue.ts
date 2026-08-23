@@ -1,6 +1,6 @@
 /**
  * Durable work queue + fair scheduler.
- * GitHub webhooks / simulate / CLI enqueue; drain claims idle workers LRU-first.
+ * GitHub webhooks / simulate / CLI enqueue; drain claims idle workers or spawns on-demand.
  * Failed claims retry with backoff, then land in the dead-letter lane.
  */
 
@@ -10,6 +10,14 @@ import { recordAudit } from "./audit.js";
 import { chargeBudget } from "./budget.js";
 import { canPlace, placementScore } from "./placement.js";
 import { lookupAffinity, rememberAffinity } from "./affinity.js";
+import {
+  canSpawnWorker,
+  isOnDemandAgent,
+  releaseOrDestroyWorker,
+  spawnWorker,
+} from "./scale.js";
+import { maxReplicas } from "./spec.js";
+import { ensureWorktree } from "./worktree.js";
 import type { ClusterMetrics, ClusterState, QueuedTask, Task, Worker } from "./types.js";
 
 /** Default max claim attempts before dead-letter. */
@@ -109,13 +117,11 @@ export function pickIdleWorker(
     (w) => w.agent === agentName && (w.status === "idle" || w.status === "running" || w.status === "pending"),
   );
   const ranked = [...idle].sort((a, b) => {
-    // Prefer digest match so canary holdouts (old digest) are not claimed first.
     if (desiredDigest) {
       const aMatch = a.imageDigest === desiredDigest ? 0 : 1;
       const bMatch = b.imageDigest === desiredDigest ? 0 : 1;
       if (aMatch !== bMatch) return aMatch - bMatch;
     }
-    // Sticky affinity (soft).
     if (stickyId) {
       const aStick = a.id === stickyId ? 0 : 1;
       const bStick = b.id === stickyId ? 0 : 1;
@@ -124,11 +130,9 @@ export function pickIdleWorker(
     const aIdle = a.status === "idle" || a.status === "pending" ? 0 : 1;
     const bIdle = b.status === "idle" || b.status === "pending" ? 0 : 1;
     if (aIdle !== bIdle) return aIdle - bIdle;
-    // Soft placement prefer (higher score first).
     const aScore = placementScore(a, placement, opts.task);
     const bScore = placementScore(b, placement, opts.task);
     if (aScore !== bScore) return bScore - aScore;
-    // Fleet affinity: prefer workers in the requested fleet.
     if (opts.preferFleet) {
       const aFleet = a.fleet === opts.preferFleet ? 0 : 1;
       const bFleet = b.fleet === opts.preferFleet ? 0 : 1;
@@ -147,6 +151,40 @@ export function pickIdleWorker(
   });
   if (!desiredDigest) return candidates[0];
   return candidates.find((w) => w.imageDigest === desiredDigest);
+}
+
+/**
+ * Pick an idle worker or spawn an on-demand one under maxConcurrent ∩ policy.
+ */
+export function acquireWorker(
+  state: ClusterState,
+  agentName: string,
+  opts: {
+    preferFleet?: string;
+    task?: Task;
+    preferWorkerId?: string;
+    root?: string;
+  } = {},
+): Worker | undefined {
+  const existing = pickIdleWorker(state, agentName, opts);
+  if (existing) return existing;
+
+  const agent = state.desired.find((a) => a.metadata.name === agentName);
+  if (!isOnDemandAgent(agent)) return undefined;
+
+  const policyCap = maxReplicas(state.policies ?? []);
+  const gate = canSpawnWorker(state, agentName, policyCap);
+  if (!gate.ok) return undefined;
+
+  const worker = spawnWorker(state, agentName, {
+    root: opts.root,
+    status: "pending",
+  });
+  if (!worker) return undefined;
+  if (opts.root) {
+    worker.worktree = ensureWorktree(opts.root, worker);
+  }
+  return worker;
 }
 
 export function pauseQueue(state: ClusterState): void {
@@ -223,7 +261,7 @@ function isClaimablePending(item: QueuedTask, now: number): boolean {
 }
 
 /**
- * Claim up to `limit` pending queue items onto idle workers.
+ * Claim up to `limit` pending queue items onto idle or freshly spawned workers.
  * Reclaims expired leases first. Skips items waiting on `nextRetryAt`.
  */
 export function claimPending(
@@ -262,6 +300,7 @@ export function claimPending(
   reclaimExpiredLeases(state, {
     now,
     maxAttempts: opts.maxAttempts,
+    root: opts.root,
   });
   const leaseMs = opts.leaseMs ?? DEFAULT_LEASE_MS;
   const claimed: DrainResult["claimed"] = [];
@@ -271,7 +310,7 @@ export function claimPending(
     .sort((a, b) => {
       const pa = effectivePriority(a, now, opts);
       const pb = effectivePriority(b, now, opts);
-      if (pa !== pb) return pb - pa; // higher priority first
+      if (pa !== pb) return pb - pa;
       return a.enqueuedAt < b.enqueuedAt ? -1 : a.enqueuedAt > b.enqueuedAt ? 1 : 0;
     });
 
@@ -282,7 +321,7 @@ export function claimPending(
       opts.preferFleet ??
       state.workers.find((w) => w.agent === item.task.agent)?.fleet ??
       agent?.derivedFrom?.fleet;
-    const worker = pickIdleWorker(state, item.task.agent, {
+    const worker = acquireWorker(state, item.task.agent, {
       preferFleet: fleetHint,
       task: item.task,
       root: opts.root,
@@ -303,7 +342,7 @@ export function claimPending(
       agent: item.task.agent,
       workerId: worker.id,
       taskId: item.id,
-      meta: { attempt: item.attempts, leaseMs },
+      meta: { attempt: item.attempts, leaseMs, spawned: isOnDemandAgent(agent) },
     });
   }
 
@@ -313,27 +352,29 @@ export function claimPending(
   };
 }
 
-function releaseWorker(state: ClusterState, workerId?: string): void {
+function releaseWorker(
+  state: ClusterState,
+  workerId?: string,
+  opts: { root?: string; now?: number } = {},
+): void {
   if (!workerId) return;
-  const worker = state.workers.find((w) => w.id === workerId);
-  if (!worker) return;
-  if (worker.status === "running" || worker.status === "failed") {
-    worker.status = "idle";
-    worker.lastTaskAt = new Date().toISOString();
-  }
+  releaseOrDestroyWorker(state, workerId, { root: opts.root, now: opts.now });
 }
 
 export type CompleteQueuedOptions = {
   /** Max claim attempts before dead-letter (default 3). */
   maxAttempts?: number;
   now?: number;
-  /** When false, leave worker status alone (default true → idle). */
+  /** When false, leave worker status alone (default true → release/destroy). */
   releaseWorker?: boolean;
+  /** Repo root for worktree teardown on on-demand destroy. */
+  root?: string;
 };
 
 /**
  * Mark a claimed item done, or retry / dead-letter on failure.
  * Policy denials stay `failed` (never claimed). Runtime failures retry then `dead`.
+ * On-demand workers are destroyed (or kept warm for idleTTL) after release.
  */
 export function completeQueued(
   state: ClusterState,
@@ -358,7 +399,7 @@ export function completeQueued(
     item.heartbeatAt = undefined;
     state.metrics.tasksCompleted += 1;
     state.metrics.lastDrainAt = item.finishedAt;
-    if (opts.releaseWorker !== false) releaseWorker(state, workerId);
+    if (opts.releaseWorker !== false) releaseWorker(state, workerId, { root: opts.root, now });
     chargeBudget(state, item.task, { now, workerId });
     if (workerId) rememberAffinity(state, item.task, workerId, { now });
     recordAudit(state, {
@@ -384,7 +425,7 @@ export function completeQueued(
     item.nextRetryAt = new Date(now + retryBackoffMs(item.attempts)).toISOString();
     state.metrics.tasksRetried = (state.metrics.tasksRetried ?? 0) + 1;
     state.metrics.lastDrainAt = new Date(now).toISOString();
-    if (opts.releaseWorker !== false) releaseWorker(state, workerId);
+    if (opts.releaseWorker !== false) releaseWorker(state, workerId, { root: opts.root, now });
     recordAudit(state, {
       kind: isLease ? "reclaim" : "retry",
       message: isLease ? "lease expired → retry" : `retry after failure: ${error ?? "unknown"}`,
@@ -404,7 +445,7 @@ export function completeQueued(
   state.metrics.tasksFailed += 1;
   state.metrics.tasksDead = (state.metrics.tasksDead ?? 0) + 1;
   state.metrics.lastDrainAt = item.finishedAt;
-  if (opts.releaseWorker !== false) releaseWorker(state, workerId);
+  if (opts.releaseWorker !== false) releaseWorker(state, workerId, { root: opts.root, now });
   recordAudit(state, {
     kind: "dead",
     message: isLease ? "lease expired → dead" : `dead-letter: ${error ?? "unknown"}`,
@@ -441,7 +482,7 @@ export type ReclaimResult = {
  */
 export function reclaimExpiredLeases(
   state: ClusterState,
-  opts: { now?: number; maxAttempts?: number } = {},
+  opts: { now?: number; maxAttempts?: number; root?: string } = {},
 ): ReclaimResult {
   ensureQueue(state);
   const now = opts.now ?? Date.now();
@@ -449,7 +490,6 @@ export function reclaimExpiredLeases(
   for (const item of state.queue) {
     if (item.status !== "claimed") continue;
     const exp = item.leaseExpiresAt ? Date.parse(item.leaseExpiresAt) : NaN;
-    // Legacy claims without lease: treat claimedAt + default lease as expiry.
     const fallback = item.claimedAt ? Date.parse(item.claimedAt) + DEFAULT_LEASE_MS : NaN;
     const deadline = Number.isFinite(exp) ? exp : fallback;
     if (!Number.isFinite(deadline) || deadline > now) continue;
@@ -460,6 +500,7 @@ export function reclaimExpiredLeases(
     const updated = completeQueued(state, id, false, "lease expired", {
       now,
       maxAttempts: opts.maxAttempts,
+      root: opts.root,
     });
     if (updated) {
       state.metrics.leasesReclaimed = (state.metrics.leasesReclaimed ?? 0) + 1;

@@ -59,6 +59,7 @@ export {
   claimPending,
   completeQueued,
   pickIdleWorker,
+  acquireWorker,
   queueSummary,
   emptyMetrics,
   requeueDead,
@@ -130,6 +131,20 @@ export { simulatePolicies } from "./policy-sim.js";
 export type { PolicySimReport, PolicySimRow } from "./policy-sim.js";
 export { planAutoscale } from "./autoscale.js";
 export type { ScaleRecommendation, AutoscalePlan, AutoscaleOptions } from "./autoscale.js";
+export {
+  resolveScaleMode,
+  resolveMaxConcurrent,
+  resolveIdleTTLMs,
+  isOnDemandAgent,
+  canSpawnWorker,
+  spawnWorker,
+  destroyWorker,
+  releaseOrDestroyWorker,
+  sweepIdleWorkers,
+  liveWorkersFor,
+  runningWorkersFor,
+  promoteWorkerMemory,
+} from "./scale.js";
 export { recordAudit, auditsFor, exportAuditJsonl, ensureAudit, AUDIT_MAX } from "./audit.js";
 export { metricsSnapshot, metricsPrometheus } from "./metrics.js";
 export { healthReport, probeWorker, evaluateBacklogSlo } from "./health.js";

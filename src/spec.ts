@@ -8,10 +8,12 @@ import type {
   LabelSelector,
   Manifest,
   Policy,
+  ScaleMode,
   TaskManifest,
   MemoryManifest,
 } from "./types.js";
 import { API_VERSION } from "./types.js";
+import { resolveMaxConcurrent, resolveScaleMode } from "./scale.js";
 
 export function parseManifests(raw: string): Manifest[] {
   const docs = parseAllDocuments(raw);
@@ -74,39 +76,120 @@ export function labelsMatch(
   return true;
 }
 
+function cloneAgentSpec(tpl: Omit<AgentSpec, "replicas"> & { replicas?: number }, overrides: {
+  replicas: number;
+  scale?: ScaleMode;
+  maxConcurrent?: number;
+  idleTTLMs?: number;
+}): AgentSpec {
+  return {
+    ...tpl,
+    replicas: overrides.replicas,
+    scale: overrides.scale ?? tpl.scale,
+    maxConcurrent: overrides.maxConcurrent ?? tpl.maxConcurrent,
+    idleTTLMs: overrides.idleTTLMs ?? tpl.idleTTLMs,
+    harness: { ...tpl.harness },
+    hermes: {
+      ...tpl.hermes,
+      skills: [...tpl.hermes.skills],
+    },
+    github: tpl.github
+      ? { ...tpl.github, events: [...tpl.github.events] }
+      : undefined,
+    selector: tpl.selector,
+    placement: tpl.placement
+      ? {
+          require: tpl.placement.require ? { ...tpl.placement.require } : undefined,
+          prefer: tpl.placement.prefer ? { ...tpl.placement.prefer } : undefined,
+          taints: tpl.placement.taints?.map((t) => ({ ...t })),
+          tolerations: tpl.placement.tolerations?.map((t) => ({ ...t })),
+        }
+      : undefined,
+  };
+}
+
+function normalizeAgentSpec(spec: AgentSpec): AgentSpec {
+  const scale = resolveScaleMode(spec);
+  const maxConcurrent = resolveMaxConcurrent({ ...spec, scale });
+  if (scale === "onDemand") {
+    return {
+      ...spec,
+      scale,
+      maxConcurrent,
+      // Keep replicas as a non-zero hint for tooling; standing expand uses scale.
+      replicas: Math.max(1, spec.replicas ?? maxConcurrent),
+    };
+  }
+  return {
+    ...spec,
+    scale: "static",
+    replicas: Math.max(1, spec.replicas ?? 1),
+    maxConcurrent: undefined,
+  };
+}
+
+/**
+ * Expand Git desired state into agent *definitions*.
+ * - Agent: one definition (static or onDemand).
+ * - Fleet static: N derived agents (legacy warm inventory).
+ * - Fleet onDemand: one definition named after the fleet; replicas/maxConcurrent = concurrency cap.
+ */
 export function expandDesired(manifests: Manifest[]): DesiredAgent[] {
   const agents: DesiredAgent[] = [];
   for (const m of manifests) {
     if (m.kind === "Agent") {
-      agents.push({ ...m, spec: { ...m.spec, replicas: Math.max(1, m.spec.replicas) } });
+      agents.push({ ...m, spec: normalizeAgentSpec({ ...m.spec, replicas: Math.max(0, m.spec.replicas ?? 1) }) });
     }
   }
   for (const m of manifests) {
     if (m.kind !== "Fleet") continue;
+    const fleetScale = resolveScaleMode({
+      scale: m.spec.scale ?? m.spec.template.spec.scale,
+      replicas: m.spec.replicas,
+      maxConcurrent: m.spec.maxConcurrent ?? m.spec.template.spec.maxConcurrent,
+    });
+    const concurrency = resolveMaxConcurrent({
+      scale: fleetScale,
+      replicas: m.spec.replicas,
+      maxConcurrent: m.spec.maxConcurrent ?? m.spec.template.spec.maxConcurrent,
+    });
+    const idleTTLMs = m.spec.idleTTLMs ?? m.spec.template.spec.idleTTLMs;
+
+    if (fleetScale === "onDemand") {
+      const spec = normalizeAgentSpec(
+        cloneAgentSpec(m.spec.template.spec, {
+          replicas: concurrency,
+          scale: "onDemand",
+          maxConcurrent: concurrency,
+          idleTTLMs,
+        }),
+      );
+      agents.push({
+        apiVersion: API_VERSION,
+        kind: "Agent",
+        metadata: {
+          name: m.metadata.name,
+          labels: {
+            ...(m.metadata.labels ?? {}),
+            ...(m.spec.template.metadata?.labels ?? {}),
+            fleet: m.metadata.name,
+          },
+        },
+        spec,
+        derivedFrom: { fleet: m.metadata.name, replica: 0 },
+      });
+      continue;
+    }
+
     const replicas = Math.max(0, m.spec.replicas);
     for (let i = 0; i < replicas; i++) {
-      const tpl = m.spec.template.spec;
-      const spec: AgentSpec = {
-        ...tpl,
-        replicas: 1,
-        harness: { ...tpl.harness },
-        hermes: {
-          ...tpl.hermes,
-          skills: [...tpl.hermes.skills],
-        },
-        github: tpl.github
-          ? { ...tpl.github, events: [...tpl.github.events] }
-          : undefined,
-        selector: tpl.selector,
-        placement: tpl.placement
-          ? {
-              require: tpl.placement.require ? { ...tpl.placement.require } : undefined,
-              prefer: tpl.placement.prefer ? { ...tpl.placement.prefer } : undefined,
-              taints: tpl.placement.taints?.map((t) => ({ ...t })),
-              tolerations: tpl.placement.tolerations?.map((t) => ({ ...t })),
-            }
-          : undefined,
-      };
+      const spec = normalizeAgentSpec(
+        cloneAgentSpec(m.spec.template.spec, {
+          replicas: 1,
+          scale: "static",
+          idleTTLMs,
+        }),
+      );
       agents.push({
         apiVersion: API_VERSION,
         kind: "Agent",
@@ -151,6 +234,11 @@ export function maxReplicas(policies: Policy[]): number {
   return Math.min(...policies.map((p) => p.spec.maxReplicas));
 }
 
+/**
+ * Cap capacity across desired agents.
+ * Static: caps standing replicas.
+ * OnDemand: caps maxConcurrent (definitions stay; spawn honors the capped value).
+ */
 export function applyReplicaCap(
   desired: DesiredAgent[],
   cap: number,
@@ -159,6 +247,26 @@ export function applyReplicaCap(
   let remaining = cap;
   const agents: DesiredAgent[] = [];
   for (const agent of desired) {
+    const mode = resolveScaleMode(agent.spec);
+    if (mode === "onDemand") {
+      const requested = resolveMaxConcurrent(agent.spec);
+      const allowed = Math.min(requested, Math.max(0, remaining));
+      if (allowed < requested) {
+        capped.push({ agent: agent.metadata.name, requested, allowed });
+      }
+      remaining -= allowed;
+      if (allowed <= 0) continue;
+      agents.push({
+        ...agent,
+        spec: {
+          ...agent.spec,
+          scale: "onDemand",
+          maxConcurrent: allowed,
+          replicas: Math.max(1, allowed),
+        },
+      });
+      continue;
+    }
     const requested = agent.derivedFrom ? 1 : agent.spec.replicas;
     const allowed = Math.min(requested, Math.max(0, remaining));
     if (allowed < requested) {
@@ -166,7 +274,10 @@ export function applyReplicaCap(
     }
     remaining -= allowed;
     if (allowed <= 0) continue;
-    agents.push({ ...agent, spec: { ...agent.spec, replicas: allowed } });
+    agents.push({ ...agent, spec: { ...agent.spec, scale: "static", replicas: allowed } });
   }
   return { agents, capped };
 }
+
+/** @deprecated use resolveScaleMode from scale.js — re-export for convenience */
+export { resolveScaleMode, resolveMaxConcurrent };

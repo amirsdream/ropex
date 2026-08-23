@@ -36,10 +36,10 @@ flowchart TB
     API --> STATE
   end
 
-  subgraph workers["Immutable workers"]
-    W1["triage:0\ndigest=a1b2…"]
-    W2["reviewer:1\ndigest=c3d4…"]
-    WN["… N replicas\nworktree · placement"]
+  subgraph workers["Ephemeral workers"]
+    W1["triage:0\nspawned · digest"]
+    W2["reviewer:1\nactive run"]
+    WN["… under maxConcurrent\nworktree · then destroy"]
   end
 
   subgraph wf["Per-task workflow"]
@@ -55,15 +55,15 @@ flowchart TB
   MEM --> CTRL
   GH --> Q
   EXT --> EXEC --> Q
-  CTRL -->|"stamp imageDigest"| workers
-  Q -->|"claim idle"| workers
+  CTRL -->|"definitions + digests"| workers
+  Q -->|"claim or spawn"| workers
   TICK -->|"bounded drain"| workers
   workers --> wf
   wf -->|"comment / check / PR / git"| GH
   API -.->|"observe · operate"| cp
 ```
 
-**Scale is a git commit:** change `spec.replicas` from 20 to 2000. Policy caps blast radius. Operators pause, drain, run pipelines, and inspect trajectories from CLI or [`ropex ui`](./docs/control-plane-ui.md).
+**Scale is a concurrency commit:** raise `maxConcurrent` (on-demand) or `replicas` (static). `Policy.maxReplicas` caps blast radius. Workers spawn on request and destroy when idle — memory stays on the agent/fleet bus. Operators pause, drain, run pipelines, and inspect trajectories from CLI or [`ropex ui`](./docs/control-plane-ui.md).
 
 ## Why this exists
 
@@ -73,7 +73,7 @@ Coding agents today are single-player. Ropex combines three proven ideas:
 | --- | --- | --- |
 | Composable kernel | [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) (Cordis) | Execute tool loops with profile packs |
 | Durable brain | [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Plan, remember, learn skills |
-| Fleet operations | GitOps (Flux/Fleet style) | Declare replicas, reconcile drift, cap with policy |
+| Fleet operations | GitOps (not a K8s clone) | Declare agent defs + concurrency caps; spawn/destroy on demand |
 
 Ropex is the control plane that multiplies those runtimes across repos and optional GitHub — the way Kubernetes multiplied containers across clusters.
 
@@ -166,12 +166,14 @@ kind: Fleet
 metadata:
   name: pr-factory
 spec:
-  replicas: 20
+  scale: onDemand
+  maxConcurrent: 8
+  idleTTLMs: 0
   template:
     spec:
       harness:
         profile: code          # minimal | code | standard | creator
-        model: deepseek-v4-pro
+        model: gpt-4o
         plugins: [github, fs, shell]
       hermes:
         soul: souls/builder.md
@@ -192,9 +194,9 @@ spec:
 | Kind | Role |
 | --- | --- |
 | `GitRepo` | Where the controller pulls desired state |
-| `Agent` | One named worker type (Hermes + harness profile) |
-| `Fleet` | Replica set of agents, selected onto repos |
-| `Policy` | Max replicas, permission denylist, optional budget |
+| `Agent` | One named agent definition (Hermes + harness); `scale: onDemand` or `static` |
+| `Fleet` | Template + concurrency (onDemand → one def; static → N derived agents) |
+| `Policy` | Max live workers, permission denylist, optional budget |
 | `Task` | Git-native work item ([forge-neutral](./docs/forge-neutral.md)) |
 | `Memory` | Git-declared shared memory fact |
 
@@ -206,7 +208,7 @@ Example fleets: `fleets/examples/github-control-plane.yaml`, `forge-local.yaml`.
 
 **DeepSeek Harness** (`src/dsh.ts`, `src/plugins.ts`) — Cordis-shaped kernel: loop mode, tools, permissions, delivery plugin.
 
-**Ropex glue** — `src/runtime.ts` runs the fixed workflow; `src/controller.ts` reconciles workers; `src/executor.ts` runs multi-stage pipelines for external orchestrators.
+**Ropex glue** — `src/runtime.ts` runs the fixed workflow; `src/scale.ts` + `src/queue.ts` spawn/destroy on-demand workers; `src/controller.ts` reconciles definitions; `src/executor.ts` runs multi-stage pipelines for external orchestrators.
 
 **Shared memory** — scoped (`worker` | `agent` | `fleet` | `cluster`) with `hermes.share` policy. Contracts in `src/contracts.ts`; store in `src/memory.ts`.
 

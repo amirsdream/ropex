@@ -1,10 +1,11 @@
 /**
- * Worker-pool autoscaler stub — GitOps scale recommendations from backlog SLO.
- * Never mutates desired replicas in place; emits YAML to commit (source of truth is git).
+ * Autoscale recommendations — GitOps patches for concurrency caps (onDemand)
+ * or standing replicas (static). Never mutates desired state in place.
  */
 
 import { evaluateBacklogSlo } from "./health.js";
 import { recordAudit } from "./audit.js";
+import { resolveMaxConcurrent, resolveScaleMode } from "./scale.js";
 import { maxReplicas } from "./spec.js";
 import type { ClusterState, DesiredAgent } from "./types.js";
 
@@ -14,6 +15,10 @@ export type ScaleRecommendation = {
   name: string;
   currentReplicas: number;
   recommendedReplicas: number;
+  /** Alias for concurrency-oriented UIs. */
+  currentConcurrent: number;
+  recommendedConcurrent: number;
+  scale: "onDemand" | "static";
   delta: number;
   reason: string;
   cappedByPolicy: boolean;
@@ -32,13 +37,13 @@ export type AutoscalePlan = {
 };
 
 export type AutoscaleOptions = {
-  /** Pending tasks per idle worker before scale-up (default 2). */
+  /** Pending tasks per idle/available slot before scale-up (default 2). */
   pendingPerIdle?: number;
-  /** Scale up by at most this many replicas per tick (default 4). */
+  /** Scale up by at most this many per tick (default 4). */
   maxScaleUp?: number;
-  /** Scale down when idle workers exceed pending by this margin (default 2). */
+  /** Scale down when idle surplus exceeds this (default 2) — static only. */
   idleSurplus?: number;
-  /** Minimum replicas to keep even when idle (default 1). */
+  /** Minimum concurrent/replicas to keep (default 1). */
   minReplicas?: number;
   now?: number;
   /** Record an audit event when recommendations are non-empty. */
@@ -62,39 +67,63 @@ function groupKey(agent: DesiredAgent): { kind: "Fleet" | "Agent"; name: string 
   return { kind: "Agent", name: agent.metadata.name };
 }
 
-function currentReplicasFor(state: ClusterState, key: { kind: string; name: string }): number {
+function currentCapacity(state: ClusterState, key: { kind: string; name: string }): number {
+  const agents =
+    key.kind === "Fleet"
+      ? state.desired.filter((a) => a.derivedFrom?.fleet === key.name)
+      : state.desired.filter((a) => a.metadata.name === key.name);
+  if (!agents.length) return 0;
+  const mode = resolveScaleMode(agents[0].spec);
+  if (mode === "onDemand") {
+    return agents.reduce((n, a) => n + resolveMaxConcurrent(a.spec), 0);
+  }
   if (key.kind === "Fleet") {
     return state.workers.filter((w) => w.fleet === key.name && w.status !== "retired").length;
   }
   return liveWorkers(state, key.name).length;
 }
 
-function agentsInGroup(state: ClusterState, key: { kind: string; name: string }): string[] {
+function agentsInGroup(state: ClusterState, key: { kind: string; name: string }): DesiredAgent[] {
   if (key.kind === "Fleet") {
-    return [
-      ...new Set(
-        state.desired.filter((a) => a.derivedFrom?.fleet === key.name).map((a) => a.metadata.name),
-      ),
-    ];
+    return state.desired.filter((a) => a.derivedFrom?.fleet === key.name);
   }
-  return [key.name];
+  return state.desired.filter((a) => a.metadata.name === key.name);
 }
 
-function fleetOrAgentYaml(kind: "Fleet" | "Agent", name: string, replicas: number): string {
+function capacityYaml(
+  kind: "Fleet" | "Agent",
+  name: string,
+  n: number,
+  scale: "onDemand" | "static",
+): string {
+  if (scale === "onDemand") {
+    return [
+      "apiVersion: ropex.dev/v1",
+      `kind: ${kind}`,
+      "metadata:",
+      `  name: ${name}`,
+      "spec:",
+      "  scale: onDemand",
+      `  maxConcurrent: ${n}`,
+      "# commit this to git — Ropex admits spawns under this cap",
+      "",
+    ].join("\n");
+  }
   return [
     "apiVersion: ropex.dev/v1",
     `kind: ${kind}`,
     "metadata:",
     `  name: ${name}`,
     "spec:",
-    `  replicas: ${replicas}`,
-    "# commit this to git — Ropex derives workers from the repo",
+    "  scale: static",
+    `  replicas: ${n}`,
+    "# commit this to git — Ropex derives standing workers from the repo",
     "",
   ].join("\n");
 }
 
 /**
- * Compute HPA-style scale recommendations from queue depth + worker idle/running.
+ * Compute scale recommendations from queue depth + worker idle/running.
  * Honors Policy.maxReplicas. Does not write cluster state (GitOps).
  */
 export function planAutoscale(state: ClusterState, opts: AutoscaleOptions = {}): AutoscalePlan {
@@ -107,7 +136,6 @@ export function planAutoscale(state: ClusterState, opts: AutoscaleOptions = {}):
   const finiteCap = Number.isFinite(policyCap) ? policyCap : 1_000;
   const backlog = evaluateBacklogSlo(state, { now });
 
-  // Group desired agents by fleet (or standalone agent name).
   const groups = new Map<string, { kind: "Fleet" | "Agent"; name: string }>();
   for (const a of state.desired ?? []) {
     const key = groupKey(a);
@@ -117,37 +145,57 @@ export function planAutoscale(state: ClusterState, opts: AutoscaleOptions = {}):
   const recommendations: ScaleRecommendation[] = [];
 
   for (const key of groups.values()) {
-    const agentNames = agentsInGroup(state, key);
+    const groupAgents = agentsInGroup(state, key);
+    if (!groupAgents.length) continue;
+    const scale = resolveScaleMode(groupAgents[0].spec);
     let pending = 0;
     let idle = 0;
     let running = 0;
-    for (const name of agentNames) {
-      pending += pendingFor(state, name);
-      const live = liveWorkers(state, name);
+    for (const a of groupAgents) {
+      pending += pendingFor(state, a.metadata.name);
+      const live = liveWorkers(state, a.metadata.name);
       idle += live.filter((w) => w.status === "idle" || w.status === "pending").length;
       running += live.filter((w) => w.status === "running").length;
     }
-    const current = currentReplicasFor(state, key);
+    const current = currentCapacity(state, key);
     if (current === 0 && pending === 0) continue;
 
     let recommended = current;
     let reason = "steady";
 
-    const load = idle === 0 ? pending : pending / Math.max(idle, 1);
-    if (pending > 0 && (idle === 0 || load >= pendingPerIdle || backlog.breached)) {
-      const need = idle === 0 ? Math.min(pending, maxScaleUp) : Math.ceil(pending / pendingPerIdle) - idle;
-      const bump = Math.max(1, Math.min(maxScaleUp, need));
-      recommended = current + bump;
-      reason = backlog.breached
-        ? `backlog SLO breached; scale up +${bump}`
-        : idle === 0
-          ? `no idle workers with ${pending} pending; scale up +${bump}`
-          : `pending/idle=${load.toFixed(1)} ≥ ${pendingPerIdle}; scale up +${bump}`;
-    } else if (pending === 0 && idle > idleSurplus && current > minReplicas) {
-      const down = Math.min(idle - idleSurplus, current - minReplicas, maxScaleUp);
-      if (down > 0) {
-        recommended = current - down;
-        reason = `idle surplus ${idle} with empty queue; scale down -${down}`;
+    if (scale === "onDemand") {
+      // Cap should cover pending + running with headroom; idle warm pool is not the signal.
+      const need = Math.max(running + pending, minReplicas);
+      if (need > current && (pending > 0 || backlog.breached)) {
+        const bump = Math.min(maxScaleUp, need - current);
+        recommended = current + Math.max(1, bump);
+        reason = backlog.breached
+          ? `backlog SLO breached; raise maxConcurrent +${bump}`
+          : `pending=${pending} running=${running}; raise maxConcurrent +${bump}`;
+      } else if (pending === 0 && running === 0 && current > minReplicas) {
+        const down = Math.min(maxScaleUp, current - minReplicas);
+        if (down > 0) {
+          recommended = current - down;
+          reason = `quiet queue; lower maxConcurrent -${down}`;
+        }
+      }
+    } else {
+      const load = idle === 0 ? pending : pending / Math.max(idle, 1);
+      if (pending > 0 && (idle === 0 || load >= pendingPerIdle || backlog.breached)) {
+        const need = idle === 0 ? Math.min(pending, maxScaleUp) : Math.ceil(pending / pendingPerIdle) - idle;
+        const bump = Math.max(1, Math.min(maxScaleUp, need));
+        recommended = current + bump;
+        reason = backlog.breached
+          ? `backlog SLO breached; scale up +${bump}`
+          : idle === 0
+            ? `no idle workers with ${pending} pending; scale up +${bump}`
+            : `pending/idle=${load.toFixed(1)} ≥ ${pendingPerIdle}; scale up +${bump}`;
+      } else if (pending === 0 && idle > idleSurplus && current > minReplicas) {
+        const down = Math.min(idle - idleSurplus, current - minReplicas, maxScaleUp);
+        if (down > 0) {
+          recommended = current - down;
+          reason = `idle surplus ${idle} with empty queue; scale down -${down}`;
+        }
       }
     }
 
@@ -166,6 +214,9 @@ export function planAutoscale(state: ClusterState, opts: AutoscaleOptions = {}):
       name: key.name,
       currentReplicas: current,
       recommendedReplicas: recommended,
+      currentConcurrent: current,
+      recommendedConcurrent: recommended,
+      scale,
       delta: recommended - current,
       reason,
       cappedByPolicy,
@@ -175,7 +226,9 @@ export function planAutoscale(state: ClusterState, opts: AutoscaleOptions = {}):
     });
   }
 
-  const yaml = recommendations.map((r) => fleetOrAgentYaml(r.kind, r.name, r.recommendedReplicas)).join("---\n");
+  const yaml = recommendations
+    .map((r) => capacityYaml(r.kind, r.name, r.recommendedReplicas, r.scale))
+    .join("---\n");
 
   if (opts.audit && recommendations.length) {
     recordAudit(state, {
