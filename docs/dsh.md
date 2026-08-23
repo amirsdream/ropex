@@ -13,9 +13,23 @@ Ropex executes Hermes plans through `bootDsh` (`src/dsh.ts`). Today the default 
 
 `backend: "live"` **fails closed** with an error that points at the next scaffold step. Do not call network APIs from tests.
 
+## Install
+
+```bash
+npm install          # small footprint — simulated backends only
+npm test
+```
+
+Do **not** install `@deepseek-ai/dsh` unless you need live mode. That package pulls dozens of nested modules and can make `npm install` appear hung for minutes.
+
+```bash
+# live only (optional, after core install works)
+npm install @deepseek-ai/dsh@^0.1.1-rc.2
+```
+
 ## Steps to wire live
 
-1. Optional peer: `@deepseek-ai/dsh` (never a hard dependency of CI).
+1. Install optional peer: `npm install @deepseek-ai/dsh` (never a hard CI dependency).
 2. Implement `bootLiveDsh(spec)` returning `{ backend: "live", pack, kernel, execute }`.
 3. Map `DSH_PROFILE_PACKS[profile].plugins` onto Cordis pack loaders.
 4. Mount Policy deny/requireApproval before tool execution.

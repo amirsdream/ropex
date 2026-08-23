@@ -1,6 +1,6 @@
 {
   "name": "Ropex control plane",
-  "install": "npm install",
+  "install": "npm install --no-optional",
   "start": "npm run build",
   "ports": [
     {
