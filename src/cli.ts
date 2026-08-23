@@ -1007,7 +1007,7 @@ async function main(argv: string[]): Promise<number> {
         console.log(`promoted ${next.id} → ${next.scope}${path ? `  exported=${path}` : ""}`);
         return 0;
       }
-      const view = buildControlPlaneView(state);
+      const view = buildControlPlaneView(state, root);
       if (!view.memory.length) {
         console.log("no shared memory facts yet");
         return 0;

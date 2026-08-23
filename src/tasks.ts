@@ -191,3 +191,102 @@ export function deliverGitTaskFromQueueItem(item: QueuedTask, output?: string): 
   }
   return false;
 }
+
+export type TaskGitEntry = {
+  id: string;
+  agent: string;
+  status: string;
+  prompt: string;
+  priority?: number;
+  path: string;
+  inQueue: boolean;
+  queueStatus?: string;
+};
+
+export type TaskGitSummary = {
+  pending: number;
+  done: number;
+  failed: number;
+  scanned: number;
+  defaultDir: string;
+  items: TaskGitEntry[];
+};
+
+function queueStateForTask(state: ClusterState, taskId: string): { inQueue: boolean; queueStatus?: string } {
+  const items = state.queue.filter((q) => q.id === taskId);
+  if (!items.length) return { inQueue: false };
+  const latest = items[items.length - 1];
+  return { inQueue: latest.status === "pending" || latest.status === "claimed", queueStatus: latest.status };
+}
+
+/** Scan git Task YAML manifests for the control-plane view (no writes). */
+export function taskGitSummary(state: ClusterState, root: string, dir?: string): TaskGitSummary {
+  const tasksDir = resolveTasksDir(root, dir);
+  const summary: TaskGitSummary = {
+    pending: 0,
+    done: 0,
+    failed: 0,
+    scanned: 0,
+    defaultDir: DEFAULT_TASKS_DIR,
+    items: [],
+  };
+  for (const path of findTaskFiles(tasksDir)) {
+    summary.scanned += 1;
+    try {
+      const m = readTaskManifest(path);
+      const status = m.spec.status ?? "pending";
+      if (status === "pending") summary.pending += 1;
+      else if (status === "done") summary.done += 1;
+      else if (status === "failed") summary.failed += 1;
+      const q = queueStateForTask(state, m.metadata.name);
+      summary.items.push({
+        id: m.metadata.name,
+        agent: m.spec.agent,
+        status,
+        prompt: m.spec.prompt,
+        priority: m.spec.priority,
+        path,
+        inQueue: q.inQueue,
+        queueStatus: q.queueStatus,
+      });
+    } catch {
+      /* skip unreadable manifests in view scan */
+    }
+  }
+  summary.items.sort((a, b) => a.id.localeCompare(b.id));
+  return summary;
+}
+
+/** Merge task git summaries from declared GitRepo paths. */
+export function taskGitSummaryFromRepos(state: ClusterState, root: string): TaskGitSummary {
+  const merged: TaskGitSummary = {
+    pending: 0,
+    done: 0,
+    failed: 0,
+    scanned: 0,
+    defaultDir: DEFAULT_TASKS_DIR,
+    items: [],
+  };
+  const repos = state.gitRepos ?? [];
+  if (!repos.length) {
+    const local = taskGitSummary(state, root);
+    return local;
+  }
+  for (const repo of repos) {
+    const loc = resolveRepoLocalPath(root, repo);
+    if (!loc.ok) continue;
+    const tasksDir = join(loc.path, repo.spec.tasksPath ?? DEFAULT_TASKS_DIR);
+    const part = taskGitSummary(state, root, tasksDir);
+    merged.pending += part.pending;
+    merged.done += part.done;
+    merged.failed += part.failed;
+    merged.scanned += part.scanned;
+    merged.items.push(...part.items);
+  }
+  if (!merged.scanned) {
+    const local = taskGitSummary(state, root);
+    return local;
+  }
+  merged.items.sort((a, b) => a.id.localeCompare(b.id));
+  return merged;
+}

@@ -177,6 +177,23 @@ export type ControlPlaneView = {
     runtimeOnly: number;
     defaultDir: string;
   };
+  taskGit: {
+    pending: number;
+    done: number;
+    failed: number;
+    scanned: number;
+    defaultDir: string;
+    items: Array<{
+      id: string;
+      agent: string;
+      status: string;
+      prompt: string;
+      priority?: number;
+      path: string;
+      inQueue: boolean;
+      queueStatus?: string;
+    }>;
+  };
   hermes: HermesSurfaceView[];
   harness: HarnessSurfaceView[];
   skills: LearnedSkill[];
@@ -329,9 +346,10 @@ export type ControlPlaneView = {
   };
   dsh: {
     backend: "simulated" | "live";
-    profiles: Array<{ profile: string; loop: string; plugins: string[]; description: string }>;
+    profiles: Array<{ profile: string; loop: string; plugins: string[]; description: string; dshProfile: string }>;
     liveReady: boolean;
     packageInstalled: boolean;
+    apiKeyPresent: boolean;
     scaffoldHint: string;
   };
   hermesLive: {
@@ -396,6 +414,7 @@ export type ControlPlaneView = {
 export const API_ROUTES = {
   view: "/api/v1/view",
   memory: "/api/v1/memory",
+  tasks: "/api/v1/tasks",
   workers: "/api/v1/workers",
   queue: "/api/v1/queue",
   metrics: "/api/v1/metrics",
