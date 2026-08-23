@@ -41,7 +41,9 @@ export {
   emitExecutorEvent,
   mapExecutorEventToUi,
   validatePipelineAgents,
+  parsePipelineTaskId,
 } from "./executor.js";
+export type { TaskProgress } from "./runtime.js";
 export type { ExecutorEvent, ExecutorEventKind, SubmitPipelineOptions, SubmitPipelineResult } from "./executor.js";
 export { planPipeline } from "./pipeline.js";
 export type { PipelineStagePlan } from "./pipeline.js";

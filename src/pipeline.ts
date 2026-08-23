@@ -54,13 +54,16 @@ function planPipelineWithHermes(prompt: string, state: ClusterState, agents: str
       prompt: `${prompt}\n\nHermes plan:\n${planText}`,
     },
   ];
-  for (const call of plan.calls.slice(0, 4)) {
+  if (plan.calls.length) {
     const target = findAgent(agents, "coder", "researcher", "planner") ?? agent.metadata.name;
+    const callSummary = plan.calls
+      .map((c) => `${c.name}(${JSON.stringify(c.input).slice(0, 120)})`)
+      .join("\n");
     stages.push({
-      id: `exec-${call.name}`,
+      id: "execute",
       agent: target,
-      role: call.name,
-      prompt: `${prompt}\n\nExecute: ${call.name} ${JSON.stringify(call.input).slice(0, 500)}`,
+      role: "executor",
+      prompt: `${prompt}\n\nHermes planned calls:\n${callSummary}`,
     });
   }
   return stages.length > 1 ? stages : [{ id: "run", agent: agent.metadata.name, role: "worker", prompt }];

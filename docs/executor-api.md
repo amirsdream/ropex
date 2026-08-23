@@ -9,6 +9,7 @@ Engine-neutral HTTP + SSE contract for external orchestrators (e.g. [Magentic](h
 | `POST` | `/api/v1/pipeline` | Submit a prompt (optional explicit stages) |
 | `POST` | `/api/v1/pipeline` `{ "action":"drain", "pipelineId" }` | Scoped sequential drain |
 | `GET` | `/api/v1/pipeline?id=<uuid>` | Fetch pipeline status + persisted events |
+| `GET` | `/api/v1/pipeline` | List recent pipelines (omit `id`) |
 | `GET` | `/api/v1/events?pipelineId=<uuid>` | SSE stream of executor events |
 | `GET` | `/api/v1/events?pipelineId=<uuid>&format=ui` | SSE with Magentic-compatible `{ type, data }` payloads |
 
@@ -84,7 +85,7 @@ Events are persisted on `pipeline.events` (capped) in cluster state.
 | `heuristic` (default) | Regex multi-stage planner in `src/pipeline.ts` |
 | `hermes` | Seed stages from Hermes offline `plan()` on the first fleet agent |
 
-Per-task execution still runs Hermes → harness inside `runTask()`.
+Per-task execution still runs Hermes → harness inside `runTask()`. Progress hooks emit `stage.log` **before** `stage.complete` during drain.
 
 ## Magentic integration
 

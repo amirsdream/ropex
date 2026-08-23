@@ -464,6 +464,22 @@ export function buildControlPlaneView(state: ClusterState, root = process.cwd())
         summary: h.summary,
       };
     })(),
+    pipelines: (() => {
+      const rows = state.pipelines ?? [];
+      return {
+        total: rows.length,
+        recent: rows
+          .slice(-20)
+          .reverse()
+          .map((p) => ({
+            id: p.id,
+            status: p.status,
+            prompt: p.prompt.slice(0, 160),
+            stages: p.stages.length,
+            updatedAt: p.updatedAt,
+          })),
+      };
+    })(),
   };
 }
 
@@ -983,7 +999,23 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
       }
     }
     const id = url.searchParams.get("id");
-    if (!id) return json(res, { error: "need id query param" }, 400);
+    if (!id) {
+      const rows = state.pipelines ?? [];
+      return json(res, {
+        total: rows.length,
+        pipelines: rows
+          .slice(-30)
+          .reverse()
+          .map((p) => ({
+            id: p.id,
+            status: p.status,
+            prompt: p.prompt,
+            stages: p.stages.length,
+            updatedAt: p.updatedAt,
+            output: p.output?.slice(0, 400),
+          })),
+      });
+    }
     const pipeline = getPipeline(state, id);
     if (!pipeline) return json(res, { error: `pipeline not found: ${id}` }, 404);
     return json(res, pipeline);

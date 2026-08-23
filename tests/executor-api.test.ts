@@ -2,13 +2,14 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { startControlPlaneServer } from "../src/api.ts";
+import { startControlPlaneServer, buildControlPlaneView } from "../src/api.ts";
 import { API_ROUTES } from "../src/contracts.ts";
 import { emptyState, planReconcile, saveState, loadState } from "../src/controller.ts";
 import {
   drainPipeline,
   getExecutorEvents,
   mapExecutorEventToUi,
+  parsePipelineTaskId,
   submitPipeline,
   validatePipelineAgents,
 } from "../src/executor.ts";
@@ -146,6 +147,28 @@ describe("executor API", () => {
     expect(log.data.log_type).toBe("thought");
   });
 
+  it("parsePipelineTaskId splits pipeline-scoped task ids", () => {
+    expect(parsePipelineTaskId("abc:research")).toEqual({ pipelineId: "abc", stageId: "research" });
+    expect(parsePipelineTaskId("plain")).toEqual({});
+  });
+
+  it("stage.log events precede stage.complete in event order", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ropex-log-order-"));
+    temps.push(root);
+    const { next } = planReconcile(emptyState(), parseManifests(yaml), "fleets/");
+    const result = await submitPipeline(next, {
+      prompt: "Compare X vs Y",
+      root,
+      drain: true,
+      stages: [{ id: "only", agent: "researcher", prompt: "compare" }],
+    });
+    const events = getExecutorEvents(result.pipeline.id);
+    const completeIdx = events.findIndex((e) => e.kind === "stage.complete");
+    const logIdx = events.findIndex((e) => e.kind === "stage.log");
+    expect(logIdx).toBeGreaterThan(-1);
+    expect(completeIdx).toBeGreaterThan(logIdx);
+  });
+
   it("emits stage.log events from trajectory steps", async () => {
     const root = mkdtempSync(join(tmpdir(), "ropex-log-"));
     temps.push(root);
@@ -191,6 +214,14 @@ describe("executor API", () => {
       expect(get.status).toBe(200);
       const loaded = (await get.json()) as { events?: unknown[] };
       expect((loaded.events ?? []).length).toBeGreaterThan(0);
+
+      const list = await fetch(`http://127.0.0.1:${server.port}${API_ROUTES.pipeline}`);
+      expect(list.status).toBe(200);
+      const listed = (await list.json()) as { total: number; pipelines: unknown[] };
+      expect(listed.total).toBeGreaterThan(0);
+
+      const view = buildControlPlaneView(loadState(root), root);
+      expect(view.pipelines.total).toBeGreaterThan(0);
     } finally {
       await server.close();
     }

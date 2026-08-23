@@ -23,6 +23,15 @@ import type {
 export type RunTaskOptions = ImageResolveOptions & {
   /** Override worktree root (defaults to opts.root or cwd). */
   worktreeRoot?: string;
+  /** Optional progress hook (pipeline SSE, tests). */
+  onProgress?: (progress: TaskProgress) => void;
+};
+
+export type TaskProgress = {
+  taskId: string;
+  agent: string;
+  kind: "plan" | "thought" | "observation" | "tool";
+  message: string;
 };
 
 export async function runTask(
@@ -73,6 +82,14 @@ export async function runTask(
 
   // compose + plan (Hermes)
   const planned = hermes.plan(task);
+  for (const thought of planned.thoughts) {
+    opts.onProgress?.({
+      taskId: task.id,
+      agent: worker.agent,
+      kind: "plan",
+      message: thought,
+    });
+  }
 
   // policy admission — deny fails closed; approval-gated tools pause for approve/reject
   const admission = admitCalls(state.policies, planned.calls, state, {
@@ -95,6 +112,33 @@ export async function runTask(
     thoughts: planned.thoughts,
     calls: admission.allowed,
   });
+
+  for (const step of execSteps) {
+    if (step.thought) {
+      opts.onProgress?.({
+        taskId: task.id,
+        agent: worker.agent,
+        kind: "thought",
+        message: step.thought,
+      });
+    }
+    for (const call of step.calls) {
+      opts.onProgress?.({
+        taskId: task.id,
+        agent: worker.agent,
+        kind: "tool",
+        message: `${call.name} ${JSON.stringify(call.input).slice(0, 200)}`,
+      });
+    }
+    if (step.observation) {
+      opts.onProgress?.({
+        taskId: task.id,
+        agent: worker.agent,
+        kind: "observation",
+        message: step.observation,
+      });
+    }
+  }
 
   const gatedSteps: TrajectoryStep[] = [
     ...admission.denied.map((d) => ({
