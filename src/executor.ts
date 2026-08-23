@@ -202,7 +202,7 @@ function pipelineProgressHook(
         taskId: progress.taskId,
         agent: progress.agent,
         message: progress.message.slice(0, 800),
-        meta: { log_type: progress.kind, role: stage?.role ?? stageId },
+        meta: { log_type: progress.kind, role: stage?.role ?? stageId ?? "" },
       },
       state,
     );
@@ -433,7 +433,9 @@ export async function drainPipelineStages(
     }
 
     syncPipelineFromQueue(state, pipeline);
-    if (stage.status === "failed") {
+    const qAfter = queueItemForTask(state, stage.taskId);
+    if (qAfter?.status === "failed" || qAfter?.status === "dead" || stage.error) {
+      stage.status = "failed";
       failed = true;
       emitStageComplete(state, pipeline.id, stage, stage.workerId, stage.error, true, stage.error);
       break;

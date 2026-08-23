@@ -57,7 +57,7 @@ import { promoteSkill, shareSkill, skillsCatalog } from "./skills.js";
 import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { ensureQueue, queueSummary, pauseQueue, resumeQueue, requeueDead, deadLetters, isQueuePaused } from "./queue.js";
-import { trajectoriesFor, exportTrajectoriesJsonl, ensureTrajectories } from "./trajectory.js";
+import { trajectoriesFor, exportTrajectoriesJsonl, ensureTrajectories, getTrajectory } from "./trajectory.js";
 import { syncTasksFromDir, syncTasksFromGitRepos, taskGitSummaryFromRepos } from "./tasks.js";
 import { WORKFLOW_STAGES } from "./workflow.js";
 import type { ClusterState, DesiredAgent } from "./types.js";
@@ -763,6 +763,12 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
     return json(res, canaryProgress(state));
   }
   if (url.pathname === API_ROUTES.trajectories) {
+    const trajId = url.searchParams.get("id");
+    if (trajId) {
+      const traj = getTrajectory(state, trajId);
+      if (!traj) return json(res, { error: `trajectory not found: ${trajId}` }, 404);
+      return json(res, traj);
+    }
     if (url.searchParams.get("format") === "jsonl") {
       res.writeHead(200, { "content-type": "application/x-ndjson; charset=utf-8" });
       res.end(

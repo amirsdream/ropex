@@ -2,6 +2,11 @@ const $ = (sel) => document.querySelector(sel);
 
 const REFRESH_MS = 5000;
 
+/** Latest view snapshot for agent drill-down without extra fetch. */
+let cachedView = null;
+/** Active SSE subscription while a pipeline drawer is open. */
+let activeEventSource = null;
+
 function showToast(message, kind = "ok") {
   const stack = $("#toast-stack");
   if (!stack) return;
@@ -10,6 +15,258 @@ function showToast(message, kind = "ok") {
   el.textContent = message;
   stack.appendChild(el);
   setTimeout(() => el.remove(), 3200);
+}
+
+function initDetailDrawer() {
+  $("#detail-close")?.addEventListener("click", () => closeDetailDrawer());
+  document.querySelectorAll("[data-close-drawer]").forEach((el) => {
+    el.addEventListener("click", () => closeDetailDrawer());
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") closeDetailDrawer();
+  });
+}
+
+function closeDetailDrawer() {
+  if (activeEventSource) {
+    activeEventSource.close();
+    activeEventSource = null;
+  }
+  const drawer = $("#detail-drawer");
+  const log = $("#detail-log");
+  if (log) {
+    log.hidden = true;
+    log.innerHTML = "";
+  }
+  if (drawer) {
+    drawer.hidden = true;
+    drawer.setAttribute("aria-hidden", "true");
+  }
+}
+
+function openDetailDrawer({ kicker, title, bodyHtml, live = false }) {
+  const drawer = $("#detail-drawer");
+  const kickerEl = $("#detail-kicker");
+  const titleEl = $("#detail-title");
+  const bodyEl = $("#detail-body");
+  const logEl = $("#detail-log");
+  if (!drawer || !titleEl || !bodyEl) return;
+  if (kickerEl) kickerEl.textContent = kicker ?? "Deep dive";
+  titleEl.textContent = title ?? "Detail";
+  bodyEl.innerHTML = bodyHtml ?? "";
+  if (logEl) {
+    logEl.hidden = !live;
+    logEl.innerHTML = live ? `<p class="section-lede">Live stage events…</p>` : "";
+  }
+  drawer.hidden = false;
+  drawer.setAttribute("aria-hidden", "false");
+}
+
+function subscribePipelineEvents(pipelineId) {
+  if (!pipelineId) return;
+  if (activeEventSource) activeEventSource.close();
+  const logEl = $("#detail-log");
+  if (!logEl) return;
+  logEl.hidden = false;
+  activeEventSource = new EventSource(
+    `/api/v1/events?pipelineId=${encodeURIComponent(pipelineId)}&format=ui`,
+  );
+  activeEventSource.onmessage = (ev) => {
+    const line = document.createElement("div");
+    line.className = "log-line";
+    try {
+      const parsed = JSON.parse(ev.data);
+      const msg =
+        parsed.data?.message ??
+        parsed.data?.output ??
+        parsed.data?.description ??
+        JSON.stringify(parsed.data);
+      line.textContent = `[${parsed.type}] ${String(msg).slice(0, 500)}`;
+      if (parsed.type === "error") line.classList.add("is-error");
+      if (parsed.type === "complete" || parsed.type === "stream_end") line.classList.add("is-complete");
+      if (parsed.type === "stream_end") {
+        activeEventSource?.close();
+        activeEventSource = null;
+        void refresh();
+      }
+    } catch {
+      line.textContent = ev.data;
+    }
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+  };
+  activeEventSource.onerror = () => {
+    activeEventSource?.close();
+    activeEventSource = null;
+  };
+}
+
+function renderPipelineDetailBody(pipeline) {
+  const stages = (pipeline.stages ?? [])
+    .map(
+      (s) => `
+      <div class="detail-row">
+        <div>
+          <strong>${escapeHtml(s.id)}</strong> · ${escapeHtml(s.agent)}
+          <p>${escapeHtml((s.output || s.prompt || "").slice(0, 600))}</p>
+          ${s.error ? `<p>${escapeHtml(s.error)}</p>` : ""}
+        </div>
+        <span class="status status-${s.status === "done" ? "idle" : s.status === "failed" ? "failed" : "running"}">${escapeHtml(s.status)}</span>
+      </div>`,
+    )
+    .join("");
+  const events = (pipeline.events ?? [])
+    .slice(-40)
+    .map(
+      (e) =>
+        `<div class="log-line">${escapeHtml(e.at?.slice(11, 19) ?? "")} [${escapeHtml(e.kind)}] ${escapeHtml((e.message ?? e.artifact ?? "").slice(0, 200))}</div>`,
+    )
+    .join("");
+  return `
+    <div class="detail-meta">
+      <span>status ${escapeHtml(pipeline.status)}</span>
+      <span>${pipeline.stages?.length ?? 0} stages</span>
+      <span>${formatTime(pipeline.updatedAt || pipeline.createdAt)}</span>
+    </div>
+    <div class="detail-block">
+      <h3>Prompt</h3>
+      <p>${escapeHtml(pipeline.prompt ?? "")}</p>
+    </div>
+    <div class="detail-block">
+      <h3>Stages</h3>
+      ${stages || `<p class="empty">No stages.</p>`}
+    </div>
+    ${
+      pipeline.output
+        ? `<div class="detail-block"><h3>Output</h3><pre>${escapeHtml(pipeline.output.slice(0, 4000))}</pre></div>`
+        : ""
+    }
+    ${
+      events
+        ? `<div class="detail-block"><h3>Recent events</h3>${events}</div>`
+        : ""
+    }`;
+}
+
+async function showPipelineDetail(pipelineId, { live = false } = {}) {
+  if (!pipelineId) return;
+  const res = await fetch(`/api/v1/pipeline?id=${encodeURIComponent(pipelineId)}`);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    showToast(body.error || `pipeline ${res.status}`, "err");
+    return;
+  }
+  const shouldLive =
+    live || body.status === "running" || body.status === "pending";
+  openDetailDrawer({
+    kicker: "Pipeline",
+    title: `${body.id?.slice(0, 12) ?? "run"}…`,
+    bodyHtml: renderPipelineDetailBody(body),
+    live: shouldLive,
+  });
+  if (shouldLive) subscribePipelineEvents(pipelineId);
+}
+
+function renderTrajectoryDetailBody(traj) {
+  const steps = (traj.steps ?? [])
+    .map(
+      (s, i) => `
+      <div class="detail-row">
+        <div>
+          <strong>step ${i + 1}</strong>
+          <p>${escapeHtml(s.thought || "")}</p>
+          ${
+            s.calls?.length
+              ? `<p>tools: ${s.calls.map((c) => escapeHtml(`${c.plugin}.${c.name}`)).join(", ")}</p>`
+              : ""
+          }
+          <p>${escapeHtml((s.observation || "").slice(0, 800))}</p>
+        </div>
+      </div>`,
+    )
+    .join("");
+  return `
+    <div class="detail-meta">
+      <span>${escapeHtml(traj.agent)}</span>
+      <span>${escapeHtml(traj.taskId)}</span>
+      <span>${formatTime(traj.at)}</span>
+      <span>${escapeHtml((traj.stages ?? []).join(" → ") || "workflow")}</span>
+    </div>
+    <div class="detail-block">
+      <h3>Plan</h3>
+      <p>${escapeHtml((traj.plan ?? []).join(" · ") || "—")}</p>
+    </div>
+    <div class="detail-block">
+      <h3>Hermes → DeepSeek steps</h3>
+      ${steps || `<p class="empty">No steps recorded.</p>`}
+    </div>
+    <div class="detail-block">
+      <h3>Output</h3>
+      <pre>${escapeHtml((traj.output ?? "").slice(0, 4000))}</pre>
+    </div>`;
+}
+
+async function showTrajectoryDetail(trajectoryId) {
+  if (!trajectoryId) return;
+  const res = await fetch(`/api/v1/trajectories?id=${encodeURIComponent(trajectoryId)}`);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    showToast(body.error || `trajectory ${res.status}`, "err");
+    return;
+  }
+  openDetailDrawer({
+    kicker: "Trajectory",
+    title: trajectoryId,
+    bodyHtml: renderTrajectoryDetailBody(body),
+  });
+}
+
+function showAgentDetail(agentName) {
+  if (!cachedView || !agentName) return;
+  const hermes = cachedView.hermes?.find((h) => h.agent === agentName);
+  const harness = cachedView.harness?.find((h) => h.agent === agentName);
+  const worker = cachedView.workers?.find((w) => w.agent === agentName);
+  if (!hermes && !harness) {
+    showToast(`agent not found: ${agentName}`, "err");
+    return;
+  }
+  const body = `
+    <div class="detail-meta">
+      <span>agent ${escapeHtml(agentName)}</span>
+      ${worker ? `<span>worker ${escapeHtml(worker.id)}</span>` : ""}
+      ${worker ? `<span>${escapeHtml(worker.harness)} · ${escapeHtml(worker.model)}</span>` : ""}
+    </div>
+    ${
+      hermes
+        ? `<div class="detail-block">
+      <h3>Hermes brain</h3>
+      <p>soul ${escapeHtml(hermes.soul)}</p>
+      <p>memory ${escapeHtml(hermes.memoryBackend)} · learning ${hermes.learning ? "on" : "off"}</p>
+      <p>share read=[${hermes.share.read.map(escapeHtml).join(", ")}] write=${escapeHtml(hermes.share.write)}</p>
+      <p>skills: ${hermes.skills.map(escapeHtml).join(", ") || "none"}</p>
+    </div>`
+        : ""
+    }
+    ${
+      harness
+        ? `<div class="detail-block">
+      <h3>DeepSeek harness</h3>
+      <p>profile ${escapeHtml(harness.profile)} · loop ${escapeHtml(harness.loop)}</p>
+      <p>model ${escapeHtml(harness.model)}</p>
+      <p>plugins: ${harness.plugins.map(escapeHtml).join(", ")}</p>
+      <p>tools: ${harness.tools.map(escapeHtml).join(", ")}</p>
+    </div>`
+        : ""
+    }
+    <div class="detail-block">
+      <h3>Workflow</h3>
+      <p>${(cachedView.workflow ?? []).map((s) => `${s.id} (${s.owner})`).join(" → ")}</p>
+    </div>`;
+  openDetailDrawer({
+    kicker: "Agent surface",
+    title: agentName,
+    bodyHtml: body,
+  });
 }
 
 function initTheme() {
@@ -797,19 +1054,33 @@ function renderPipelines(view) {
         row.status === "running" || row.status === "pending"
           ? `<button type="button" data-drain="${row.id}">drain</button>`
           : "";
-      return `<div class="worker-row">
+      return `<div class="worker-row is-clickable" data-pipeline="${escapeHtml(row.id)}">
         <div>
           <div class="worker-id">${escapeHtml(row.id.slice(0, 8))}…</div>
           <div class="digest">${escapeHtml(row.prompt || "")}</div>
         </div>
         <div class="status status-${st}">${escapeHtml(row.status)}</div>
         <div class="digest">${row.doneStages ?? 0}/${row.stages} stages · ${escapeHtml((row.updatedAt || "").slice(11, 19))}</div>
-        <div class="digest">${drainBtn}</div>
+        <div class="digest">${drainBtn}<button type="button" data-view-pipeline="${escapeHtml(row.id)}">view</button></div>
       </div>`;
     })
     .join("");
   el.querySelectorAll("[data-drain]").forEach((btn) => {
-    btn.addEventListener("click", () => void drainPipelineUi(btn.getAttribute("data-drain")));
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      void drainPipelineUi(btn.getAttribute("data-drain"));
+    });
+  });
+  el.querySelectorAll("[data-view-pipeline]").forEach((btn) => {
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      void showPipelineDetail(btn.getAttribute("data-view-pipeline"));
+    });
+  });
+  el.querySelectorAll("[data-pipeline]").forEach((row) => {
+    row.addEventListener("click", () => {
+      void showPipelineDetail(row.getAttribute("data-pipeline"));
+    });
   });
 }
 
@@ -825,7 +1096,11 @@ async function submitPipelineUi(prompt) {
     return;
   }
   showToast(`pipeline ${body.pipeline?.status ?? "ok"}`, "ok");
-  await refresh();
+  if (body.pipeline?.id) {
+    await showPipelineDetail(body.pipeline.id, { live: true });
+  } else {
+    await refresh();
+  }
 }
 
 async function drainPipelineUi(pipelineId) {
@@ -1143,19 +1418,24 @@ function renderTrajectories(view) {
   const rows = (t.recent ?? [])
     .map(
       (r, i) => `
-      <div class="worker-row" style="animation-delay:${Math.min(i, 12) * 0.03}s">
+      <div class="worker-row is-clickable" data-trajectory="${escapeHtml(r.id)}" style="animation-delay:${Math.min(i, 12) * 0.03}s">
         <div>
           <div class="worker-id">${escapeHtml(r.id)}</div>
           <div class="digest">${escapeHtml(r.agent)} · ${escapeHtml(r.taskId)}</div>
         </div>
         <div class="status status-running">${r.steps} steps</div>
         <div class="digest">${escapeHtml((r.stages ?? []).join(" → ") || "—")}</div>
-        <div class="digest">${formatTime(r.at)}</div>
+        <div class="digest">${formatTime(r.at)} · view</div>
       </div>`,
     )
     .join("");
   el.innerHTML =
     head + (rows || `<p class="empty">No trajectories yet. Drain a task to record one.</p>`);
+  el.querySelectorAll("[data-trajectory]").forEach((row) => {
+    row.addEventListener("click", () => {
+      void showTrajectoryDetail(row.getAttribute("data-trajectory"));
+    });
+  });
 }
 
 function renderRateLimits(view) {
@@ -1219,7 +1499,7 @@ function renderSurfaces(view) {
   $("#hermes-list").innerHTML = view.hermes
     .map(
       (h) => `
-      <article class="surface">
+      <article class="surface is-clickable" data-agent="${escapeHtml(h.agent)}" tabindex="0" role="button">
         <h3>${escapeHtml(h.agent)}</h3>
         <p>soul ${escapeHtml(h.soul)} · ${h.memoryBackend}</p>
         <p>share read=[${h.share.read.join(", ")}] write=${h.share.write}</p>
@@ -1231,7 +1511,7 @@ function renderSurfaces(view) {
   $("#harness-list").innerHTML = view.harness
     .map(
       (h) => `
-      <article class="surface">
+      <article class="surface is-clickable" data-agent="${escapeHtml(h.agent)}" tabindex="0" role="button">
         <h3>${escapeHtml(h.agent)}</h3>
         <p>${h.profile} · loop ${h.loop}</p>
         <p>${escapeHtml(h.model)}</p>
@@ -1239,6 +1519,17 @@ function renderSurfaces(view) {
       </article>`,
     )
     .join("") || `<p class="empty">No harness surfaces.</p>`;
+
+  document.querySelectorAll(".surface.is-clickable[data-agent]").forEach((el) => {
+    const open = () => showAgentDetail(el.getAttribute("data-agent"));
+    el.addEventListener("click", open);
+    el.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        open();
+      }
+    });
+  });
 }
 
 function renderMeta(view) {
@@ -1278,6 +1569,7 @@ async function refresh() {
 async function main() {
   try {
     const view = await loadView();
+    cachedView = view;
     renderMeta(view);
     renderPulse(view);
     renderWorkflow(view);
@@ -1314,6 +1606,7 @@ async function main() {
 
 initTheme();
 initNav();
+initDetailDrawer();
 $("#refresh-btn")?.addEventListener("click", () => refresh());
 main();
 setInterval(refresh, REFRESH_MS);

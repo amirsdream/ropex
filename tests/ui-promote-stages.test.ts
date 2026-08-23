@@ -4,7 +4,7 @@ import { emptyState, planReconcile } from "../src/controller.ts";
 import { expandDesired, parseManifests } from "../src/spec.ts";
 import { promoteSkill, registerSkill, skillVersions } from "../src/skills.ts";
 import { metricsPrometheus } from "../src/metrics.ts";
-import { recordTrajectory, workflowStageCounts } from "../src/trajectory.ts";
+import { recordTrajectory, workflowStageCounts, getTrajectory } from "../src/trajectory.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -98,6 +98,31 @@ describe("workflow stage metrics", () => {
     expect(counts.compose).toBe(1);
     expect(counts.learn).toBe(1);
     expect(metricsPrometheus(state)).toContain("ropex_workflow_plan_total 1");
+  });
+
+  it("getTrajectory returns one record by id", () => {
+    const state = emptyState();
+    const rec = recordTrajectory(state, {
+      task: { id: "t2", agent: "a", prompt: "y" },
+      worker: {
+        id: "a:0",
+        agent: "a",
+        replica: 0,
+        status: "idle",
+        imageDigest: "d".repeat(16),
+        harness: "minimal",
+        plugins: [],
+        skills: [],
+        model: "m",
+      },
+      imageDigest: "d".repeat(16),
+      workflow: [{ id: "plan", owner: "hermes" }],
+      plan: ["step"],
+      steps: [{ thought: "think", calls: [], observation: "see" }],
+      output: "result",
+    });
+    expect(getTrajectory(state, rec.id)?.output).toBe("result");
+    expect(getTrajectory(state, "missing")).toBeUndefined();
   });
 });
 
