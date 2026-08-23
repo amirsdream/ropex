@@ -37,7 +37,14 @@ export function resolveGitRepoPath(root: string, repo: GitRepo): string {
   return resolve(root, p);
 }
 
-/** Prefer declared path; fall back to root/fleets when path mentions fleets. */
+/** Checkout path after `ropex clone` materializes a remote GitRepo. */
+export function resolveClonedRepoManifestPath(root: string, repo: GitRepo): string {
+  const checkout = join(root, ".ropex", "repos", repo.metadata.name);
+  const rel = repo.spec.path.replace(/^\//, "");
+  return join(checkout, rel);
+}
+
+/** Prefer declared path; fall back to root/fleets when path mentions fleets; then cloned checkout. */
 export function resolveRepoLocalPath(root: string, repo: GitRepo): { path: string; ok: boolean; reason?: string } {
   const path = resolveGitRepoPath(root, repo);
   if (existsSync(path)) return { path, ok: true };
@@ -45,10 +52,18 @@ export function resolveRepoLocalPath(root: string, repo: GitRepo): { path: strin
   if (existsSync(fallback) && repo.spec.path.includes("fleets")) {
     return { path: fallback, ok: true };
   }
+  const cloned = resolveClonedRepoManifestPath(root, repo);
+  if (existsSync(cloned)) {
+    return { path: cloned, ok: true };
+  }
+  const checkout = join(root, ".ropex", "repos", repo.metadata.name);
+  if (existsSync(checkout)) {
+    return { path: cloned, ok: true, reason: `using clone checkout (manifest path pending): ${cloned}` };
+  }
   return {
     path,
     ok: false,
-    reason: `path missing (remote clone not wired): ${path}`,
+    reason: `path missing — run ropex clone --remote or ropex watch --repos: ${path}`,
   };
 }
 

@@ -49,7 +49,7 @@ import { policyDryRun } from "./policy.js";
 import { runReconcileChaos, assertChaosInvariants } from "./chaos.js";
 import { parseManifests } from "./spec.js";
 import { ingestGithubWebhook, signGithubPayload } from "./webhook.js";
-import { parseInterval, watchLoop, watchOnce } from "./watch.js";
+import { parseInterval, watchLoop, watchOnce, watchDeclaredRepos, watchReposLoop } from "./watch.js";
 import type { AuditKind, GithubEvent, ReconcilePlan } from "./types.js";
 
 const HELP = `ropex — GitOps control plane for agent fleets
@@ -99,7 +99,8 @@ Usage:
   ropex tasks apply <task.yaml>       Enqueue one Task manifest file
   ropex chaos [--replicas N]          Stress reconcile scale + digest rolls
   ropex watch <path> [--once] [--interval 5s]
-                                     Reconcile manifests on an interval (Flux-style)
+  ropex watch --repos [--once] [--interval 30s] [--remote] [--force]
+                                     Clone + sync declared GitRepos (Flux-style)
   ropex metrics [--prometheus]    Export cluster metrics
   ropex health                    Worker probes + backlog SLO
   ropex audit [--kind k] [--jsonl]  Control-plane event trail
@@ -717,8 +718,46 @@ async function main(argv: string[]): Promise<number> {
       return 0;
     }
     case "watch": {
+      const reposMode = rest.includes("--repos");
+      const once = rest.includes("--once");
+      const intervalRaw = flag(rest, "--interval") ?? (reposMode ? "30s" : "5s");
+      const remote = rest.includes("--remote");
+      const force = rest.includes("--force");
+
+      if (reposMode) {
+        const state = loadState(root);
+        if (!(state.gitRepos ?? []).length) {
+          return fail("watch --repos requires GitRepo manifests in cluster state — apply fleets first");
+        }
+        if (once) {
+          const result = watchDeclaredRepos(root, state, { remote, force });
+          if (result.plan) printPlan(result.plan);
+          console.log(
+            result.changed
+              ? `repos synced ${result.source}`
+              : `no drift (${result.source || "gitrepos"})`,
+          );
+          return 0;
+        }
+        const intervalMs = parseInterval(intervalRaw);
+        console.log(`watching declared GitRepos every ${intervalMs}ms  (ctrl-c to stop)`);
+        await watchReposLoop({
+          root,
+          intervalMs,
+          remote,
+          force,
+          onTick: (result, tick) => {
+            const p = result.plan;
+            console.log(
+              `#${tick} rev=${result.state.revision} create=${p.create.length} retire=${p.retire.length}${result.changed ? "  CHANGED" : ""}`,
+            );
+          },
+        });
+        return 0;
+      }
+
       const path = rest.find((a) => !a.startsWith("--")) ?? rest[0];
-      if (!path) return fail("watch requires a path");
+      if (!path) return fail("watch requires a path (or --repos)");
       const once = rest.includes("--once");
       const intervalRaw = flag(rest, "--interval") ?? "5s";
       const source = resolve(root, path);

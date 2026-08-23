@@ -926,7 +926,7 @@ function renderDsh(view) {
         <div class="digest">${escapeHtml(h.scaffoldHint)}</div>
       </div>
       <div class="status status-${h.liveReady ? "idle" : "failed"}">${h.liveReady ? "live" : "simulated"}</div>
-      <div class="digest">steps ${h.steps?.length ?? 0}</div>
+      <div class="digest">backend ${escapeHtml(h.backend ?? "simulated")} · pkg ${h.packageInstalled ? "yes" : "no"}</div>
       <div class="digest"></div>
     </div>`
     : "";
@@ -954,7 +954,22 @@ function renderDsh(view) {
       </div>`,
     )
     .join("");
-  el.innerHTML = hermesRow + head + rows;
+  el.innerHTML = hermesRow + head + rows + renderGithubAppRow(view);
+}
+
+function renderGithubAppRow(view) {
+  const g = view.githubApp;
+  if (!g) return "";
+  return `
+    <div class="worker-row">
+      <div>
+        <div class="worker-id">github app</div>
+        <div class="digest">${escapeHtml(g.summary)}</div>
+      </div>
+      <div class="status status-${g.ready ? "idle" : "failed"}">${g.ready ? "ready" : "setup"}</div>
+      <div class="digest">id ${g.appIdPresent ? "yes" : "no"} · key ${g.privateKeyPresent ? "yes" : "no"} · wh ${g.webhookSecretPresent ? "yes" : "no"}</div>
+      <div class="digest"></div>
+    </div>`;
 }
 
 function renderJournal(view) {

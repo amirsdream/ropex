@@ -353,8 +353,18 @@ export type ControlPlaneView = {
     scaffoldHint: string;
   };
   hermesLive: {
+    backend: "simulated" | "live";
     liveReady: boolean;
+    packageInstalled: boolean;
     scaffoldHint: string;
+    steps: string[];
+  };
+  githubApp: {
+    ready: boolean;
+    appIdPresent: boolean;
+    privateKeyPresent: boolean;
+    webhookSecretPresent: boolean;
+    summary: string;
     steps: string[];
   };
   trajectories: {

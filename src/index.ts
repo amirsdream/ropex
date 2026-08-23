@@ -5,8 +5,18 @@ export { API_ROUTES } from "./contracts.js";
 export { parseManifests, expandDesired, applyReplicaCap, maxReplicas, collectTasks } from "./spec.js";
 export { planReconcile, applyManifestText, loadState, saveState, emptyState } from "./controller.js";
 export { createHarness } from "./harness.js";
-export { createHermes, liveHermesScaffold } from "./hermes.js";
-export type { LiveHermesScaffold } from "./hermes.js";
+export {
+  createHermes,
+  bootHermes,
+  liveHermesScaffold,
+  hermesPackageInstalled,
+  resolveHermesBackend,
+  resolveHermesBin,
+  runLiveHermesTask,
+} from "./hermes.js";
+export type { LiveHermesScaffold, HermesBackend } from "./hermes.js";
+export { githubAppScaffold, githubAppEnv } from "./github-app.js";
+export type { GithubAppScaffold } from "./github-app.js";
 export { runTask, expandWorkers } from "./runtime.js";
 export { agentsForEvent, eventToTask } from "./github.js";
 export { Kernel, memoryPlugin, skillsPlugin, soulPlugin } from "./plugins.js";
@@ -68,7 +78,8 @@ export {
 } from "./webhook.js";
 export { rememberAffinity, lookupAffinity, pruneAffinity, affinityKey } from "./affinity.js";
 export type { AffinityBinding } from "./types.js";
-export { watchOnce, watchLoop, parseInterval, readManifestTree } from "./watch.js";
+export { watchOnce, watchLoop, watchDeclaredRepos, watchReposLoop, parseInterval, readManifestTree } from "./watch.js";
+export { resolveClonedRepoManifestPath } from "./gitrepo.js";
 export { bootDsh, profilePack, DSH_PROFILE_PACKS, liveDshScaffold, resolveDshBackend, dshPackageInstalled, resolveDshBin, loadLiveProfileMeta, runHeadlessDsh } from "./dsh.js";
 export type { LiveDshScaffold, DshAdapter, DshBackend } from "./dsh.js";
 export { recordDelivery, deliveriesFor, compactJournal, replayDelivery, JOURNAL_DEFAULT_KEEP } from "./journal.js";

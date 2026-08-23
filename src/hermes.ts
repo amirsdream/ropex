@@ -4,6 +4,8 @@
  * Implements HermesContract so UI and runtime share one interface.
  */
 
+import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import type { HermesContract, HermesPlan, MemoryPort } from "./contracts.js";
 import { createMemoryPort, memoryContextFor, SharedMemoryStore } from "./memory.js";
 import type {
@@ -13,6 +15,10 @@ import type {
   TrajectoryStep,
   Worker,
 } from "./types.js";
+
+const require = createRequire(import.meta.url);
+
+export type HermesBackend = "simulated" | "live";
 
 export type HermesBrain = HermesContract;
 
@@ -27,7 +33,63 @@ export type HermesCreateOptions = {
   store?: SharedMemoryStore;
   worker?: Pick<Worker, "id" | "agent" | "fleet">;
   skills?: string[];
+  backend?: HermesBackend;
 };
+
+/** True when optional peer `hermes-agent` resolves (network-free check). */
+export function hermesPackageInstalled(): boolean {
+  try {
+    require.resolve("hermes-agent/bin/hermes.js");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function resolveHermesBackend(explicit?: HermesBackend): HermesBackend {
+  if (explicit) return explicit;
+  if (process.env.ROPEX_HERMES_BACKEND === "live") return "live";
+  return "simulated";
+}
+
+/** Resolve installed hermes CLI entry (undefined when package absent). */
+export function resolveHermesBin(): string | undefined {
+  try {
+    return require.resolve("hermes-agent/bin/hermes.js");
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Run one hermes-agent turn synchronously (live backend only).
+ * Requires hermes-agent installed; fails closed in tests without the package.
+ */
+export function runLiveHermesTask(
+  prompt: string,
+  opts: { cwd?: string; timeoutMs?: number } = {},
+): string {
+  const bin = resolveHermesBin();
+  if (!bin) {
+    throw new Error("hermes live backend unavailable — install hermes-agent first.");
+  }
+  if (process.env.VITEST === "true") {
+    throw new Error("hermes live backend disabled under vitest");
+  }
+  const timeoutMs = opts.timeoutMs ?? 120_000;
+  const result = spawnSync(process.execPath, [bin, prompt], {
+    cwd: opts.cwd,
+    env: process.env,
+    encoding: "utf8",
+    timeout: timeoutMs,
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    const msg = (result.stderr || result.stdout || "hermes exited non-zero").trim();
+    throw new Error(`hermes live failed (${result.status}): ${msg.slice(0, 500)}`);
+  }
+  return (result.stdout || result.stderr || "").trim();
+}
 
 export function createHermes(spec: AgentSpec, options: HermesCreateOptions = {}): HermesBrain {
   const worker = options.worker ?? {
@@ -44,6 +106,23 @@ export function createHermes(spec: AgentSpec, options: HermesCreateOptions = {})
   const port: MemoryPort = createMemoryPort(store, ctx);
   const skills = [...new Set([...spec.hermes.skills, ...(options.skills ?? [])])];
   const soul = spec.hermes.soul ?? DEFAULT_SOUL;
+  const backend = resolveHermesBackend(options.backend);
+
+  const offlinePlan = (task: Task): HermesPlan => {
+    const memHints = port.query({ limit: 3 }).map((m) => `memory[${m.scope}]: ${m.text.slice(0, 60)}`);
+    const thoughts = [
+      `soul: ${soul.slice(0, 80)}`,
+      `skills: ${skills.join(", ") || "none"}`,
+      `share: read=${ctx.policy.read.join("+") || "∅"} write=${ctx.policy.write}`,
+      `task: ${task.prompt}`,
+      ...memHints,
+    ];
+    if (task.event) {
+      thoughts.push(`github ${task.event.type} on ${task.event.repo}`);
+    }
+    const calls = planCalls(task, skills);
+    return { thoughts, calls };
+  };
 
   return {
     soul,
@@ -53,19 +132,22 @@ export function createHermes(spec: AgentSpec, options: HermesCreateOptions = {})
     },
     port,
     plan(task) {
-      const memHints = port.query({ limit: 3 }).map((m) => `memory[${m.scope}]: ${m.text.slice(0, 60)}`);
-      const thoughts = [
-        `soul: ${soul.slice(0, 80)}`,
-        `skills: ${skills.join(", ") || "none"}`,
-        `share: read=${ctx.policy.read.join("+") || "∅"} write=${ctx.policy.write}`,
-        `task: ${task.prompt}`,
-        ...memHints,
-      ];
-      if (task.event) {
-        thoughts.push(`github ${task.event.type} on ${task.event.repo}`);
+      if (backend === "live") {
+        try {
+          const liveOut = runLiveHermesTask(task.prompt, { cwd: process.cwd() });
+          return {
+            thoughts: [`hermes-live: ${liveOut.slice(0, 240)}`],
+            calls: [{ name: "fs", input: { action: "apply_plan", plan: liveOut.slice(0, 4000) } }],
+          };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return {
+            thoughts: [`hermes-live failed: ${msg}`, "falling back to offline planner"],
+            calls: offlinePlan(task).calls,
+          };
+        }
       }
-      const calls = planCalls(task, skills);
-      return { thoughts, calls } satisfies HermesPlan;
+      return offlinePlan(task);
     },
     remember(fact) {
       if (typeof fact === "string") {
@@ -131,9 +213,22 @@ function slugify(text: string): string {
 
 export type { HermesPlan };
 
+export type BootHermesOptions = HermesCreateOptions;
+
+/** Boot Hermes brain — simulated by default; live when ROPEX_HERMES_BACKEND=live. */
+export function bootHermes(spec: AgentSpec, opts: BootHermesOptions = {}): HermesBrain {
+  const backend = resolveHermesBackend(opts.backend);
+  if (backend === "live" && !hermesPackageInstalled()) {
+    const scaffold = liveHermesScaffold();
+    throw new Error(`hermes live backend unavailable — ${scaffold.summary}`);
+  }
+  return createHermes(spec, { ...opts, backend });
+}
+
 /** Checklist for wiring a live hermes-agent process (network-free until wired). */
 export type LiveHermesScaffold = {
   liveReady: boolean;
+  packageInstalled: boolean;
   packageName: string;
   summary: string;
   steps: string[];
@@ -142,22 +237,25 @@ export type LiveHermesScaffold = {
 
 /**
  * Describe how to attach a real hermes-agent runtime without importing it.
- * createHermes() stays the offline brain; live is a future process/RPC seam.
+ * createHermes() stays the offline brain; live invokes hermes-agent CLI.
  */
 export function liveHermesScaffold(): LiveHermesScaffold {
+  const packageInstalled = hermesPackageInstalled();
   return {
-    liveReady: false,
+    liveReady: packageInstalled,
+    packageInstalled,
     packageName: "hermes-agent",
-    summary:
-      "Live hermes-agent not wired — createHermes() is the offline brain; process/RPC seam TBD.",
+    summary: packageInstalled
+      ? "Live hermes-agent present — set ROPEX_HERMES_BACKEND=live to plan via hermes CLI."
+      : "Install hermes-agent for live brain; createHermes() stays the offline default.",
     steps: [
-      "Optional peer: hermes-agent (never required by tests).",
-      "Implement createLiveHermes(spec) returning HermesContract over RPC/stdio.",
-      "Load SOUL.md from hermes.soul path into the live process identity.",
+      "Add optional peer dependency hermes-agent (never required by tests).",
+      "Set ROPEX_HERMES_BACKEND=live for production runs.",
+      "bootHermes() invokes hermes-agent CLI for plan(); harness still executes via dsh.",
       "Bridge MemoryPort to SharedMemoryStore (same scopes as offline).",
       "Keep createHermes() as the default for CI and network-free demos.",
       "Prove plan→learn loop parity with simulated brain in sandbox.",
     ],
-    env: ["ROPEX_HERMES_BACKEND=simulated|live", "HERMES_AGENT_BIN=(live only)"],
+    env: ["ROPEX_HERMES_BACKEND=simulated|live"],
   };
 }
