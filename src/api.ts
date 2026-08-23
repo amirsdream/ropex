@@ -38,7 +38,8 @@ import { cloneStatusReport, cloneAllGitRepos } from "./clone.js";
 import { decideApproval } from "./approval.js";
 import { pruneAffinity } from "./affinity.js";
 import { DSH_PROFILE_PACKS, liveDshScaffold, resolveDshBackend } from "./dsh.js";
-import { liveHermesScaffold } from "./hermes.js";
+import { liveHermesScaffold, resolveHermesBackend } from "./hermes.js";
+import { githubAppScaffold } from "./github-app.js";
 import { rateLimitReport } from "./ratelimit.js";
 import { drainQueue, drainStatus, setDrainConcurrency } from "./scheduler.js";
 import { hygieneReport, runHygiene } from "./hygiene.js";
@@ -397,9 +398,22 @@ export function buildControlPlaneView(state: ClusterState, root = process.cwd())
     hermesLive: (() => {
       const scaffold = liveHermesScaffold();
       return {
+        backend: resolveHermesBackend(),
         liveReady: scaffold.liveReady,
+        packageInstalled: scaffold.packageInstalled,
         scaffoldHint: scaffold.summary,
         steps: [...scaffold.steps],
+      };
+    })(),
+    githubApp: (() => {
+      const app = githubAppScaffold();
+      return {
+        ready: app.ready,
+        appIdPresent: app.appIdPresent,
+        privateKeyPresent: app.privateKeyPresent,
+        webhookSecretPresent: app.webhookSecretPresent,
+        summary: app.summary,
+        steps: [...app.steps],
       };
     })(),
     trajectories: (() => {

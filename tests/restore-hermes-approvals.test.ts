@@ -63,7 +63,7 @@ describe("hermes scaffold + approvals API", () => {
     const { next } = planReconcile(emptyState(), parseManifests(yaml), "t");
     const view = buildControlPlaneView(next);
     expect(view.hermesLive.liveReady).toBe(false);
-    expect(view.hermesLive.scaffoldHint).toMatch(/not wired/i);
+    expect(view.hermesLive.scaffoldHint).toMatch(/hermes-agent/i);
   });
 
   it("POST /api/v1/approvals decides pending requests", async () => {

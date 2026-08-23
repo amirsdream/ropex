@@ -1,7 +1,7 @@
 import { admitCalls } from "./admission.js";
 import { requestApprovals } from "./approval.js";
 import { bootDsh } from "./dsh.js";
-import { createHermes } from "./hermes.js";
+import { createHermes, bootHermes } from "./hermes.js";
 import { buildAgentImage, type ImageResolveOptions } from "./image.js";
 import { recordDelivery } from "./journal.js";
 import { SharedMemoryStore } from "./memory.js";
@@ -50,7 +50,7 @@ export async function runTask(
   const policy = effectivePolicy(state.policies);
   const store = SharedMemoryStore.fromState(state);
   const registrySkills = skillsForAgent(state, worker.agent).map((s) => s.name);
-  const hermes = createHermes(agent.spec, {
+  const hermes = bootHermes(agent.spec, {
     store,
     worker,
     skills: [
