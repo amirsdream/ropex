@@ -34,4 +34,4 @@ DEEPSEEK_API_KEY=(live only)
 - Control-plane UI **DeepSeek harness** section (from `/api/v1/view`.dsh)
 - `liveDshScaffold()` for CLI/docs/programmatic checks
 
-See also [architecture.md](./architecture.md) DeepSeek adapter seam.
+See also [architecture.md](./architecture.md), [control-plane-ui.md](./control-plane-ui.md), and [executor-api.md](./executor-api.md).

@@ -1,6 +1,26 @@
 # Ropex executor API
 
-Engine-neutral HTTP + SSE contract for external orchestrators (e.g. [Magentic](https://github.com/amirsdream/Magentic)). Ropex remains the execution control plane; clients stay in separate repos and call this API.
+Engine-neutral **HTTP + SSE** contract for external orchestrators (e.g. [Magentic](https://github.com/amirsdream/Magentic)). Ropex remains the execution control plane; clients stay in separate repos.
+
+The same endpoints power the **Pipelines** section in [`ropex ui`](./control-plane-ui.md) (submit form, live SSE drawer).
+
+## Architecture
+
+```mermaid
+flowchart LR
+  CLIENT["Client\nMagentic · curl · UI"]
+  API["POST/GET /api/v1/pipeline"]
+  EXEC["executor.ts"]
+  PLAN["pipeline.ts\nheuristic | hermes"]
+  Q["queue + scheduler"]
+  RT["runTask\nHermes → DeepSeek"]
+
+  CLIENT --> API --> EXEC
+  EXEC --> PLAN
+  EXEC --> Q --> RT
+  EXEC --> SSE["GET /api/v1/events"]
+  SSE --> CLIENT
+```
 
 ## Endpoints
 
@@ -8,12 +28,12 @@ Engine-neutral HTTP + SSE contract for external orchestrators (e.g. [Magentic](h
 |--------|------|---------|
 | `POST` | `/api/v1/pipeline` | Submit a prompt (optional explicit stages) |
 | `POST` | `/api/v1/pipeline` `{ "action":"drain", "pipelineId" }` | Scoped sequential drain |
-| `GET` | `/api/v1/pipeline?id=<uuid>` | Fetch pipeline status + persisted events |
-| `GET` | `/api/v1/pipeline` | List recent pipelines (omit `id`) |
-| `GET` | `/api/v1/events?pipelineId=<uuid>` | SSE stream of executor events |
-| `GET` | `/api/v1/events?pipelineId=<uuid>&format=ui` | SSE with Magentic-compatible `{ type, data }` payloads |
+| `GET` | `/api/v1/pipeline?id=<uuid>` | Pipeline status, stages, persisted events |
+| `GET` | `/api/v1/pipeline` | List recent pipelines |
+| `GET` | `/api/v1/events?pipelineId=<uuid>` | SSE stream (native `kind`) |
+| `GET` | `/api/v1/events?pipelineId=<uuid>&format=ui` | SSE with `{ type, data }` (Magentic-compatible) |
 
-Start the server with `ropex ui` (default port `7780`).
+Start the server: `ropex ui` (default port **7780**).
 
 ## Submit pipeline
 
@@ -26,71 +46,111 @@ Content-Type: application/json
   "drain": true,
   "agents": ["researcher", "synthesizer"],
   "stages": [
-    { "id": "research", "agent": "researcher", "role": "researcher", "prompt": "Gather sources…" }
+    {
+      "id": "research",
+      "agent": "researcher",
+      "role": "researcher",
+      "prompt": "Gather sources on React and Vue for dashboards…"
+    }
   ]
 }
 ```
 
-- **`prompt`** (required on submit): user task; used by the built-in heuristic planner when `stages` is omitted.
-- **`stages`** (optional): explicit stage list; skips heuristic planning. Each `agent` must match a fleet `metadata.name`.
-- **`drain`** (default `true`): run stages **sequentially** before returning.
-- **`drain: false`**: plan only; call `{ "action": "drain", "pipelineId" }` later.
+| Field | Description |
+| --- | --- |
+| `prompt` | Required on submit. Used by heuristic/Hermes planner when `stages` omitted |
+| `stages` | Optional explicit stage list. Each `agent` must exist in fleet YAML |
+| `drain` | Default `true` — run stages sequentially before HTTP response completes |
+| `drain: false` | Plan only; drain later via `{ action: "drain", pipelineId }` |
+| `concurrency` | Passed to scoped drain (default 1 — stages stay sequential) |
 
-### Async drain (Magentic adapter)
+Response:
+
+```json
+{
+  "ok": true,
+  "pipeline": {
+    "id": "uuid",
+    "status": "done",
+    "stages": […],
+    "events": […],
+    "output": "…"
+  },
+  "drained": 2
+}
+```
+
+## Async drain (Magentic pattern)
 
 ```http
 POST /api/v1/pipeline
-{ "prompt": "…", "drain": false }
+{ "prompt": "Build auth middleware", "drain": false }
+
+GET /api/v1/events?pipelineId=<uuid>&format=ui
+# SSE connects; replays persisted + live events
 
 POST /api/v1/pipeline
 { "action": "drain", "pipelineId": "<uuid>" }
 ```
 
-Drain claims only queue items whose task id starts with `<pipelineId>:` — other queue work is untouched.
+Drain claims **only** queue items whose task id starts with `<pipelineId>:` — other queue work is untouched.
 
 ## Sequential stages + context handoff
 
-Stages run **one at a time**. Each stage keeps an immutable `basePrompt`; prior outputs are recomputed into `prompt` on every drain (no double-append):
+Stages run **one at a time**. Each stage keeps an immutable `basePrompt`; prior outputs are recomputed into `prompt` on every drain:
 
-```
+```text
 --- Prior stage outputs ---
 [research/researcher]
-…output…
+…output from stage 1…
 ```
 
-Completed stage outputs are written into shared memory (when the agent allows) with tags `pipeline`, `<pipelineId>`, `<stageId>`, `<role>`.
+Completed outputs are written into shared memory (when the agent allows) with tags `pipeline`, `<pipelineId>`, `<stageId>`, `<role>`.
 
-Terminal events (`pipeline.complete` / `pipeline.error` / `pipeline.end`) fire **only** when the run is fully done or failed — not after a partial drain with pending stages.
+**Terminal gating:** `pipeline.complete` / `pipeline.error` / `pipeline.end` fire only when the run is fully done or failed — not after a partial drain with pending stages.
 
-Stage outputs prefer trajectory **observations** (not just tool-name stubs) so handoff carries real content.
+Stage outputs prefer trajectory **observations** (not tool-name stubs) so handoff carries real content.
+
 ## Event stream
 
-Native executor events (`kind`):
+### Native executor events (`kind`)
 
 | `kind` | Meaning |
 |--------|---------|
 | `pipeline.start` | Run accepted |
-| `pipeline.plan` | Stage plan ready (includes `meta.agents` JSON for UIs) |
-| `stage.start` | Stage enqueued / running |
-| `stage.log` | Mid-stage log line |
+| `pipeline.plan` | Stage plan ready (`meta.agents` JSON for UIs) |
+| `stage.start` | Stage running |
+| `stage.log` | Mid-stage progress (from `onProgress`) |
 | `stage.complete` | Stage finished |
 | `stage.failed` | Stage dead-lettered |
 | `pipeline.complete` | All stages done |
 | `pipeline.error` | Run failed |
-| `pipeline.end` | SSE stream terminal (closes subscribers) |
+| `pipeline.end` | SSE terminal — closes subscribers |
 
-With `format=ui`, events map to Magentic WebSocket names (`plan`, `agent_start`, `agent_complete` with `error: true` on failure, `complete`, `error`, `stream_end`).
+Events persist on `pipeline.events` (capped) in `.ropex/state.json`.
 
-Events are persisted on `pipeline.events` (capped) in cluster state.
+### UI / Magentic mapping (`format=ui`)
+
+| Native `kind` | UI `type` |
+| --- | --- |
+| `pipeline.plan` | `plan` |
+| `stage.start` | `agent_start` |
+| `stage.log` | `agent_log` |
+| `stage.complete` / `stage.failed` | `agent_complete` (`error: true` on failure) |
+| `pipeline.complete` | `complete` |
+| `pipeline.error` | `error` |
+| `pipeline.end` | `stream_end` |
+
+Implementation: `mapExecutorEventToUi()` in `src/executor.ts`.
 
 ## Planners
 
-| `ROPEX_PIPELINE_PLANNER` | Behavior |
-|--------------------------|----------|
-| `heuristic` (default) | Regex multi-stage planner in `src/pipeline.ts` |
-| `hermes` | Seed stages from Hermes offline `plan()` on the first fleet agent |
+| Env | Behavior |
+|-----|----------|
+| `ROPEX_PIPELINE_PLANNER=heuristic` (default) | Regex multi-stage planner in `src/pipeline.ts` |
+| `ROPEX_PIPELINE_PLANNER=hermes` | Seed stages from Hermes offline `plan()` on first fleet agent |
 
-Per-task execution still runs Hermes → harness inside `runTask()`. Progress hooks emit `stage.log` **before** `stage.complete` during drain.
+Per-task execution still runs full Hermes → harness inside `runTask()`. Progress hooks emit `stage.log` before `stage.complete` during drain.
 
 ## Magentic integration
 
@@ -99,7 +159,22 @@ EXECUTION_ENGINE=ropex
 ROPEX_BASE_URL=http://127.0.0.1:7780
 ```
 
-Magentic submits with `drain: false`, opens SSE, then calls scoped pipeline drain. LangGraph is not used when configured.
+Adapter branch in Magentic repo: `cursor/ropex-engine-4b15`
+
+- `src/engines/ropex_executor.py` — submit, SSE relay, scoped drain
+- `src/config.py` — engine selection
+- `src/api.py` — bypass LangGraph when `EXECUTION_ENGINE=ropex`
+
+Flow:
+
+1. `POST /api/v1/pipeline` `{ prompt, drain: false }`
+2. `GET /api/v1/events?pipelineId=&format=ui`
+3. `POST /api/v1/pipeline` `{ action: "drain", pipelineId }`
+4. Relay `{ type, data }` → Magentic WebSocket
+
+**Role mapping:** stage `agent` fields must match fleet `metadata.name`, not Magentic display roles. Align names or POST explicit `stages`.
+
+Full integration guide: [integrations/magentic/README.md](../integrations/magentic/README.md).
 
 ## CLI
 
@@ -107,4 +182,35 @@ Magentic submits with `drain: false`, opens SSE, then calls scoped pipeline drai
 ropex apply fleets/
 ropex pipeline "Implement auth middleware tests"
 ropex pipeline "Plan only" --no-drain
+ropex ui   # Pipelines form + live SSE drawer
 ```
+
+## Control-plane UI
+
+The built-in dashboard uses the same API:
+
+- **Run** → `POST /api/v1/pipeline` `{ prompt, drain: true }` → opens detail drawer
+- **Live logs** → `EventSource(/api/v1/events?pipelineId=…&format=ui)`
+- **View** → `GET /api/v1/pipeline?id=…`
+
+See [control-plane-ui.md](./control-plane-ui.md).
+
+## Testing
+
+Network-free tests in `tests/executor-api.test.ts`:
+
+- Sequential planning + drain
+- Scoped async drain (`taskIdPrefix`)
+- Stage context handoff
+- Terminal event gating
+- HTTP POST/GET pipeline routes
+- `stage.log` emission
+
+Run: `npm test`
+
+## Related
+
+- [HTTP API reference](./api.md)
+- [Architecture — executor layer](./architecture.md#executor-api-multi-stage-pipelines)
+- [Hermes wiring](./hermes.md)
+- [DeepSeek wiring](./dsh.md)

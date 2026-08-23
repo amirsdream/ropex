@@ -2,6 +2,8 @@
 
 Ropex is a GitOps orchestrator for agent fleets. Desired state lives in git. The controller derives **immutable workers** from agent code digests and runs a fixed **Hermes + DeepSeek Harness** workflow on each task.
 
+External orchestrators (e.g. Magentic) call the **executor API** for multi-stage pipelines without reimplementing queue semantics.
+
 ## Big picture
 
 ```mermaid
@@ -11,13 +13,13 @@ flowchart TB
     AG["Agent"]
     FL["Fleet"]
     PO["Policy"]
+    TK["Task / Memory YAML"]
   end
 
-  subgraph Queue["Work queue (GitHub)"]
-    ISS["issues.*"]
-    PR["pull_request.*"]
-    CHK["checks"]
-    RL["rate limit + idempotency"]
+  subgraph Ingress["Work ingress"]
+    ISS["GitHub events"]
+    TQ["tasks sync"]
+    EXT["POST /api/v1/pipeline"]
   end
 
   subgraph Control["Ropex control plane"]
@@ -25,28 +27,92 @@ flowchart TB
     EXP["expand Fleet → DesiredAgent"]
     CAP["apply Policy.maxReplicas"]
     IMG["buildAgentImage → imageDigest"]
-    REC["reconcile workers\ncreate / retire / roll / canary"]
-    SCH["queue · pause · DLQ\naffinity · drain c=N"]
+    REC["reconcile workers"]
+    SCH["queue · pause · DLQ · affinity"]
+    EXEC["executor · pipelines · SSE"]
     TICK["tick: reclaim → drain → sync"]
+    UI["api.ts + ropex ui"]
     STATE[".ropex/state.json"]
     PARSE --> EXP --> CAP --> IMG --> REC --> STATE
     SCH --> STATE
+    EXEC --> STATE
     TICK --> STATE
+    UI --> STATE
   end
 
   subgraph Data["Data plane"]
-    W["Worker slot\nagent:replica + imageDigest"]
+    W["Worker slot\nagent:replica + digest"]
     RT["runTask\nHermes → DeepSeek → learn"]
     W --> RT
   end
 
   Desired --> PARSE
-  Queue --> RL --> SCH
+  TK --> TQ --> SCH
+  ISS --> SCH
+  EXT --> EXEC --> SCH
   REC -->|"immutable stamp"| W
   SCH -->|"claim idle"| RT
   TICK -->|"bounded drain"| RT
-  RT -->|"comment / check / PR"| Queue
+  EXEC -->|"scoped drain\npipelineId:*"| RT
+  RT -->|"deliver"| ISS
 ```
+
+## Layered architecture
+
+```mermaid
+flowchart TB
+  subgraph L1["Layer 1 — GitOps desired state"]
+    YAML["fleets/**/*.yaml"]
+    CTRL["controller.ts"]
+  end
+
+  subgraph L2["Layer 2 — Scheduling"]
+    Q["queue.ts"]
+    SCH["scheduler.ts — drainQueue"]
+    PLACE["placement.ts"]
+  end
+
+  subgraph L3["Layer 3 — Single-task runtime"]
+    RT["runtime.ts — runTask"]
+    WF["workflow.ts — 5 stages"]
+    H["hermes.ts"]
+    DSH["dsh.ts + plugins.ts"]
+  end
+
+  subgraph L4["Layer 4 — Multi-stage executor"]
+    PIPE["pipeline.ts — planners"]
+    EXEC["executor.ts"]
+    EV["SSE /api/v1/events"]
+  end
+
+  subgraph L5["Layer 5 — Surfaces"]
+    CLI["cli.ts"]
+    API["api.ts"]
+    UI["src/ui/"]
+  end
+
+  YAML --> CTRL --> Q
+  Q --> SCH --> RT
+  RT --> WF --> H
+  RT --> DSH
+  PIPE --> EXEC --> Q
+  EXEC --> EV
+  API --> CTRL
+  API --> EXEC
+  UI --> API
+  CLI --> CTRL
+  CLI --> EXEC
+```
+
+| Layer | Module | Responsibility |
+| --- | --- | --- |
+| GitOps | `controller`, `image`, `spec` | Expand fleets, stamp digests, reconcile workers |
+| Schedule | `queue`, `scheduler`, `placement` | Enqueue, claim, lease, fair drain |
+| Runtime | `runtime`, `workflow`, `hermes`, `dsh` | One task: compose→plan→execute→deliver→learn |
+| Executor | `pipeline`, `executor` | Multi-agent sequential pipelines + SSE for external UI |
+| Surface | `api`, `ui`, `cli` | Operate and observe without touching internals |
+
+**Rule:** keep the CLI thin. New behavior belongs in spec, controller, or runtime — not ad-hoc scripts.
 
 ## Control plane mapping
 
@@ -158,7 +224,60 @@ flowchart TB
   W0 -.->|no| F2
 ```
 
-Control-plane UI: `ropex ui` serves `src/ui` and `/api/v1/view` (Hermes + DeepSeek surfaces, memory rope, workers).
+Control-plane UI: `ropex ui` serves `src/ui/` and `/api/v1/view` (Hermes + DeepSeek surfaces, memory rope, workers, **pipelines**, trajectories). See [control-plane-ui.md](./control-plane-ui.md).
+
+## Executor API (multi-stage pipelines)
+
+For external orchestrators, Ropex exposes a second ingress path beside single-task queue items:
+
+```mermaid
+sequenceDiagram
+  participant UI as Magentic / ropex ui
+  participant API as /api/v1/pipeline
+  participant EXEC as executor.ts
+  participant Q as queue
+  participant W as worker
+  participant RT as runTask
+
+  UI->>API: POST { prompt, drain: false }
+  API->>EXEC: plan stages (heuristic | hermes)
+  EXEC-->>UI: pipelineId + stages
+  UI->>API: GET /events?pipelineId&format=ui (SSE)
+  UI->>API: POST { action: drain, pipelineId }
+  loop each stage sequentially
+    EXEC->>Q: enqueue pipelineId:stageId
+    EXEC->>Q: drainQueue(taskIdPrefix)
+    Q->>W: claim
+    W->>RT: Hermes → DeepSeek
+    RT-->>EXEC: stage output + stage.log events
+    EXEC-->>UI: SSE agent_start / agent_log / agent_complete
+  end
+  EXEC-->>UI: pipeline.complete + pipeline.end
+```
+
+Key properties:
+
+- **Sequential stages** — stage N+1 waits for stage N; context handoff injects prior outputs into `prompt`
+- **Scoped drain** — only tasks matching `<pipelineId>:*` are claimed; other queue work is untouched
+- **Terminal gating** — `pipeline.complete` / `pipeline.error` / `pipeline.end` fire only when the run is fully terminal
+- **Persisted events** — capped `pipeline.events` in state; SSE replays on subscribe
+
+Planners: `ROPEX_PIPELINE_PLANNER=heuristic` (regex) or `hermes` (offline brain seed). Full contract: [executor-api.md](./executor-api.md).
+
+## Magentic integration (external UI)
+
+Repos stay independent. Magentic sets `EXECUTION_ENGINE=ropex` and calls Ropex HTTP + SSE — no LangGraph when configured.
+
+```mermaid
+flowchart LR
+  MUI["Magentic UI\nchat / orchestration"]
+  MA["Magentic API\nropex_executor.py"]
+  RAPI["Ropex :7780\n/api/v1/pipeline"]
+  REX["executor.ts"]
+  MUI --> MA --> RAPI --> REX
+```
+
+Stage `agent` names must match fleet `metadata.name` (or POST explicit `stages`). See [integrations/magentic/README.md](../integrations/magentic/README.md).
 
 ### Task sequence
 
@@ -311,26 +430,34 @@ flowchart LR
 - `ropex replay <id>` re-appends a delivery with `[replay]`.
 - `ropex demo` runs apply → HMAC webhook → concurrent drain offline.
 
-## Overnight control-plane stack (2026-08-21 → 22)
+## Overnight control-plane stack
 
 Shipped end-to-end offline:
 
 | Layer | Modules |
 | --- | --- |
 | Desired state | `fleets/**`, `spec`, `controller`, `image`, `worktree` |
-| Ingress | `webhook` (HMAC), `ratelimit`, `github` |
+| Ingress | `webhook`, `ratelimit`, `github`, **`executor`** |
 | Schedule | fair LRU `queue`, concurrent `scheduler`, priority, retry/DLQ, `fanout` |
 | Brain / kernel | Hermes compose/plan/learn, `bootDsh` profile packs |
 | Governance | `admission`, `approval`, `policy` dry-run |
 | Memory / skills | scoped `SharedMemoryStore`, versioned `skillRegistry` |
-| Observability | journal, trajectories, metrics, health/SLO, **audit** |
-| Surfaces | CLI, `/api/v1/*`, `ropex ui` |
+| Observability | journal, trajectories, metrics, health/SLO, audit |
+| Surfaces | CLI, `/api/v1/*`, `ropex ui`, **deep-dive drawer**, **pipeline SSE** |
 
-Still open for live adapters: remote GitRepo clone, `@deepseek-ai/dsh`, Hermes process.
+Still open for live adapters: live `@deepseek-ai/dsh`, Hermes process/RPC.
 
 ## What is still simulated
 
-Tools, delivery, memory backend, GitRepo watch, live `@deepseek-ai/dsh`, and live Hermes. The contracts above are the seams those live adapters plug into.
+Tools, delivery transport, live `@deepseek-ai/dsh`, and live Hermes process. The contracts above are the seams those live adapters plug into.
+
+## Related docs
+
+- [Control-plane UI](./control-plane-ui.md)
+- [Executor API](./executor-api.md)
+- [HTTP API](./api.md)
+- [Hermes wiring](./hermes.md)
+- [DeepSeek wiring](./dsh.md)
 
 ## License
 

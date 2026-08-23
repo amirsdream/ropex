@@ -109,3 +109,5 @@ spec:
 | Offline tests | Yes | Simulated |
 
 Use git tasks for air-gapped, self-hosted, or Gitea/GitLab workflows. Keep GitHub adapters when issues and PRs are already your inbox.
+
+See [docs/README.md](./README.md) for the full documentation index.
