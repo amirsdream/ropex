@@ -425,6 +425,7 @@ export type ControlPlaneView = {
       status: string;
       prompt: string;
       stages: number;
+      doneStages: number;
       updatedAt: string;
     }>;
   };

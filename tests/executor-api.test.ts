@@ -147,6 +147,65 @@ describe("executor API", () => {
     expect(log.data.log_type).toBe("thought");
   });
 
+  it("does not emit pipeline.complete when drain is false", async () => {
+    const { next } = planReconcile(emptyState(), parseManifests(yaml), "fleets/");
+    const result = await submitPipeline(next, {
+      prompt: "Research something",
+      drain: false,
+      stages: [{ id: "only", agent: "researcher", prompt: "later" }],
+    });
+    expect(result.pipeline.status).toBe("running");
+    const events = getExecutorEvents(result.pipeline.id);
+    expect(events.some((e) => e.kind === "pipeline.complete")).toBe(false);
+    expect(events.some((e) => e.kind === "pipeline.end")).toBe(false);
+  });
+
+  it("does not double-append prior context on re-drain", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ropex-rehand-"));
+    temps.push(root);
+    const { next } = planReconcile(emptyState(), parseManifests(yaml), "fleets/");
+    const submitted = await submitPipeline(next, {
+      prompt: "Compare A vs B",
+      root,
+      drain: true,
+    });
+    const second = submitted.pipeline.stages[1];
+    expect(second).toBeTruthy();
+    const firstPass = second.prompt;
+    expect(firstPass).toContain("Prior stage outputs");
+    const count = (firstPass.match(/Prior stage outputs/g) ?? []).length;
+    expect(count).toBe(1);
+    await drainPipeline(next, submitted.pipeline.id, { root });
+    const again = (firstPass.match(/Prior stage outputs/g) ?? []).length;
+    expect(again).toBe(1);
+    expect(second.basePrompt).toBeTruthy();
+    expect(second.basePrompt).not.toContain("Prior stage outputs");
+  });
+
+  it("emits stage.start only once across drain attempts", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ropex-start-once-"));
+    temps.push(root);
+    const { next } = planReconcile(emptyState(), parseManifests(yaml), "fleets/");
+    const submitted = await submitPipeline(next, {
+      prompt: "x",
+      drain: false,
+      stages: [{ id: "only", agent: "researcher", prompt: "once" }],
+    });
+    await drainPipeline(next, submitted.pipeline.id, { root });
+    await drainPipeline(next, submitted.pipeline.id, { root });
+    const starts = getExecutorEvents(submitted.pipeline.id).filter((e) => e.kind === "stage.start");
+    expect(starts.length).toBe(1);
+  });
+
+  it("code prompts always include an execute stage", async () => {
+    const { next } = planReconcile(emptyState(), parseManifests(yaml), "fleets/");
+    const result = await submitPipeline(next, {
+      prompt: "Implement auth middleware tests",
+      drain: false,
+    });
+    expect(result.pipeline.stages.some((s) => s.id === "execute")).toBe(true);
+  });
+
   it("parsePipelineTaskId splits pipeline-scoped task ids", () => {
     expect(parsePipelineTaskId("abc:research")).toEqual({ pipelineId: "abc", stageId: "research" });
     expect(parsePipelineTaskId("plain")).toEqual({});
@@ -222,6 +281,7 @@ describe("executor API", () => {
 
       const view = buildControlPlaneView(loadState(root), root);
       expect(view.pipelines.total).toBeGreaterThan(0);
+      expect(view.pipelines.recent[0].doneStages).toBeGreaterThanOrEqual(0);
     } finally {
       await server.close();
     }

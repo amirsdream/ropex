@@ -476,6 +476,7 @@ export function buildControlPlaneView(state: ClusterState, root = process.cwd())
             status: p.status,
             prompt: p.prompt.slice(0, 160),
             stages: p.stages.length,
+            doneStages: p.stages.filter((s) => s.status === "done").length,
             updatedAt: p.updatedAt,
           })),
       };
@@ -1060,6 +1061,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
           /* closed */
         }
       },
+      state,
     );
     req.on("close", () => unsub());
     return;

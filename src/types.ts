@@ -347,9 +347,13 @@ export type PipelineStageRun = {
   id: string;
   agent: string;
   prompt: string;
+  /** Immutable original prompt (context handoff recomputed each drain). */
+  basePrompt?: string;
   role?: string;
   taskId: string;
   status: "pending" | "running" | "done" | "failed";
+  /** True after stage.start has been emitted for this stage. */
+  started?: boolean;
   workerId?: string;
   output?: string;
   error?: string;

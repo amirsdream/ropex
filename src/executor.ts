@@ -5,6 +5,7 @@
 
 import { randomUUID } from "node:crypto";
 import { recordAudit } from "./audit.js";
+import { SharedMemoryStore, memoryContextFor } from "./memory.js";
 import { enqueueTask } from "./queue.js";
 import { drainQueue, type DrainOptions } from "./scheduler.js";
 import { planPipeline, type PipelineStagePlan } from "./pipeline.js";
@@ -76,7 +77,7 @@ function planAgentsMeta(stages: PipelineStageRun[]): Record<string, string | num
     agent: s.agent,
     stage_id: s.id,
     layer: i + 1,
-    task: s.prompt.slice(0, 300),
+    task: (s.basePrompt ?? s.prompt).slice(0, 300),
   }));
 }
 
@@ -93,7 +94,7 @@ function closePipelineSubscribers(pipelineId: string): void {
   for (const sub of [...subscribers]) {
     if (sub.pipelineId !== pipelineId && sub.pipelineId !== "*") continue;
     try {
-      sub.write(`event: end\ndata: ${JSON.stringify({ pipelineId })}\n\n`);
+      sub.write(`data: ${JSON.stringify({ type: "stream_end", data: { pipeline_id: pipelineId } })}\n\n`);
       sub.close();
     } catch {
       /* closed */
@@ -125,19 +126,37 @@ export function emitExecutorEvent(event: ExecutorEvent, state?: ClusterState): v
   }
 }
 
-export function getExecutorEvents(pipelineId: string): ExecutorEvent[] {
-  return [...(eventBuffer.get(pipelineId) ?? [])];
+export function getExecutorEvents(pipelineId: string, state?: ClusterState): ExecutorEvent[] {
+  const live = eventBuffer.get(pipelineId);
+  if (live?.length) return [...live];
+  const persisted = state?.pipelines?.find((p) => p.id === pipelineId)?.events;
+  if (persisted?.length) {
+    return persisted.map((e) => ({
+      pipelineId: e.pipelineId,
+      at: e.at,
+      kind: e.kind as ExecutorEventKind,
+      stageId: e.stageId,
+      agent: e.agent,
+      taskId: e.taskId,
+      workerId: e.workerId,
+      message: e.message,
+      artifact: e.artifact,
+      meta: e.meta,
+    }));
+  }
+  return [];
 }
 
-/** Register SSE subscriber; returns unsubscribe. */
+/** Register SSE subscriber; returns unsubscribe. Seeds from live buffer or persisted events. */
 export function subscribeExecutorEvents(
   pipelineId: string,
   write: (chunk: string) => void,
   close: () => void,
+  state?: ClusterState,
 ): () => void {
   const sub: SseSubscriber = { pipelineId, write, close };
   subscribers.add(sub);
-  for (const e of getExecutorEvents(pipelineId)) {
+  for (const e of getExecutorEvents(pipelineId, state)) {
     write(`data: ${JSON.stringify(e)}\n\n`);
   }
   return () => {
@@ -147,7 +166,10 @@ export function subscribeExecutorEvents(
 
 function ensurePipelines(state: ClusterState): PipelineRun[] {
   if (!state.pipelines) state.pipelines = [];
-  while (state.pipelines.length > MAX_PIPELINE_RUNS) state.pipelines.shift();
+  while (state.pipelines.length > MAX_PIPELINE_RUNS) {
+    const dropped = state.pipelines.shift();
+    if (dropped) eventBuffer.delete(dropped.id);
+  }
   return state.pipelines;
 }
 
@@ -208,9 +230,9 @@ function syncPipelineFromQueue(state: ClusterState, pipeline: PipelineRun): void
       stage.status = "done";
       stage.workerId = latest.workerId;
     }
-    if (latest.status === "dead") {
+    if (latest.status === "dead" || latest.status === "failed") {
       stage.status = "failed";
-      stage.error = latest.error;
+      stage.error = latest.error ?? "enqueue denied";
       stage.workerId = latest.workerId;
     }
   }
@@ -242,6 +264,27 @@ function priorStageContext(stages: PipelineStageRun[], uptoIndex: number): strin
 function stagePrompt(base: string, prior: string): string {
   if (!prior.trim()) return base;
   return `${base}\n\n--- Prior stage outputs ---\n${prior.slice(0, 8000)}`;
+}
+
+function rememberStageOutput(state: ClusterState, pipeline: PipelineRun, stage: PipelineStageRun): void {
+  if (!stage.output?.trim()) return;
+  const agent = state.desired.find((a) => a.metadata.name === stage.agent);
+  if (!agent || agent.spec.hermes.memory === "none") return;
+  try {
+    const store = SharedMemoryStore.fromState(state);
+    const worker = state.workers.find((w) => w.id === stage.workerId) ?? {
+      id: `${stage.agent}:0`,
+      agent: stage.agent,
+      fleet: agent.derivedFrom?.fleet,
+    };
+    const ctx = memoryContextFor(worker, agent.spec.hermes);
+    store.remember(ctx, stage.output.slice(0, 4000), {
+      id: `${pipeline.id}:${stage.id}:out`,
+      tags: ["pipeline", pipeline.id, stage.id, stage.role ?? stage.id],
+    });
+  } catch {
+    /* memory write optional — don't fail the pipeline */
+  }
 }
 
 function emitStageComplete(
@@ -276,6 +319,27 @@ function queueItemForTask(state: ClusterState, taskId: string) {
   return items[items.length - 1];
 }
 
+function emitTerminalIfDone(state: ClusterState, pipeline: PipelineRun): void {
+  const terminal =
+    pipeline.status === "failed"
+      ? ("pipeline.error" as const)
+      : pipeline.status === "done"
+        ? ("pipeline.complete" as const)
+        : null;
+  if (!terminal) return;
+  emitExecutorEvent(
+    {
+      pipelineId: pipeline.id,
+      at: nowIso(),
+      kind: terminal,
+      artifact: pipeline.output?.slice(0, 4000),
+      message: pipeline.status,
+    },
+    state,
+  );
+  emitExecutorEvent({ pipelineId: pipeline.id, at: nowIso(), kind: "pipeline.end", message: "closed" }, state);
+}
+
 /** Run pending stages sequentially; optional prefix scopes drain to this pipeline. */
 export async function drainPipelineStages(
   state: ClusterState,
@@ -294,8 +358,9 @@ export async function drainPipelineStages(
       break;
     }
 
+    if (!stage.basePrompt) stage.basePrompt = stage.prompt;
     const prior = priorStageContext(pipeline.stages, i);
-    stage.prompt = stagePrompt(stage.prompt, prior);
+    stage.prompt = stagePrompt(stage.basePrompt, prior);
 
     const task: Task = {
       id: stage.taskId,
@@ -304,7 +369,7 @@ export async function drainPipelineStages(
     };
 
     const existing = queueItemForTask(state, stage.taskId);
-    if (!existing || existing.status === "dead") {
+    if (!existing || existing.status === "dead" || existing.status === "failed") {
       enqueueTask(state, task, "pipeline");
       recordAudit(state, {
         kind: "enqueue",
@@ -315,22 +380,36 @@ export async function drainPipelineStages(
       });
     }
 
+    // Admission may have denied immediately
+    const afterEnqueue = queueItemForTask(state, stage.taskId);
+    if (afterEnqueue?.status === "failed") {
+      stage.status = "failed";
+      stage.error = afterEnqueue.error ?? "enqueue denied";
+      failed = true;
+      emitStageComplete(state, pipeline.id, stage, undefined, stage.error, true, stage.error);
+      break;
+    }
+
+    const firstStart = !stage.started;
     stage.status = "running";
+    stage.started = true;
     pipeline.updatedAt = nowIso();
 
-    emitExecutorEvent(
-      {
-        pipelineId: pipeline.id,
-        at: nowIso(),
-        kind: "stage.start",
-        stageId: stage.id,
-        agent: stage.agent,
-        taskId: stage.taskId,
-        message: stage.prompt.slice(0, 300),
-        meta: { role: stage.role ?? stage.id, index: i + 1, total: pipeline.stages.length },
-      },
-      state,
-    );
+    if (firstStart) {
+      emitExecutorEvent(
+        {
+          pipelineId: pipeline.id,
+          at: nowIso(),
+          kind: "stage.start",
+          stageId: stage.id,
+          agent: stage.agent,
+          taskId: stage.taskId,
+          message: stage.prompt.slice(0, 300),
+          meta: { role: stage.role ?? stage.id, index: i + 1, total: pipeline.stages.length },
+        },
+        state,
+      );
+    }
 
     const onProgress = pipelineProgressHook(state, pipeline, prefix);
     const results = await drainQueue(state, {
@@ -348,6 +427,7 @@ export async function drainPipelineStages(
       stage.workerId = hit.worker.id;
       stage.output = hit.output;
       drained += 1;
+      rememberStageOutput(state, pipeline, stage);
       emitStageComplete(state, pipeline.id, stage, hit.worker.id, hit.output, false);
       continue;
     }
@@ -384,28 +464,7 @@ export async function drainPipeline(
   pipeline.status = "running";
   const drained = await drainPipelineStages(state, pipeline, opts);
   syncPipelineFromQueue(state, pipeline);
-
-  const terminal =
-    pipeline.status === "failed"
-      ? ("pipeline.error" as const)
-      : pipeline.status === "done"
-        ? ("pipeline.complete" as const)
-        : null;
-
-  if (terminal) {
-    emitExecutorEvent(
-      {
-        pipelineId,
-        at: nowIso(),
-        kind: terminal,
-        artifact: pipeline.output?.slice(0, 4000),
-        message: pipeline.status,
-      },
-      state,
-    );
-    emitExecutorEvent({ pipelineId, at: nowIso(), kind: "pipeline.end", message: "closed" }, state);
-  }
-
+  emitTerminalIfDone(state, pipeline);
   return { pipeline, drained };
 }
 
@@ -429,6 +488,10 @@ export async function submitPipeline(
     stages: opts.stages,
   });
 
+  if (!stages.length) throw new Error("stages must not be empty");
+  const ids = stages.map((s) => s.id);
+  if (new Set(ids).size !== ids.length) throw new Error("duplicate stage ids");
+
   const validation = validatePipelineAgents(state, stages);
   if (!validation.ok) {
     throw new Error(`unknown agent(s): ${validation.missing.join(", ")} — apply fleet manifests first`);
@@ -443,8 +506,10 @@ export async function submitPipeline(
     status: "pending",
     stages: stages.map((s) => ({
       ...s,
+      basePrompt: s.prompt,
       taskId: `${pipelineId}:${s.id}`,
       status: "pending" as const,
+      started: false,
     })),
     events: [],
   };
@@ -484,17 +549,7 @@ export async function submitPipeline(
       concurrency: 1,
     });
     syncPipelineFromQueue(state, run);
-    emitExecutorEvent(
-      {
-        pipelineId,
-        at: nowIso(),
-        kind: run.status === "failed" ? "pipeline.error" : "pipeline.complete",
-        artifact: run.output?.slice(0, 4000),
-        message: run.status,
-      },
-      state,
-    );
-    emitExecutorEvent({ pipelineId, at: nowIso(), kind: "pipeline.end", message: "closed" }, state);
+    emitTerminalIfDone(state, run);
   }
 
   return { pipeline: run, drained };
@@ -503,6 +558,8 @@ export async function submitPipeline(
 /** Map executor events to common UI event names (Magentic-compatible). */
 export function mapExecutorEventToUi(event: ExecutorEvent): { type: string; data: Record<string, unknown> } {
   switch (event.kind) {
+    case "pipeline.start":
+      return { type: "status", data: { kind: event.kind, message: event.message, pipeline_id: event.pipelineId } };
     case "pipeline.plan": {
       let agents: unknown[] = [];
       if (typeof event.meta?.agents === "string") {
