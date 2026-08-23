@@ -95,10 +95,12 @@ export function enqueueTask(
 export function pickIdleWorker(
   state: ClusterState,
   agentName: string,
-  opts: { preferFleet?: string; task?: Task; preferWorkerId?: string } = {},
+  opts: { preferFleet?: string; task?: Task; preferWorkerId?: string; root?: string } = {},
 ): Worker | undefined {
   const agent = state.desired.find((a) => a.metadata.name === agentName);
-  const desiredDigest = agent ? buildAgentImage(agent).digest : undefined;
+  const desiredDigest = agent
+    ? buildAgentImage(agent, opts.root ? { root: opts.root } : {}).digest
+    : undefined;
   const placement = agent?.spec.placement;
   const stickyId =
     opts.preferWorkerId ??
@@ -238,6 +240,8 @@ export function claimPending(
     agePriorities?: boolean;
     /** Only consider queue items whose id starts with this prefix. */
     taskIdPrefix?: string;
+    /** Repo root for image digest / soul resolution (must match reconcile). */
+    root?: string;
   } = {},
 ): DrainResult {
   ensureQueue(state);
@@ -281,6 +285,7 @@ export function claimPending(
     const worker = pickIdleWorker(state, item.task.agent, {
       preferFleet: fleetHint,
       task: item.task,
+      root: opts.root,
     });
     if (!worker) continue;
     item.status = "claimed";

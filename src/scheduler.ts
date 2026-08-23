@@ -84,6 +84,7 @@ export async function drainQueue(
     leaseMs: opts.leaseMs,
     maxAttempts: opts.maxAttempts,
     taskIdPrefix: opts.taskIdPrefix,
+    root: opts.root,
   });
   const concurrency = clampDrainConcurrency(opts.concurrency ?? getDrainConcurrency(state));
   const results: RunResult[] = [];

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { emptyState, planReconcile } from "../src/controller.ts";
 import { buildAgentImage } from "../src/image.ts";
+import { pickIdleWorker } from "../src/queue.ts";
 import { expandDesired, parseManifests } from "../src/spec.ts";
 import { composeWorkflow, WORKFLOW_STAGES } from "../src/workflow.ts";
 
@@ -48,6 +49,17 @@ describe("immutable agent images", () => {
     expect(live[0].imageDigest).not.toBe(digestBefore);
     expect(next.workers.filter((w) => w.status === "retired")).toHaveLength(2);
     expect(next.workers.filter((w) => w.status === "retired")[0].imageDigest).toBe(digestBefore);
+  });
+
+  it("pickIdleWorker matches soul digests when root is passed", () => {
+    const root = process.cwd();
+    const { next } = planReconcile(emptyState(), parseManifests(base), "fleets/", { root });
+    const withRoot = buildAgentImage(next.desired[0], { root }).digest;
+    const withoutRoot = buildAgentImage(next.desired[0]).digest;
+    expect(withRoot).not.toBe(withoutRoot);
+    expect(next.workers[0].imageDigest).toBe(withRoot);
+    expect(pickIdleWorker(next, "triage")?.id).toBeUndefined();
+    expect(pickIdleWorker(next, "triage", { root })?.id).toBe("triage:0");
   });
 });
 
