@@ -34,6 +34,8 @@ export type HermesCreateOptions = {
   worker?: Pick<Worker, "id" | "agent" | "fleet">;
   skills?: string[];
   backend?: HermesBackend;
+  /** Worker worktree cwd for live hermes-agent invocations. */
+  cwd?: string;
 };
 
 /** True when optional peer `hermes-agent` resolves (network-free check). */
@@ -107,6 +109,7 @@ export function createHermes(spec: AgentSpec, options: HermesCreateOptions = {})
   const skills = [...new Set([...spec.hermes.skills, ...(options.skills ?? [])])];
   const soul = spec.hermes.soul ?? DEFAULT_SOUL;
   const backend = resolveHermesBackend(options.backend);
+  const cwd = options.cwd;
 
   const offlinePlan = (task: Task): HermesPlan => {
     const memHints = port.query({ limit: 3 }).map((m) => `memory[${m.scope}]: ${m.text.slice(0, 60)}`);
@@ -134,7 +137,7 @@ export function createHermes(spec: AgentSpec, options: HermesCreateOptions = {})
     plan(task) {
       if (backend === "live") {
         try {
-          const liveOut = runLiveHermesTask(task.prompt, { cwd: process.cwd() });
+          const liveOut = runLiveHermesTask(task.prompt, { cwd: cwd ?? process.cwd() });
           return {
             thoughts: [`hermes-live: ${liveOut.slice(0, 240)}`],
             calls: [{ name: "fs", input: { action: "apply_plan", plan: liveOut.slice(0, 4000) } }],

@@ -1,8 +1,10 @@
 /**
  * Pipeline planner — decompose a prompt into staged tasks against declared Agents.
  * Engine-neutral: any UI (e.g. Magentic) can POST the plan or accept the default heuristic.
+ * Set ROPEX_PIPELINE_PLANNER=hermes to seed stages from Hermes brain planning.
  */
 
+import { createHermes } from "./hermes.js";
 import type { ClusterState } from "./types.js";
 
 export type PipelineStagePlan = {
@@ -30,6 +32,40 @@ function findAgent(agents: string[], ...roleKeys: (keyof typeof ROLE_ALIASES)[])
   return undefined;
 }
 
+function resolvePipelinePlanner(): "heuristic" | "hermes" {
+  const v = (process.env.ROPEX_PIPELINE_PLANNER ?? "heuristic").toLowerCase();
+  return v === "hermes" ? "hermes" : "heuristic";
+}
+
+/** Hermes-backed single/coordinator stage plan (offline brain). */
+function planPipelineWithHermes(prompt: string, state: ClusterState, agents: string[]): PipelineStagePlan[] {
+  const name = agents[0] ?? state.desired[0]?.metadata.name;
+  const agent = state.desired.find((a) => a.metadata.name === name) ?? state.desired[0];
+  if (!agent) return [{ id: "run", agent: "default", prompt, role: "worker" }];
+
+  const hermes = createHermes(agent.spec, { worker: { id: `${agent.metadata.name}:0`, agent: agent.metadata.name } });
+  const plan = hermes.plan({ id: "pipeline-plan", agent: agent.metadata.name, prompt });
+  const planText = plan.thoughts.join("\n").slice(0, 2000);
+  const stages: PipelineStagePlan[] = [
+    {
+      id: "plan",
+      agent: agent.metadata.name,
+      role: "planner",
+      prompt: `${prompt}\n\nHermes plan:\n${planText}`,
+    },
+  ];
+  for (const call of plan.calls.slice(0, 4)) {
+    const target = findAgent(agents, "coder", "researcher", "planner") ?? agent.metadata.name;
+    stages.push({
+      id: `exec-${call.name}`,
+      agent: target,
+      role: call.name,
+      prompt: `${prompt}\n\nExecute: ${call.name} ${JSON.stringify(call.input).slice(0, 500)}`,
+    });
+  }
+  return stages.length > 1 ? stages : [{ id: "run", agent: agent.metadata.name, role: "worker", prompt }];
+}
+
 /** Build a multi-stage plan from a user prompt and fleet agents. */
 export function planPipeline(
   prompt: string,
@@ -43,6 +79,10 @@ export function planPipeline(
     : state.desired.map((a) => a.metadata.name);
   if (!agents.length) {
     return [{ id: "run", agent: "default", prompt, role: "worker" }];
+  }
+
+  if (resolvePipelinePlanner() === "hermes") {
+    return planPipelineWithHermes(prompt, state, agents);
   }
 
   const p = prompt.toLowerCase();
