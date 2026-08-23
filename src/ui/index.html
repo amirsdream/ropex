@@ -224,7 +224,7 @@
           <section id="pipelines" class="section card">
             <div class="section-head">
               <h2>Pipelines</h2>
-              <p class="section-lede">Executor API runs — sequential stages for Magentic and CLI.</p>
+              <p class="section-lede">Executor API runs — submit a prompt, then click a run for stage logs and live SSE.</p>
             </div>
             <div id="pipeline-controls" class="panel worker-rail"></div>
             <div id="pipelines-rail" class="data-table worker-rail"></div>
@@ -265,7 +265,7 @@
           <section id="trajectories" class="section card">
             <div class="section-head">
               <h2>Trajectories</h2>
-              <p class="section-lede">Recent Hermes→DeepSeek runs for export and learning.</p>
+              <p class="section-lede">Recent Hermes→DeepSeek runs — click a row to drill into plan, steps, and output.</p>
             </div>
             <div class="data-table worker-rail" id="trajectories-rail"></div>
           </section>
@@ -289,7 +289,7 @@
           <section id="surfaces" class="section card surfaces">
             <div class="section-head">
               <h2>Agent surfaces</h2>
-              <p class="section-lede">Hermes brain and DeepSeek harness configuration per agent.</p>
+              <p class="section-lede">Hermes brain and DeepSeek harness configuration — click an agent to deep dive.</p>
             </div>
             <div class="surfaces-grid">
               <div>
@@ -313,6 +313,21 @@
     </div>
 
     <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
+
+    <div id="detail-drawer" class="detail-drawer" hidden aria-hidden="true">
+      <div class="detail-backdrop" data-close-drawer tabindex="-1"></div>
+      <aside class="detail-panel" role="dialog" aria-labelledby="detail-title">
+        <header class="detail-head">
+          <div>
+            <p class="detail-kicker" id="detail-kicker">Deep dive</p>
+            <h2 id="detail-title">Detail</h2>
+          </div>
+          <button type="button" class="btn btn-ghost" id="detail-close" aria-label="Close">Close</button>
+        </header>
+        <div id="detail-body" class="detail-body"></div>
+        <div id="detail-log" class="detail-log" hidden></div>
+      </aside>
+    </div>
 
     <script type="module" src="/app.js"></script>
   </body>

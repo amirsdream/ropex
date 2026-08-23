@@ -783,16 +783,16 @@ async function main(argv: string[]): Promise<number> {
 
       const path = rest.find((a) => !a.startsWith("--")) ?? rest[0];
       if (!path) return fail("watch requires a path (or --repos)");
-      const once = rest.includes("--once");
-      const intervalRaw = flag(rest, "--interval") ?? "5s";
+      const pathOnce = rest.includes("--once");
+      const pathIntervalRaw = flag(rest, "--interval") ?? "5s";
       const source = resolve(root, path);
-      if (once) {
+      if (pathOnce) {
         const result = watchOnce(root, source);
         printPlan(result.plan);
         console.log(result.changed ? "drift reconciled" : "no create/retire drift");
         return 0;
       }
-      const intervalMs = parseInterval(intervalRaw);
+      const intervalMs = parseInterval(pathIntervalRaw);
       console.log(`watching ${source} every ${intervalMs}ms  (ctrl-c to stop)`);
       await watchLoop({
         root,

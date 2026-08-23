@@ -12,7 +12,7 @@ export function ensureTrajectories(state: ClusterState): void {
 
 export function recordTrajectory(state: ClusterState, result: RunResult): TrajectoryRecord {
   ensureTrajectories(state);
-  const stages = result.workflow.map((s) => s.id);
+  const stages = result.workflow.map((s) => s.id) as TrajectoryRecord["stages"];
   const rec: TrajectoryRecord = {
     id: `traj-${result.task.id}-${Date.now()}`,
     at: new Date().toISOString(),
@@ -63,11 +63,20 @@ function inferStagesFromTrajectory(t: TrajectoryRecord): string[] {
   return out;
 }
 
+export function getTrajectory(state: ClusterState, id: string): TrajectoryRecord | undefined {
+  ensureTrajectories(state);
+  return state.trajectories.find((t) => t.id === id);
+}
+
 export function trajectoriesFor(
   state: ClusterState,
-  filter: { agent?: string; taskId?: string; limit?: number } = {},
+  filter: { agent?: string; taskId?: string; id?: string; limit?: number } = {},
 ): TrajectoryRecord[] {
   ensureTrajectories(state);
+  if (filter.id) {
+    const one = getTrajectory(state, filter.id);
+    return one ? [one] : [];
+  }
   let rows = [...state.trajectories];
   if (filter.agent) rows = rows.filter((t) => t.agent === filter.agent);
   if (filter.taskId) rows = rows.filter((t) => t.taskId === filter.taskId);

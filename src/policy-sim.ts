@@ -51,8 +51,8 @@ export function simulatePolicies(state: ClusterState, opts: PolicySimOptions = {
       });
       const taskDenied = report.taskAdmission.status === "deny";
       if (taskDenied) deniedTasks += 1;
-      const callsDenied = report.callAdmission.denied.map((d) => d.call.name);
-      const callsNeedApproval = report.callAdmission.needsApproval.map((d) => d.call.name);
+      const callsDenied = report.callAdmission.denied.map((d) => d.name);
+      const callsNeedApproval = report.callAdmission.needsApproval.map((d) => d.name);
       deniedCalls += callsDenied.length;
       approvalCalls += callsNeedApproval.length;
       rows.push({
