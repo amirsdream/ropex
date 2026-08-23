@@ -269,6 +269,15 @@ function showAgentDetail(agentName) {
   });
 }
 
+/** Expanded agent groups (persists across refresh). */
+const expandedAgents = new Set(
+  JSON.parse(localStorage.getItem("ropex-expanded-agents") || "[]"),
+);
+
+function persistExpandedAgents() {
+  localStorage.setItem("ropex-expanded-agents", JSON.stringify([...expandedAgents]));
+}
+
 function initTheme() {
   const root = document.documentElement;
   const saved = localStorage.getItem("ropex-theme");
@@ -281,23 +290,46 @@ function initTheme() {
   });
 }
 
-function initNav() {
-  const links = [...document.querySelectorAll(".nav-link")];
-  const sections = links
-    .map((a) => document.querySelector(a.getAttribute("href")))
-    .filter(Boolean);
-  const sync = () => {
-    const y = window.scrollY + 120;
-    let current = sections[0];
-    for (const s of sections) {
-      if (s.offsetTop <= y) current = s;
-    }
-    links.forEach((a) => {
-      a.classList.toggle("is-active", a.getAttribute("href") === `#${current?.id}`);
+function initTabs() {
+  const buttons = [...document.querySelectorAll(".tab-btn")];
+  const panels = [...document.querySelectorAll(".tab-panel")];
+  const activate = (name) => {
+    buttons.forEach((btn) => {
+      const on = btn.getAttribute("data-tab") === name;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
     });
+    panels.forEach((panel) => {
+      const on = panel.id === `tab-${name}`;
+      panel.classList.toggle("is-active", on);
+      panel.hidden = !on;
+    });
+    localStorage.setItem("ropex-tab", name);
   };
-  window.addEventListener("scroll", sync, { passive: true });
-  sync();
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => activate(btn.getAttribute("data-tab")));
+  });
+  const saved = localStorage.getItem("ropex-tab") || "overview";
+  activate(saved);
+
+  $("#workers-expand-all")?.addEventListener("click", () => {
+    document.querySelectorAll(".agent-group").forEach((g) => {
+      const agent = g.getAttribute("data-agent");
+      if (agent) expandedAgents.add(agent);
+      g.classList.add("is-open");
+    });
+    persistExpandedAgents();
+  });
+  $("#workers-collapse-all")?.addEventListener("click", () => {
+    expandedAgents.clear();
+    persistExpandedAgents();
+    document.querySelectorAll(".agent-group").forEach((g) => g.classList.remove("is-open"));
+  });
+}
+
+/** @deprecated scroll-spy nav replaced by tabs */
+function initNav() {
+  initTabs();
 }
 
 async function loadView() {
@@ -340,20 +372,199 @@ function renderPulse(view) {
     .join("");
 }
 
+function donutSvg(parts) {
+  const total = parts.reduce((s, p) => s + p.value, 0) || 1;
+  const r = 42;
+  const c = 2 * Math.PI * r;
+  let offset = 0;
+  const arcs = parts
+    .map((p) => {
+      const len = (p.value / total) * c;
+      const arc = `<circle cx="50" cy="50" r="${r}" fill="none" stroke="${p.color}" stroke-width="12"
+        stroke-dasharray="${len} ${c - len}" stroke-dashoffset="${-offset}" />`;
+      offset += len;
+      return arc;
+    })
+    .join("");
+  return `<svg viewBox="0 0 100 100" aria-hidden="true">${arcs}</svg>`;
+}
+
+function renderCharts(view) {
+  const el = $("#chart-grid");
+  if (!el) return;
+  const workers = view.workers ?? [];
+  const byStatus = { idle: 0, running: 0, pending: 0, failed: 0, other: 0 };
+  for (const w of workers) {
+    if (byStatus[w.status] !== undefined) byStatus[w.status] += 1;
+    else byStatus.other += 1;
+  }
+  const statusParts = [
+    { label: "idle", value: byStatus.idle, color: "#4ade80" },
+    { label: "running", value: byStatus.running, color: "#fb923c" },
+    { label: "pending", value: byStatus.pending, color: "#94a3b8" },
+    { label: "failed", value: byStatus.failed, color: "#f87171" },
+  ].filter((p) => p.value > 0);
+
+  const byAgent = new Map();
+  for (const w of workers) {
+    const key = w.fleet ? `${w.fleet}` : w.agent;
+    byAgent.set(key, (byAgent.get(key) || 0) + 1);
+  }
+  const agentBars = [...byAgent.entries()].sort((a, b) => b[1] - a[1]);
+  const maxBar = Math.max(1, ...agentBars.map(([, n]) => n));
+
+  const queuePending = view.counts?.queuePending ?? 0;
+  const done = view.counts?.tasksCompleted ?? 0;
+  const failed = view.metrics?.tasksFailed ?? 0;
+  const traj = view.trajectories?.total ?? 0;
+  const pipes = view.pipelines?.total ?? 0;
+  const backlogParts = [
+    { label: "pending", value: queuePending, color: "#fb923c" },
+    { label: "done", value: done, color: "#2dd4bf" },
+    { label: "failed", value: failed, color: "#f87171" },
+    { label: "traj", value: traj, color: "#94a3b8" },
+    { label: "pipes", value: pipes, color: "#5eead4" },
+  ];
+  const backlogMax = Math.max(1, ...backlogParts.map((p) => p.value));
+
+  el.innerHTML = `
+    <article class="chart-card">
+      <h3>Worker status</h3>
+      <div class="chart-body">
+        <div class="donut-wrap">
+          ${donutSvg(statusParts.length ? statusParts : [{ value: 1, color: "#334155" }])}
+          <div class="donut-center"><strong>${workers.length}</strong><span>workers</span></div>
+        </div>
+        <ul class="chart-legend">
+          ${statusParts.map((p) => `<li><span class="swatch" style="background:${p.color}"></span>${p.label} ${p.value}</li>`).join("") || "<li>No workers</li>"}
+        </ul>
+      </div>
+    </article>
+    <article class="chart-card">
+      <h3>Replicas by agent / fleet</h3>
+      <div class="bar-chart">
+        ${
+          agentBars
+            .slice(0, 8)
+            .map(
+              ([name, n]) => `
+          <div class="bar-row">
+            <span title="${escapeHtml(name)}">${escapeHtml(name.length > 12 ? name.slice(0, 11) + "…" : name)}</span>
+            <div class="bar-track"><div class="bar-fill" style="width:${(n / maxBar) * 100}%"></div></div>
+            <span>${n}</span>
+          </div>`,
+            )
+            .join("") || `<p class="empty">No workers yet.</p>`
+        }
+      </div>
+    </article>
+    <article class="chart-card">
+      <h3>Work &amp; learning</h3>
+      <div class="bar-chart">
+        ${backlogParts
+          .map(
+            (p) => `
+          <div class="bar-row">
+            <span>${p.label}</span>
+            <div class="bar-track"><div class="bar-fill" style="width:${(p.value / backlogMax) * 100}%;background:${p.color}"></div></div>
+            <span>${p.value}</span>
+          </div>`,
+          )
+          .join("")}
+      </div>
+    </article>`;
+}
+
 function renderWorkflow(view) {
   const el = $("#workflow-list");
-  el.innerHTML = view.workflow
-    .map(
-      (s, i) => `
-      <li style="animation-delay:${0.05 * i}s">
-        <span class="step-id">${s.id}</span>
-        <span>
-          <span class="owner">${s.owner}</span><br />
-          ${escapeHtml(s.purpose)}
-        </span>
-      </li>`,
-    )
+  if (!el) return;
+  const stages = view.workflow ?? [];
+  el.innerHTML = stages
+    .map((s, i) => {
+      const ownerClass = s.owner === "hermes" ? "is-hermes" : s.owner === "deepseek" ? "is-deepseek" : "";
+      const arrow = i < stages.length - 1 ? `<span class="wf-arrow" aria-hidden="true">→</span>` : "";
+      return `
+      <div class="wf-node ${ownerClass}" style="animation-delay:${0.05 * i}s">
+        <span class="step-id">${escapeHtml(s.id)}</span>
+        <span class="owner">${escapeHtml(s.owner)}</span>
+        <p class="purpose">${escapeHtml(s.purpose)}</p>
+      </div>${arrow}`;
+    })
     .join("");
+}
+
+function groupWorkers(workers) {
+  const groups = new Map();
+  for (const w of workers) {
+    const key = w.agent;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(w);
+  }
+  return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+function renderWorkers(view) {
+  const el = $("#worker-rail");
+  if (!el) return;
+  if (!view.workers.length) {
+    el.innerHTML = `<p class="empty">No workers. Apply fleets/examples, then refresh.</p>`;
+    return;
+  }
+  const groups = groupWorkers(view.workers);
+  el.innerHTML = groups
+    .map(([agent, replicas]) => {
+      const open = expandedAgents.has(agent);
+      const fleet = replicas[0]?.fleet;
+      const harness = replicas[0]?.harness ?? "";
+      const model = replicas[0]?.model ?? "";
+      const statusCounts = {};
+      for (const r of replicas) statusCounts[r.status] = (statusCounts[r.status] || 0) + 1;
+      const pills = Object.entries(statusCounts)
+        .map(([st, n]) => `<span class="status-pill is-${escapeHtml(st)}">${n} ${escapeHtml(st)}</span>`)
+        .join("");
+      const rows = replicas
+        .map(
+          (w) => `
+        <div class="worker-row">
+          <div>
+            <div class="worker-id">${escapeHtml(w.id)}</div>
+            <div class="digest">${escapeHtml(w.harness)} · ${escapeHtml(w.model)}</div>
+          </div>
+          <div class="status status-${w.status}">${w.status}</div>
+          <div class="digest" title="${escapeHtml(w.imageDigest)}">${escapeHtml(w.imageDigest.slice(0, 12))}…</div>
+          <div class="digest">mem ${w.memoryReadable} · skills ${w.skills.length}</div>
+        </div>`,
+        )
+        .join("");
+      return `
+      <div class="agent-group ${open ? "is-open" : ""}" data-agent="${escapeHtml(agent)}">
+        <button type="button" class="agent-group-head" data-toggle-agent="${escapeHtml(agent)}" aria-expanded="${open}">
+          <span class="chev" aria-hidden="true">▸</span>
+          <div>
+            <div class="agent-name">${escapeHtml(agent)}${fleet ? ` <span class="agent-meta">fleet ${escapeHtml(fleet)}</span>` : ""}</div>
+            <div class="agent-meta">${escapeHtml(harness)} · ${escapeHtml(model)}</div>
+          </div>
+          <span class="replica-count">${replicas.length} replica${replicas.length === 1 ? "" : "s"}</span>
+          <div class="status-pills">${pills}</div>
+        </button>
+        <div class="agent-group-body">${rows}</div>
+      </div>`;
+    })
+    .join("");
+
+  el.querySelectorAll("[data-toggle-agent]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const agent = btn.getAttribute("data-toggle-agent");
+      const group = btn.closest(".agent-group");
+      if (!agent || !group) return;
+      const willOpen = !group.classList.contains("is-open");
+      group.classList.toggle("is-open", willOpen);
+      btn.setAttribute("aria-expanded", willOpen ? "true" : "false");
+      if (willOpen) expandedAgents.add(agent);
+      else expandedAgents.delete(agent);
+      persistExpandedAgents();
+    });
+  });
 }
 
 function renderMemory(view) {
@@ -473,28 +684,6 @@ async function memoryAction(action) {
       : `Exported ${result.exported?.length ?? 0} files`,
   );
   await refresh();
-}
-
-function renderWorkers(view) {
-  const el = $("#worker-rail");
-  if (!view.workers.length) {
-    el.innerHTML = `<p class="empty">No workers. Apply fleets/examples, then refresh.</p>`;
-    return;
-  }
-  el.innerHTML = view.workers
-    .map(
-      (w, i) => `
-      <div class="worker-row" style="animation-delay:${Math.min(i, 16) * 0.03}s">
-        <div>
-          <div class="worker-id">${escapeHtml(w.id)}</div>
-          <div class="digest">${escapeHtml(w.harness)} · ${escapeHtml(w.model)}</div>
-        </div>
-        <div class="status status-${w.status}">${w.status}</div>
-        <div class="digest" title="${escapeHtml(w.imageDigest)}">${escapeHtml(w.imageDigest)}</div>
-        <div class="digest">mem ${w.memoryReadable} · skills ${w.skills.length}</div>
-      </div>`,
-    )
-    .join("");
 }
 
 function renderHealth(view) {
@@ -1572,6 +1761,7 @@ async function main() {
     cachedView = view;
     renderMeta(view);
     renderPulse(view);
+    renderCharts(view);
     renderWorkflow(view);
     renderMemory(view);
     renderTasks(view);

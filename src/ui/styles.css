@@ -40,9 +40,9 @@
   --radius-lg: 14px;
   --radius-full: 999px;
 
-  --font-display: "Plus Jakarta Sans", system-ui, sans-serif;
-  --font-body: "Inter", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --font-display: "Sora", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
   --sidebar-w: 15.5rem;
   --content-max: 72rem;
@@ -988,4 +988,420 @@ code {
 .atmosphere,
 .rope-line {
   display: none;
+}
+
+/* —— Tabbed dashboard —— */
+.tab-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.5rem 0.75rem 1rem;
+}
+
+.tab-btn {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-display);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.tab-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.tab-btn.is-active {
+  background: var(--accent-muted);
+  color: var(--accent-hover);
+  border-color: rgba(45, 212, 191, 0.28);
+}
+
+.tab-panel[hidden] {
+  display: none !important;
+}
+
+.tab-panel.is-active {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  animation: tab-in 0.22s ease;
+}
+
+@keyframes tab-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.brand-kicker {
+  margin: 0 0 0.35rem;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.panel-quiet {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 1.15rem 1.25rem 1.35rem;
+}
+
+.section.card {
+  /* legacy class still on some nodes — quiet panels preferred */
+}
+
+.row-between {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.btn-row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.btn-sm {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.75rem;
+}
+
+/* —— Charts —— */
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+@media (max-width: 960px) {
+  .chart-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.chart-card {
+  background: linear-gradient(160deg, var(--bg-panel), var(--bg-inset));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  min-height: 11rem;
+}
+
+.chart-card h3 {
+  margin: 0 0 0.75rem;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.chart-card .chart-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  min-height: 7rem;
+}
+
+.donut-wrap {
+  position: relative;
+  width: 6.5rem;
+  height: 6.5rem;
+}
+
+.donut-wrap svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.donut-center {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+
+.donut-center strong {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.donut-center span {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.chart-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.chart-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.swatch {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.bar-chart {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr 2.2rem;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.bar-track {
+  height: 0.45rem;
+  border-radius: var(--radius-full);
+  background: var(--bg-inset);
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: linear-gradient(90deg, var(--accent), var(--accent-warm));
+  transition: width 0.4s ease;
+}
+
+/* —— Workflow flow diagram —— */
+.workflow-flow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0.25rem 0;
+}
+
+.wf-node {
+  flex: 1 1 8.5rem;
+  min-width: 8rem;
+  max-width: 12rem;
+  position: relative;
+  padding: 0.95rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-panel);
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%, 10px 50%);
+  padding-left: 1.15rem;
+  padding-right: 1.25rem;
+}
+
+.wf-node:first-child {
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%);
+  padding-left: 1rem;
+}
+
+.wf-node.is-hermes {
+  border-color: rgba(45, 212, 191, 0.35);
+  background: linear-gradient(145deg, rgba(45, 212, 191, 0.1), var(--bg-panel));
+}
+
+.wf-node.is-deepseek {
+  border-color: rgba(251, 146, 60, 0.35);
+  background: linear-gradient(145deg, rgba(251, 146, 60, 0.1), var(--bg-panel));
+}
+
+.wf-node .step-id {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 0.35rem;
+}
+
+.wf-node .owner {
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.wf-node.is-deepseek .owner {
+  color: var(--accent-warm);
+}
+
+.wf-node .purpose {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.wf-arrow {
+  align-self: center;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 700px) {
+  .wf-arrow {
+    display: none;
+  }
+  .wf-node {
+    max-width: none;
+    clip-path: none;
+    border-radius: var(--radius-md);
+  }
+}
+
+/* —— Agent group expansion —— */
+.agent-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.agent-group {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-panel);
+  overflow: hidden;
+}
+
+.agent-group-head {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: 0.75rem;
+  align-items: center;
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.agent-group-head:hover {
+  background: var(--bg-hover);
+}
+
+.agent-group-head .chev {
+  width: 1.1rem;
+  height: 1.1rem;
+  display: grid;
+  place-content: center;
+  color: var(--text-muted);
+  transition: transform 0.18s ease;
+}
+
+.agent-group.is-open .chev {
+  transform: rotate(90deg);
+}
+
+.agent-group-head .agent-name {
+  font-family: var(--font-display);
+  font-weight: 650;
+  font-size: 0.95rem;
+}
+
+.agent-group-head .agent-meta {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+.replica-count {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-sm);
+  background: var(--accent-muted);
+  color: var(--accent-hover);
+}
+
+.status-pills {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.status-pill {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+}
+
+.status-pill.is-idle {
+  color: var(--success);
+}
+.status-pill.is-running {
+  color: var(--accent-warm);
+}
+.status-pill.is-failed {
+  color: var(--danger);
+}
+
+.agent-group-body {
+  display: none;
+  border-top: 1px solid var(--border-subtle);
+  padding: 0.35rem 0.5rem 0.55rem;
+}
+
+.agent-group.is-open .agent-group-body {
+  display: block;
+  animation: tab-in 0.18s ease;
+}
+
+.agent-group-body .worker-row {
+  border-radius: var(--radius-sm);
 }
