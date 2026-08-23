@@ -2,6 +2,12 @@
 
 Nightly capture. Newest first. Each entry should be one shippable idea, not a slogan.
 
+## Executor API + UI deep-dive + docs
+
+Engine-neutral `POST/GET /api/v1/pipeline`, scoped sequential drain, SSE with Magentic `format=ui`, terminal gating, context handoff. Control-plane UI: Pipelines form, detail drawer, live EventSource logs, trajectory drill-down (`GET /api/v1/trajectories?id=`), clickable Hermes/DeepSeek surfaces. Magentic adapter notes in `integrations/magentic/`. Deep docs refresh: README architecture diagram, layered architecture, control-plane-ui.md, executor-api.md.
+
+**Shipped (2026-08-23):** `src/executor.ts`, UI drawer, docs/, PR #13–#14.
+
 ## Outbound delivery stub + worker cordon/evict
 
 Record intended webhook POSTs offline; cordon workers out of the scheduler; evict when idle.

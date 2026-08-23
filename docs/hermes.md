@@ -34,4 +34,4 @@ HERMES_AGENT_BIN=(live only)
 - Control-plane UI DeepSeek/Hermes section (`view.hermesLive`)
 - `liveHermesScaffold()` for docs/CLI checks
 
-See [architecture.md](./architecture.md) and [dsh.md](./dsh.md).
+See [architecture.md](./architecture.md), [control-plane-ui.md](./control-plane-ui.md), and [dsh.md](./dsh.md).

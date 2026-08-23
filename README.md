@@ -1,48 +1,45 @@
 # Ropex
 
-Git is the control plane. Agents are the workload. **The queue is pluggable** — git-native Task YAML, CLI, or optional GitHub webhooks.
+Git is the control plane. Agents are the workload. **The queue is pluggable** — git-native Task YAML, CLI, optional GitHub webhooks, or the **executor API** for external orchestrators like Magentic.
 
 The name is from **RoPE** (rotary position embeddings) — the trick that lets a transformer keep many tokens in one coherent sequence. Ropex does the same for agents: one git sequence, many workers in position.
 
-Ropex treats agents the way Kubernetes treats pods: you declare desired state in git, a controller derives workers, and they reconcile toward it. Each worker is **DeepSeek Harness** (everything is a plugin) plus **Hermes** (soul, memory, skills, a closed learning loop).
+Each worker is **DeepSeek Harness** (Cordis plugin kernel) plus **Hermes** (soul, memory, skills, closed learning loop). You declare desired state in git; a controller derives immutable workers; they reconcile toward it.
 
-Work can arrive as **`Task` YAML in your fleet repo** (any git server), from the CLI, or via optional GitHub events. Delivery for git tasks writes status back to the same file. See [forge-neutral tasks](./docs/forge-neutral.md).
-
-## Why this exists
-
-Coding agents today are single-player. You open a chat, one model loops on one repo, and scale means "buy more seats." That is the opposite of how software already ships.
-
-- **DeepSeek Harness** already made the kernel composable: model, tools, loop, permissions, and even the agent loop are plugins (Cordis).
-- **Hermes Agent** already made the brain durable: named bots, memory, skills that improve while they run, scheduled work.
-- **GitOps** already showed how to run *huge* numbers of identical workloads from a repo: declare replicas, select targets, cap with policy, reconcile drift.
-
-Ropex is the missing control plane that multiplies those two runtimes across GitHub the way Fleet/Flux multiplied Kubernetes across clusters.
+## System architecture
 
 ```mermaid
 flowchart TB
-  subgraph git["Git — desired state"]
-    M["Agent / Fleet / Policy / GitRepo YAML"]
+  subgraph git["Git — source of truth"]
+    FLEET["fleets/**/*.yaml\nAgent · Fleet · Policy · GitRepo"]
+    TASKS["tasks/*.yaml\nforge-neutral inbox"]
+    MEM["memory/*.yaml\nshared facts"]
   end
 
-  subgraph gh["GitHub — work queue"]
-    E["issues · PRs · checks"]
-    WH["HMAC webhook + rate limit"]
+  subgraph ingress["Work ingress"]
+    GH["GitHub webhooks\nHMAC + rate limit"]
+    CLI["ropex enqueue · tasks sync"]
+    EXT["External UI\nPOST /api/v1/pipeline"]
   end
 
   subgraph cp["Ropex control plane"]
-    C["Controller\nexpand · cap · reconcile · canary"]
-    Q["Queue\npause · DLQ · age · affinity"]
-    T["Tick\nreclaim · drain · sync · GC"]
-    S[".ropex/state.json"]
-    C --> S
-    Q --> S
-    T --> S
+    CTRL["Controller\nexpand · cap · reconcile · canary"]
+    Q["Queue\npause · DLQ · affinity · leases"]
+    EXEC["Executor\nmulti-stage pipelines · SSE"]
+    TICK["Tick\nreclaim · drain · sync · GC"]
+    API["HTTP API + UI\n:7780"]
+    STATE[".ropex/state.json"]
+    CTRL --> STATE
+    Q --> STATE
+    EXEC --> STATE
+    TICK --> STATE
+    API --> STATE
   end
 
   subgraph workers["Immutable workers"]
-    W1["triage:0\nimage=a1b2…"]
-    W2["builder:3\nimage=c3d4…"]
-    W3["… N replicas\nplacement · cordon"]
+    W1["triage:0\ndigest=a1b2…"]
+    W2["reviewer:1\ndigest=c3d4…"]
+    WN["… N replicas\nworktree · placement"]
   end
 
   subgraph wf["Per-task workflow"]
@@ -53,39 +50,75 @@ flowchart TB
     D2 --> H3["learn\nHermes"]
   end
 
-  M --> C
-  E --> WH --> Q
-  C -->|"stamp imageDigest"| workers
+  FLEET --> CTRL
+  TASKS --> CLI --> Q
+  MEM --> CTRL
+  GH --> Q
+  EXT --> EXEC --> Q
+  CTRL -->|"stamp imageDigest"| workers
   Q -->|"claim idle"| workers
-  T -->|"bounded drain"| workers
+  TICK -->|"bounded drain"| workers
   workers --> wf
-  wf -->|"comment / check / PR"| E
+  wf -->|"comment / check / PR / git"| GH
+  API -.->|"observe · operate"| cp
 ```
 
-Scale is a git commit: change `spec.replicas` from `20` to `2000`. The controller creates workers. Policy caps blast radius. Operators pause, drain, and retry from CLI or `ropex ui`.
+**Scale is a git commit:** change `spec.replicas` from 20 to 2000. Policy caps blast radius. Operators pause, drain, run pipelines, and inspect trajectories from CLI or [`ropex ui`](./docs/control-plane-ui.md).
+
+## Why this exists
+
+Coding agents today are single-player. Ropex combines three proven ideas:
+
+| Layer | Source | Ropex role |
+| --- | --- | --- |
+| Composable kernel | [DeepSeek Harness](https://github.com/deepseek-ai/DeepSeek-Harness) (Cordis) | Execute tool loops with profile packs |
+| Durable brain | [Hermes Agent](https://github.com/NousResearch/hermes-agent) | Plan, remember, learn skills |
+| Fleet operations | GitOps (Flux/Fleet style) | Declare replicas, reconcile drift, cap with policy |
+
+Ropex is the control plane that multiplies those runtimes across repos and optional GitHub — the way Kubernetes multiplied containers across clusters.
 
 ## Quick start
 
-```sh
+```bash
 npm install
 npm test
+
+# End-to-end sandbox (no network, no API keys)
 npx tsx src/cli.ts demo --root /tmp/ropex-demo
-npx tsx src/cli.ts apply fleets/examples
+
+# Load example fleet + control-plane UI
+npx tsx src/cli.ts apply fleets/examples/github-control-plane.yaml
+npx tsx src/cli.ts ui                    # http://127.0.0.1:7780
+
+# Executor API (CLI or UI Pipelines section)
+npx tsx src/cli.ts pipeline "Summarize the repo layout"
+
+# Forge-neutral tasks (any git server)
 npx tsx src/cli.ts apply fleets/examples/forge-local.yaml
-npx tsx src/cli.ts memory sync
 npx tsx src/cli.ts tasks sync
-npx tsx src/cli.ts status
-npx tsx src/cli.ts webhook simulate issues.opened --repo acme/app --title "login is broken" --secret test
 npx tsx src/cli.ts drain --concurrency 2
+
+# Observability
+npx tsx src/cli.ts trajectories --jsonl
 npx tsx src/cli.ts metrics --prometheus
 npx tsx src/cli.ts health
-npx tsx src/cli.ts trajectories --jsonl
-npx tsx src/cli.ts ui
 ```
 
-`apply` reads YAML, expands fleets, applies policy, and writes `.ropex/state.json`. That local store is a stand-in for a real cluster; the contract is the same.
+`apply` reads YAML, expands fleets, applies policy, and writes `.ropex/state.json`. Soul/skills/harness edits change the **agent image digest** → reconcile retires old workers and boots new ones (immutable roll, not in-place mutation).
 
-Soul / skills / harness edits change the **agent image digest** → reconcile retires the old worker and boots a new one (hot-reload via immutable roll, not in-place mutate).
+## Documentation
+
+| Guide | Topics |
+| --- | --- |
+| [**Architecture**](./docs/architecture.md) | Kubernetes mapping, image digests, queue, workflow, executor layer |
+| [**Control-plane UI**](./docs/control-plane-ui.md) | Dashboard, deep-dive drawer, live pipeline SSE |
+| [**HTTP API**](./docs/api.md) | All `/api/v1/*` routes |
+| [**Executor API**](./docs/executor-api.md) | Pipelines, SSE events, Magentic contract |
+| [**Forge-neutral tasks**](./docs/forge-neutral.md) | Task YAML without GitHub |
+| [**Hermes wiring**](./docs/hermes.md) | Offline brain vs live process |
+| [**DeepSeek wiring**](./docs/dsh.md) | Profile packs vs `@deepseek-ai/dsh` |
+| [**Magentic integration**](./integrations/magentic/README.md) | External chat UI → Ropex executor |
+| [**Docs index**](./docs/README.md) | Full table of contents |
 
 ## Manifests
 
@@ -99,7 +132,7 @@ spec:
   template:
     spec:
       harness:
-        profile: code          # DeepSeek: standard | code | minimal | creator
+        profile: code          # minimal | code | standard | creator
         model: deepseek-v4-pro
         plugins: [github, fs, shell]
       hermes:
@@ -118,92 +151,108 @@ spec:
           org: acme
 ```
 
-Kinds:
-
 | Kind | Role |
 | --- | --- |
 | `GitRepo` | Where the controller pulls desired state |
-| `Agent` | One named worker type (Hermes bot + harness profile) |
+| `Agent` | One named worker type (Hermes + harness profile) |
 | `Fleet` | Replica set of agents, selected onto repos |
-| `Policy` | Max replicas and permission denylist |
-| `Task` | Git-native work item (forge-neutral queue) |
+| `Policy` | Max replicas, permission denylist, optional budget |
+| `Task` | Git-native work item ([forge-neutral](./docs/forge-neutral.md)) |
 | `Memory` | Git-declared shared memory fact |
+
+Example fleets: `fleets/examples/github-control-plane.yaml`, `forge-local.yaml`.
 
 ## Runtime split
 
-**Hermes** plans: soul + skills + **MemoryPort** decide *what* to do and learn from the trajectory.
+**Hermes** (`src/hermes.ts`) — compose, plan, remember, learn. Soul + skills + scoped `MemoryPort`.
 
-**DeepSeek Harness** executes: a plugin kernel runs the loop (`tool-calls` or Code-mode collapsed program), tools, permissions, session, memory/skills/soul plugins, and GitHub delivery.
+**DeepSeek Harness** (`src/dsh.ts`, `src/plugins.ts`) — Cordis-shaped kernel: loop mode, tools, permissions, delivery plugin.
 
-**Shared memory** is scoped (`worker` | `agent` | `fleet` | `cluster`) with a read/write policy on `hermes.share`. Replicas of the same agent share agent-scoped facts; fleets can opt into fleet-scoped facts. Contracts live in `src/contracts.ts`; the store is `src/memory.ts`.
+**Ropex glue** — `src/runtime.ts` runs the fixed workflow; `src/controller.ts` reconciles workers; `src/executor.ts` runs multi-stage pipelines for external orchestrators.
 
-Neither is a wrapper slogan. `src/plugins.ts` is a Cordis-shaped kernel. `src/hermes.ts` is the learn-loop. `src/runtime.ts` is the glue. `src/controller.ts` is the GitOps reconciler. `src/api.ts` + `src/ui/` are the control-plane view (`ropex ui`).
+**Shared memory** — scoped (`worker` | `agent` | `fleet` | `cluster`) with `hermes.share` policy. Contracts in `src/contracts.ts`; store in `src/memory.ts`.
 
-## GitHub as the agent OS
+```mermaid
+flowchart LR
+  subgraph Hermes["Hermes — brain"]
+    C["compose"] --> P["plan"]
+    P --> L["learn"]
+  end
+  subgraph DS["DeepSeek — kernel"]
+    X["execute"] --> D["deliver"]
+  end
+  P --> X --> D --> L
+```
 
-1. Human (or another agent) opens an issue.
-2. Controller matches `github.events` + label selectors.
-3. An idle worker runs the task.
-4. Delivery plugin writes a comment, check, or pull request.
-5. If Hermes learning is on, a skill is persisted for the next replica.
+## Executor API + external UI
 
-GitHub already has auth, review, CI, and blame. Ropex uses that instead of inventing another agent console.
+Ropex exposes an engine-neutral HTTP + SSE contract so **Magentic** (or any client) can orchestrate without embedding LangGraph:
 
-See [architecture](./docs/architecture.md) for the Kubernetes analogy, image digests, and workflow ownership.
+```bash
+ropex ui   # POST /api/v1/pipeline + GET /api/v1/events on :7780
+```
+
+Flow: submit prompt → plan stages → scoped sequential drain → stream `{ type, data }` events → terminal `pipeline.end`.
+
+See [executor-api.md](./docs/executor-api.md) and [integrations/magentic/README.md](./integrations/magentic/README.md).
+
+The built-in **control-plane UI** also submits pipelines, streams live stage logs, and drill-down into trajectories and agent surfaces — see [control-plane-ui.md](./docs/control-plane-ui.md).
+
+## GitHub as optional agent OS
+
+1. Human opens an issue (or labels it).
+2. Controller matches `github.events` + selectors.
+3. Idle worker runs Hermes→DeepSeek workflow.
+4. Delivery writes comment, check, or pull request.
+5. Hermes learning persists a skill for the next replica.
+
+GitHub provides auth, review, CI, and blame. Ropex uses that instead of inventing another agent console. For non-GitHub forges, use [Task YAML](./docs/forge-neutral.md).
+
+## Project layout
+
+```
+fleets/           Desired state YAML
+src/
+  controller.ts   GitOps reconciler
+  scheduler.ts    Queue drain + leases
+  runtime.ts      Per-task workflow
+  executor.ts     Pipeline API + SSE
+  api.ts          HTTP control plane
+  ui/             Static dashboard
+  hermes.ts       Brain contract
+  dsh.ts          Harness adapter
+  contracts.ts    Shared types for CLI/API/UI
+tests/            Network-free vitest suite
+docs/             Architecture, API, wiring guides
+integrations/     Magentic adapter notes
+.ropex/           Local cluster state
+```
 
 ## Status
 
-Control plane today (local, network-free tests):
-
-| Capability | Status |
+| Area | Shipped |
 | --- | --- |
-| Immutable workers + image digests | shipped |
-| Hermes plan / learn + DeepSeek execute / deliver | shipped |
-| Scoped shared memory + contracts + UI | shipped |
-| Worktrees, fair queue, concurrent drain | shipped |
-| HMAC webhooks + rate limit | shipped |
-| Policy admission + fan-out | shipped |
-| Journal, skills, metrics, trajectories | shipped |
-| Worker health probes + backlog SLO | shipped |
-| Dead-letter + retry queue | shipped |
-| Claim leases + reclaim | shipped |
-| Event-sourced audit trail | shipped |
-| Multi-repo GitRepo sync + health UI | shipped (no remote clone yet) |
-| Worker-pool autoscaler (GitOps YAML) | shipped |
-| Control-plane tick + clone contract | shipped (remote clone stub) |
-| Policy budget / cost accounting | shipped |
-| Canary digest rolls + snapshots | shipped |
-| Outbound webhook stub + cordon/evict | shipped |
-| Placement require/prefer + taints | shipped |
-| Config drift detector | shipped |
-| Queue latency + fairness metrics | shipped |
-| Drift + fairness UI panels | shipped |
-| Skill promote / versions CLI | shipped |
-| Workflow stage trajectory metrics | shipped |
-| Chaos invariants + budget/policy UI | shipped |
-| Clone progress + outbound UI | shipped |
-| Worktree GC + webhook idempotency + priority aging | shipped |
-| Queue pause/resume + sticky affinity + tick hooks | shipped |
-| Pause/affinity/dsh UI + live scaffold docs | shipped |
-| Snapshot restore + hermes seam + approval UI | shipped |
-| Trajectory + rate-limit UI / metrics | shipped |
-| Drain concurrency preference + UI | shipped |
-| Operator pause/retry + policy sim UI | shipped |
-| Hygiene API + worker pool heatmap | shipped |
-| Skills promote UI + canary + budget alerts | shipped |
-| GitRepo local watch/sync | shipped (no remote clone yet) |
-| Forge-neutral Task YAML inbox + git delivery | shipped |
-| Git-defined Memory YAML sync + export | shipped |
-| Auto-export memory on remember (hermes.exportMemory) | shipped |
-| Memory sync/export UI + API | shipped |
-| Remote git clone (--remote / ROPEX_GIT_CLONE) | shipped |
-| Live dsh when @deepseek-ai/dsh installed | shipped (Cordis adapter) |
-| Live `@deepseek-ai/dsh` / Hermes process | not yet |
+| Immutable workers + image digests | yes |
+| Hermes plan/learn + DeepSeek execute/deliver | yes (simulated backends) |
+| Scoped shared memory + git sync/export | yes |
+| Fair queue, leases, DLQ, retry, pause, affinity | yes |
+| HMAC webhooks + rate limits | yes |
+| Policy admission, budget, fan-out | yes |
+| Trajectories, skills registry, audit trail | yes |
+| Health probes + backlog SLO | yes |
+| Control-plane UI + `/api/v1/view` | yes |
+| **Executor API** (pipelines, SSE, scoped drain) | yes |
+| **UI deep-dive** (pipelines, trajectories, agent surfaces) | yes |
+| **UI live pipeline SSE** | yes |
+| Remote git clone | yes (`--remote`) |
+| Live `@deepseek-ai/dsh` / Hermes process | seam documented, not default |
 
-See [architecture](./docs/architecture.md), [API](./docs/api.md), and [ideas](./docs/ideas.md).
+Full capability matrix: [architecture.md](./docs/architecture.md). Roadmap log: [ideas.md](./docs/ideas.md).
+
+## Policy for scale
+
+Never spawn uncapped fleets. Always declare `Policy.maxReplicas`. The controller derives workers — do not hard-code replica lists in application code.
 
 ## License
 
-[AGPL-3.0-only](./LICENSE) — GNU Affero General Public License v3.
-
-If you run a modified Ropex as a network service, you must offer the corresponding source to its users.
+[AGPL-3.0-only](./LICENSE) — GNU Affero General Public License v3. Network service operators must offer corresponding source to users.
