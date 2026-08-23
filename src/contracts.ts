@@ -350,6 +350,8 @@ export type ControlPlaneView = {
     liveReady: boolean;
     packageInstalled: boolean;
     apiKeyPresent: boolean;
+    /** OPENAI_API_KEY (preferred) or DEEPSEEK_API_KEY when set. */
+    apiKeySource?: "OPENAI_API_KEY" | "DEEPSEEK_API_KEY";
     scaffoldHint: string;
   };
   hermesLive: {

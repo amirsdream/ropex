@@ -1295,7 +1295,7 @@ function renderDsh(view) {
         <div class="digest">${escapeHtml(d.scaffoldHint)}</div>
       </div>
       <div class="status status-${d.liveReady ? "idle" : "failed"}">${d.liveReady ? "live" : "simulated"}</div>
-      <div class="digest">backend ${escapeHtml(d.backend)} · pkg ${d.packageInstalled ? "yes" : "no"} · key ${d.apiKeyPresent ? "yes" : "no"}</div>
+      <div class="digest">backend ${escapeHtml(d.backend)} · pkg ${d.packageInstalled ? "yes" : "no"} · key ${d.apiKeyPresent ? escapeHtml(d.apiKeySource ?? "yes") : "no"}</div>
       <div class="digest">profiles ${d.profiles?.length ?? 0}</div>
     </div>`;
   const rows = (d.profiles ?? [])

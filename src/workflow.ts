@@ -84,7 +84,7 @@ export function composeWorkflow(
     },
     harness: {
       profile: image.harness.profile,
-      model: image.harness.model ?? "deepseek-v4-flash",
+      model: image.harness.model ?? "gpt-4o-mini",
       plugins: [...image.harness.plugins],
       deliver: image.github?.deliver,
     },

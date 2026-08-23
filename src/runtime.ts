@@ -224,7 +224,7 @@ export function workerFromDesired(
     harness: image.harness.profile,
     plugins: [...image.harness.plugins],
     skills: [...image.hermes.skills],
-    model: image.harness.model ?? "deepseek-v4-flash",
+    model: image.harness.model ?? "gpt-4o-mini",
     labels,
     taints: taints?.length ? taints : undefined,
   };

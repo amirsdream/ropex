@@ -43,7 +43,7 @@ spec:
       zone: ingress
   harness:
     profile: minimal
-    model: deepseek-v4-flash
+    model: gpt-4o-mini
     plugins:
       - github
       - fs
@@ -88,7 +88,7 @@ spec:
         operator: Exists
   harness:
     profile: code
-    model: deepseek-v4-pro
+    model: gpt-4o
     plugins:
       - github
       - fs
@@ -139,7 +139,7 @@ spec:
             operator: Exists
       harness:
         profile: standard
-        model: deepseek-v4-pro
+        model: gpt-4o
         plugins:
           - github
           - fs

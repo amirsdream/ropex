@@ -402,6 +402,7 @@ export function buildControlPlaneView(state: ClusterState, root = process.cwd())
         liveReady: scaffold.liveReady,
         packageInstalled: scaffold.packageInstalled,
         apiKeyPresent: scaffold.apiKeyPresent,
+        apiKeySource: scaffold.apiKeySource,
         scaffoldHint: scaffold.summary,
       };
     })(),
@@ -500,7 +501,7 @@ function harnessSurface(agent: DesiredAgent): HarnessSurfaceView {
   return {
     agent: agent.metadata.name,
     profile: agent.spec.harness.profile,
-    model: agent.spec.harness.model ?? "deepseek-v4-flash",
+    model: agent.spec.harness.model ?? "gpt-4o-mini",
     plugins: [...agent.spec.harness.plugins],
     loop: loopModeFor(agent.spec.harness.profile),
     tools: toolsFor(agent.spec),

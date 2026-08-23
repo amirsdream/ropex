@@ -113,6 +113,8 @@ For live backends later (optional):
 
 ```bash
 npm install @deepseek-ai/dsh@^0.1.1-rc.2 hermes-agent@^0.20.5
+export OPENAI_API_KEY=sk-...   # preferred for live harness
+# export DEEPSEEK_API_KEY=...  # optional fallback
 # then: ROPEX_DSH_BACKEND=live ROPEX_HERMES_BACKEND=live
 ```
 
