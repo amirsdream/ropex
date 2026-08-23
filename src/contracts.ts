@@ -418,6 +418,16 @@ export type ControlPlaneView = {
     leasesReclaimedTotal: number;
     summary: { pending: number; claimed: number; dead: number; waitingRetry: number };
   };
+  pipelines: {
+    total: number;
+    recent: Array<{
+      id: string;
+      status: string;
+      prompt: string;
+      stages: number;
+      updatedAt: string;
+    }>;
+  };
 };
 
 /** Stable API routes the UI and CLI share. */

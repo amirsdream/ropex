@@ -8,7 +8,8 @@ import { recordAudit } from "./audit.js";
 import { enqueueTask } from "./queue.js";
 import { drainQueue, type DrainOptions } from "./scheduler.js";
 import { planPipeline, type PipelineStagePlan } from "./pipeline.js";
-import type { ClusterState, PipelineRun, PipelineStageRun, RunResult, Task } from "./types.js";
+import type { TaskProgress } from "./runtime.js";
+import type { ClusterState, PipelineRun, PipelineStageRun, Task } from "./types.js";
 
 export type ExecutorEventKind =
   | "pipeline.start"
@@ -154,6 +155,38 @@ export function getPipeline(state: ClusterState, id: string): PipelineRun | unde
   return ensurePipelines(state).find((p) => p.id === id);
 }
 
+/** Parse `<pipelineId>:<stageId>` task ids from executor pipelines. */
+export function parsePipelineTaskId(taskId: string): { pipelineId?: string; stageId?: string } {
+  const i = taskId.indexOf(":");
+  if (i <= 0) return {};
+  return { pipelineId: taskId.slice(0, i), stageId: taskId.slice(i + 1) };
+}
+
+function pipelineProgressHook(
+  state: ClusterState,
+  pipeline: PipelineRun,
+  prefix: string,
+): (progress: TaskProgress) => void {
+  return (progress) => {
+    if (!progress.taskId.startsWith(prefix)) return;
+    const { stageId } = parsePipelineTaskId(progress.taskId);
+    const stage = pipeline.stages.find((s) => s.id === stageId);
+    emitExecutorEvent(
+      {
+        pipelineId: pipeline.id,
+        at: nowIso(),
+        kind: "stage.log",
+        stageId: stage?.id ?? stageId,
+        taskId: progress.taskId,
+        agent: progress.agent,
+        message: progress.message.slice(0, 800),
+        meta: { log_type: progress.kind, role: stage?.role ?? stageId },
+      },
+      state,
+    );
+  };
+}
+
 /** Validate stage agents exist in desired fleet. */
 export function validatePipelineAgents(
   state: ClusterState,
@@ -238,61 +271,6 @@ function emitStageComplete(
   );
 }
 
-function emitStageLogs(
-  state: ClusterState,
-  pipelineId: string,
-  stage: PipelineStageRun,
-  result: RunResult,
-): void {
-  for (const thought of result.plan.slice(0, 6)) {
-    emitExecutorEvent(
-      {
-        pipelineId,
-        at: nowIso(),
-        kind: "stage.log",
-        stageId: stage.id,
-        taskId: stage.taskId,
-        agent: stage.agent,
-        message: thought.slice(0, 800),
-        meta: { role: stage.role ?? stage.id, log_type: "plan" },
-      },
-      state,
-    );
-  }
-  for (const step of result.steps.slice(0, 24)) {
-    if (step.thought) {
-      emitExecutorEvent(
-        {
-          pipelineId,
-          at: nowIso(),
-          kind: "stage.log",
-          stageId: stage.id,
-          taskId: stage.taskId,
-          agent: stage.agent,
-          message: step.thought.slice(0, 800),
-          meta: { role: stage.role ?? stage.id, log_type: "thought" },
-        },
-        state,
-      );
-    }
-    if (step.observation) {
-      emitExecutorEvent(
-        {
-          pipelineId,
-          at: nowIso(),
-          kind: "stage.log",
-          stageId: stage.id,
-          taskId: stage.taskId,
-          agent: stage.agent,
-          message: step.observation.slice(0, 800),
-          meta: { role: stage.role ?? stage.id, log_type: "observation" },
-        },
-        state,
-      );
-    }
-  }
-}
-
 function queueItemForTask(state: ClusterState, taskId: string) {
   const items = state.queue.filter((q) => q.id === taskId);
   return items[items.length - 1];
@@ -354,12 +332,14 @@ export async function drainPipelineStages(
       state,
     );
 
+    const onProgress = pipelineProgressHook(state, pipeline, prefix);
     const results = await drainQueue(state, {
       ...opts,
       root: opts.root,
       limit: 1,
       concurrency: 1,
       taskIdPrefix: prefix,
+      onProgress,
     });
 
     const hit = results.find((r) => r.task.id === stage.taskId);
@@ -368,7 +348,6 @@ export async function drainPipelineStages(
       stage.workerId = hit.worker.id;
       stage.output = hit.output;
       drained += 1;
-      emitStageLogs(state, pipeline.id, stage, hit);
       emitStageComplete(state, pipeline.id, stage, hit.worker.id, hit.output, false);
       continue;
     }
