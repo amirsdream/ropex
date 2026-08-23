@@ -1,6 +1,6 @@
 # Control-plane UI
 
-`ropex ui` serves a static dashboard and the full `/api/v1/*` API on one port (default **7780**).
+`ropex ui` serves a static **tabbed** dashboard and the full `/api/v1/*` API on one port (default **7780**).
 
 ```bash
 ropex apply fleets/examples/github-control-plane.yaml
@@ -9,10 +9,31 @@ ropex ui
 # → http://127.0.0.1:7780/api/v1/view
 ```
 
-The UI is an **operations and observability** surface — not a chat agent. It shows fleet health, queue state, Hermes/DeepSeek configuration, executor pipelines, and trajectories. For conversational orchestration, use [Magentic](../integrations/magentic/README.md) against the [executor API](./executor-api.md).
+The UI is an **operations and observability** surface — not a chat agent. Tabs organize the control plane; workers of the same agent are **collapsed by default** and expand to show replicas.
 
-## Architecture
+## Tabs
 
+| Tab | Contents |
+| --- | --- |
+| **Overview** | Snapshot charts, workflow flow diagram, health |
+| **Fleet** | Grouped workers, memory, tasks, hygiene, drift, fairness, canary, skills, autoscale |
+| **Queue** | Drain controls, pipelines, affinity, approvals, budget, policy |
+| **Observe** | Harness live/sim status, trajectories, deliveries, rate limits, audit |
+| **Agents** | Hermes & DeepSeek surfaces (click for deep-dive) |
+
+## Overview charts
+
+- Worker status donut (idle / running / failed)
+- Replicas by agent/fleet bar chart
+- Work & learning bars (pending, done, traj, pipes)
+
+## Grouped workers
+
+On **Fleet → Workers**, replicas are grouped (`triage` ×3, `pr-factory` ×20). Click a group header to expand. Use **Expand all** / **Collapse all**. Expansion state is remembered in `localStorage`.
+
+## Workflow diagram
+
+Overview shows compose → plan → execute → deliver → learn as shaped flow nodes (Hermes teal / DeepSeek copper), not a flat top-of-page list.
 ```mermaid
 flowchart TB
   subgraph Browser["Browser (src/ui)"]
