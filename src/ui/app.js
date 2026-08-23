@@ -70,6 +70,7 @@ function renderPulse(view) {
     ["drift", view.drift?.ok === false ? "yes" : "ok"],
     ["state", view.queuePaused ? "paused" : "run"],
     ["traj", view.trajectories?.total ?? 0],
+    ["pipes", view.pipelines?.total ?? 0],
     ["rl", view.rateLimits?.nearLimit ?? 0],
     ["dup", view.webhookDuplicates ?? 0],
     ["canary", view.canary?.ok === false ? `${view.canary.pctMatched}%` : "ok"],
@@ -760,6 +761,88 @@ function renderAutoscale(view) {
     .join("");
 }
 
+function renderPipelines(view) {
+  const el = $("#pipelines-rail");
+  const controls = $("#pipeline-controls");
+  if (!el) return;
+  const p = view.pipelines ?? { total: 0, recent: [] };
+  if (controls) {
+    controls.innerHTML = `
+      <div class="worker-row">
+        <div>
+          <div class="worker-id">executor</div>
+          <div class="digest">${p.total} runs · POST /api/v1/pipeline</div>
+        </div>
+        <div class="status status-idle">api</div>
+        <div class="digest" style="flex:1">
+          <input id="pipeline-prompt" type="text" placeholder="Prompt for a new pipeline…" style="width:100%;min-width:12rem" />
+        </div>
+        <div class="digest">
+          <button type="button" id="pipeline-run">run</button>
+        </div>
+      </div>`;
+    $("#pipeline-run")?.addEventListener("click", () => {
+      const prompt = ($("#pipeline-prompt")?.value ?? "").trim();
+      if (prompt) void submitPipelineUi(prompt);
+    });
+  }
+  if (!p.recent?.length) {
+    el.innerHTML = `<p class="empty">No pipelines yet. Run from the form above or Magentic.</p>`;
+    return;
+  }
+  el.innerHTML = p.recent
+    .map((row) => {
+      const st = row.status === "done" ? "idle" : row.status === "failed" ? "failed" : "running";
+      const drainBtn =
+        row.status === "running" || row.status === "pending"
+          ? `<button type="button" data-drain="${row.id}">drain</button>`
+          : "";
+      return `<div class="worker-row">
+        <div>
+          <div class="worker-id">${escapeHtml(row.id.slice(0, 8))}…</div>
+          <div class="digest">${escapeHtml(row.prompt || "")}</div>
+        </div>
+        <div class="status status-${st}">${escapeHtml(row.status)}</div>
+        <div class="digest">${row.doneStages ?? 0}/${row.stages} stages · ${escapeHtml((row.updatedAt || "").slice(11, 19))}</div>
+        <div class="digest">${drainBtn}</div>
+      </div>`;
+    })
+    .join("");
+  el.querySelectorAll("[data-drain]").forEach((btn) => {
+    btn.addEventListener("click", () => void drainPipelineUi(btn.getAttribute("data-drain")));
+  });
+}
+
+async function submitPipelineUi(prompt) {
+  const res = await fetch("/api/v1/pipeline", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ prompt, drain: true }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    showToast(body.error || `pipeline failed (${res.status})`, "err");
+    return;
+  }
+  showToast(`pipeline ${body.pipeline?.status ?? "ok"}`, "ok");
+  await refresh();
+}
+
+async function drainPipelineUi(pipelineId) {
+  const res = await fetch("/api/v1/pipeline", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "drain", pipelineId }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    showToast(body.error || `drain failed (${res.status})`, "err");
+    return;
+  }
+  showToast(`drained ${body.drained ?? 0}`, "ok");
+  await refresh();
+}
+
 function renderQueue(view) {
   const el = $("#queue-rail");
   const drainEl = $("#drain-controls");
@@ -1213,6 +1296,7 @@ async function main() {
     renderClone(view);
     renderAutoscale(view);
     renderQueue(view);
+    renderPipelines(view);
     renderAffinity(view);
     renderDsh(view);
     renderJournal(view);

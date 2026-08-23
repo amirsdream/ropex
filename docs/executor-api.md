@@ -50,7 +50,7 @@ Drain claims only queue items whose task id starts with `<pipelineId>:` — othe
 
 ## Sequential stages + context handoff
 
-Stages run **one at a time**. Each stage's prompt is extended with prior stage outputs:
+Stages run **one at a time**. Each stage keeps an immutable `basePrompt`; prior outputs are recomputed into `prompt` on every drain (no double-append):
 
 ```
 --- Prior stage outputs ---
@@ -58,6 +58,11 @@ Stages run **one at a time**. Each stage's prompt is extended with prior stage o
 …output…
 ```
 
+Completed stage outputs are written into shared memory (when the agent allows) with tags `pipeline`, `<pipelineId>`, `<stageId>`, `<role>`.
+
+Terminal events (`pipeline.complete` / `pipeline.error` / `pipeline.end`) fire **only** when the run is fully done or failed — not after a partial drain with pending stages.
+
+Stage outputs prefer trajectory **observations** (not just tool-name stubs) so handoff carries real content.
 ## Event stream
 
 Native executor events (`kind`):

@@ -246,6 +246,13 @@ function effectivePolicy(policies: Policy[]): { deny: string[]; requireApproval:
 }
 
 function summarize(task: Task, steps: TrajectoryStep[]): string {
+  const observations = steps
+    .map((s) => s.observation?.trim())
+    .filter((o): o is string => Boolean(o && o.length > 0));
+  if (observations.length) {
+    const body = observations.join("\n").slice(0, 6000);
+    return body;
+  }
   const tools = steps.flatMap((s) => s.calls.map((c) => c.name)).join(" → ");
-  return `Ropex finished "${task.prompt}" via ${tools || "no-op"}.`;
+  return `Ropex finished "${task.prompt.slice(0, 200)}" via ${tools || "no-op"}.`;
 }

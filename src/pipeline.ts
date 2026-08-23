@@ -5,6 +5,7 @@
  */
 
 import { createHermes } from "./hermes.js";
+import { SharedMemoryStore } from "./memory.js";
 import type { ClusterState } from "./types.js";
 
 export type PipelineStagePlan = {
@@ -43,9 +44,25 @@ function planPipelineWithHermes(prompt: string, state: ClusterState, agents: str
   const agent = state.desired.find((a) => a.metadata.name === name) ?? state.desired[0];
   if (!agent) return [{ id: "run", agent: "default", prompt, role: "worker" }];
 
-  const hermes = createHermes(agent.spec, { worker: { id: `${agent.metadata.name}:0`, agent: agent.metadata.name } });
+  const hermes = createHermes(agent.spec, {
+    worker: { id: `${agent.metadata.name}:0`, agent: agent.metadata.name },
+    store: SharedMemoryStore.fromState(state),
+  });
   const plan = hermes.plan({ id: "pipeline-plan", agent: agent.metadata.name, prompt });
   const planText = plan.thoughts.join("\n").slice(0, 2000);
+
+  // Prefer heuristic multi-agent shape when Hermes only returns a generic single call.
+  if (plan.calls.length <= 1 && agents.length >= 2) {
+    const heuristic = planPipelineHeuristic(prompt, agents);
+    if (heuristic.length >= 2) {
+      heuristic[0] = {
+        ...heuristic[0],
+        prompt: `${heuristic[0].prompt}\n\nHermes plan:\n${planText}`,
+      };
+      return heuristic;
+    }
+  }
+
   const stages: PipelineStagePlan[] = [
     {
       id: "plan",
@@ -69,25 +86,8 @@ function planPipelineWithHermes(prompt: string, state: ClusterState, agents: str
   return stages.length > 1 ? stages : [{ id: "run", agent: agent.metadata.name, role: "worker", prompt }];
 }
 
-/** Build a multi-stage plan from a user prompt and fleet agents. */
-export function planPipeline(
-  prompt: string,
-  state: ClusterState,
-  opts: { agents?: string[]; stages?: PipelineStagePlan[] } = {},
-): PipelineStagePlan[] {
-  if (opts.stages?.length) return opts.stages;
-
-  const agents = opts.agents?.length
-    ? opts.agents
-    : state.desired.map((a) => a.metadata.name);
-  if (!agents.length) {
-    return [{ id: "run", agent: "default", prompt, role: "worker" }];
-  }
-
-  if (resolvePipelinePlanner() === "hermes") {
-    return planPipelineWithHermes(prompt, state, agents);
-  }
-
+/** Heuristic multi-stage plan (used by default and as Hermes fallback). */
+function planPipelineHeuristic(prompt: string, agents: string[]): PipelineStagePlan[] {
   const p = prompt.toLowerCase();
   const stages: PipelineStagePlan[] = [];
 
@@ -124,9 +124,12 @@ export function planPipeline(
     const planner = findAgent(agents, "planner") ?? agents[0];
     const coder = findAgent(agents, "coder") ?? agents[0];
     stages.push({ id: "plan", agent: planner, role: "planner", prompt: `Plan approach: ${prompt}` });
-    if (coder !== planner) {
-      stages.push({ id: "execute", agent: coder, role: "coder", prompt: `Implement: ${prompt}` });
-    }
+    stages.push({
+      id: "execute",
+      agent: coder,
+      role: "coder",
+      prompt: `Implement: ${prompt}`,
+    });
     return stages;
   }
 
@@ -147,4 +150,26 @@ export function planPipeline(
   }
 
   return [{ id: "run", agent: agents[0], role: "worker", prompt }];
+}
+
+/** Build a multi-stage plan from a user prompt and fleet agents. */
+export function planPipeline(
+  prompt: string,
+  state: ClusterState,
+  opts: { agents?: string[]; stages?: PipelineStagePlan[] } = {},
+): PipelineStagePlan[] {
+  if (opts.stages?.length) return opts.stages;
+
+  const agents = opts.agents?.length
+    ? opts.agents
+    : state.desired.map((a) => a.metadata.name);
+  if (!agents.length) {
+    return [{ id: "run", agent: "default", prompt, role: "worker" }];
+  }
+
+  if (resolvePipelinePlanner() === "hermes") {
+    return planPipelineWithHermes(prompt, state, agents);
+  }
+
+  return planPipelineHeuristic(prompt, agents);
 }
