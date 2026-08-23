@@ -79,6 +79,22 @@ Ropex is the control plane that multiplies those runtimes across repos and optio
 
 ## Quick start
 
+If `npm install` hangs, use the bootstrap script (skips the huge live DeepSeek tree):
+
+```bash
+bash scripts/bootstrap.sh
+```
+
+Or manually:
+
+```bash
+# edit package.json — delete the whole "optionalDependencies" block
+rm -rf node_modules package-lock.json
+npm install --no-fund --no-audit
+```
+
+Normal path (after PR #16 merge / on `cursor/npm-install-fast-4b15`):
+
 ```bash
 npm install
 npm test
@@ -103,6 +119,8 @@ npm install @deepseek-ai/dsh@^0.1.1-rc.2 hermes-agent@^0.20.5
 If a previous install hung, cancel it (`Ctrl+C`) and run:
 
 ```bash
+bash scripts/bootstrap.sh
+# or:
 rm -rf node_modules package-lock.json
 npm install
 ```
