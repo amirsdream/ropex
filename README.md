@@ -8,60 +8,9 @@ Each worker is **DeepSeek Harness** (Cordis plugin kernel) plus **Hermes** (soul
 
 ## System architecture
 
-```mermaid
-flowchart TB
-  subgraph git["Git — source of truth"]
-    FLEET["fleets/**/*.yaml\nAgent · Fleet · Policy · GitRepo"]
-    TASKS["tasks/*.yaml\nforge-neutral inbox"]
-    MEM["memory/*.yaml\nshared facts"]
-  end
+![Ropex architecture — git desired state → ingress → control plane → ephemeral workers → the start · transform · result spine → delivery](./docs/architecture.png)
 
-  subgraph ingress["Work ingress"]
-    GH["GitHub webhooks\nHMAC + rate limit"]
-    CLI["ropex enqueue · tasks sync"]
-    EXT["External UI\nPOST /api/v1/pipeline"]
-  end
-
-  subgraph cp["Ropex control plane"]
-    CTRL["Controller\nexpand · cap · reconcile · canary"]
-    Q["Queue\npause · DLQ · affinity · leases"]
-    EXEC["Executor\nmulti-stage pipelines · SSE"]
-    TICK["Tick\nreclaim · drain · sync · GC"]
-    API["HTTP API + UI\n:7780"]
-    STATE[".ropex/state.json"]
-    CTRL --> STATE
-    Q --> STATE
-    EXEC --> STATE
-    TICK --> STATE
-    API --> STATE
-  end
-
-  subgraph workers["Ephemeral workers"]
-    W1["triage:0\nspawned · digest"]
-    W2["reviewer:1\nactive run"]
-    WN["… under maxConcurrent\nworktree · then destroy"]
-  end
-
-  subgraph wf["Per-task workflow — start → transform → result"]
-    direction LR
-    H1["compose\nHermes · Start"] --> H2["plan\nHermes · Start"]
-    H2 --> D1["execute\nDeepSeek · Transform"]
-    D1 --> D2["deliver\nDeepSeek · Result"]
-    D2 --> H3["learn\nHermes · Result"]
-  end
-
-  FLEET --> CTRL
-  TASKS --> CLI --> Q
-  MEM --> CTRL
-  GH --> Q
-  EXT --> EXEC --> Q
-  CTRL -->|"definitions + digests"| workers
-  Q -->|"claim or spawn"| workers
-  TICK -->|"bounded drain"| workers
-  workers --> wf
-  wf -->|"comment / check / PR / git"| GH
-  API -.->|"observe · operate"| cp
-```
+> Source: [`docs/architecture.excalidraw`](./docs/architecture.excalidraw) — open in [Excalidraw](https://excalidraw.com) to edit. Regenerate the PNG with `node scripts/gen-arch-excalidraw.mjs`.
 
 **Scale is a concurrency commit:** raise `maxConcurrent` (on-demand) or `replicas` (static). `Policy.maxReplicas` caps blast radius. Workers spawn on request and destroy when idle — memory stays on the agent/fleet bus. Operators pause, drain, run pipelines, and inspect trajectories from CLI or [`ropex ui`](./docs/control-plane-ui.md).
 
