@@ -21,7 +21,14 @@ export { runTask, expandWorkers } from "./runtime.js";
 export { agentsForEvent, eventToTask } from "./github.js";
 export { Kernel, memoryPlugin, skillsPlugin, soulPlugin } from "./plugins.js";
 export { buildAgentImage, digestOf } from "./image.js";
-export { composeWorkflow, WORKFLOW_STAGES } from "./workflow.js";
+export {
+  composeWorkflow,
+  WORKFLOW_STAGES,
+  WORKFLOW_PHASE_ORDER,
+  WORKFLOW_PHASE_LABELS,
+  workflowPhases,
+} from "./workflow.js";
+export type { WorkflowPhase, WorkflowStage, WorkflowPhaseGroup } from "./workflow.js";
 export {
   SharedMemoryStore,
   createMemoryPort,
@@ -40,6 +47,7 @@ export {
   subscribeExecutorEvents,
   emitExecutorEvent,
   mapExecutorEventToUi,
+  pipelinePhase,
   validatePipelineAgents,
   parsePipelineTaskId,
 } from "./executor.js";
