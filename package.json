@@ -12,6 +12,8 @@
   "scripts": {
     "build": "tsc && mkdir -p dist/ui && cp -r src/ui/. dist/ui/",
     "dev": "tsx src/cli.ts",
+    "up": "bash scripts/stack-up.sh",
+    "down": "bash scripts/stack-down.sh",
     "test": "vitest run",
     "test:watch": "vitest"
   },

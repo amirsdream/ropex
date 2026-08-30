@@ -1,11 +1,90 @@
 const $ = (sel) => document.querySelector(sel);
 
-const REFRESH_MS = 5000;
+const REFRESH_MS_IDLE = 5000;
+const REFRESH_MS_WAITING = 1200;
 
 /** Latest view snapshot for agent drill-down without extra fetch. */
 let cachedView = null;
 /** Active SSE subscription while a pipeline drawer is open. */
 let activeEventSource = null;
+let refreshTimer = null;
+let isRefreshing = false;
+
+function refreshIntervalFor(view) {
+  const status = view?.stack?.status;
+  if (status === "starting" || status === "stopping") return REFRESH_MS_WAITING;
+  if (view?.metrics?.queuePending > 0 || view?.counts?.queuePending > 0) return REFRESH_MS_WAITING;
+  return REFRESH_MS_IDLE;
+}
+
+function setLoading(active, text) {
+  const veil = $("#loading-veil");
+  const label = $("#loading-text");
+  if (!veil) return;
+  veil.hidden = !active;
+  veil.setAttribute("aria-hidden", active ? "false" : "true");
+  if (label && text) label.textContent = text;
+  document.body.classList.toggle("is-loading", active);
+}
+
+function scheduleRefresh(view) {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(() => refresh({ soft: true }), refreshIntervalFor(view ?? cachedView));
+}
+
+async function stackAction(action) {
+  setLoading(true, action === "up" ? "Starting stack…" : "Stopping stack…");
+  document.body.classList.add("is-waiting");
+  try {
+    const res = await fetch("/api/v1/stack", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `stack ${res.status}`);
+    showToast(body.stack?.message || `Stack ${action}`, "ok");
+    await refresh();
+  } catch (err) {
+    showToast(String(err), "err");
+  } finally {
+    setLoading(false);
+    document.body.classList.remove("is-waiting");
+  }
+}
+
+function renderStackControl(view) {
+  const stack = view.stack ?? {};
+  const pill = $("#stack-pill");
+  const dot = $("#stack-dot");
+  const label = $("#stack-label");
+  const upBtn = $("#stack-up-btn");
+  const downBtn = $("#stack-down-btn");
+  if (!pill) return;
+  pill.dataset.status = stack.status || "down";
+  if (label) {
+    label.textContent =
+      stack.status === "up"
+        ? "Running"
+        : stack.status === "starting"
+          ? "Starting…"
+          : stack.status === "stopping"
+            ? "Stopping…"
+            : "Stopped";
+  }
+  if (dot) {
+    dot.classList.toggle(
+      "is-waiting",
+      stack.status === "starting" || stack.status === "stopping",
+    );
+  }
+  if (upBtn) upBtn.disabled = stack.status === "up" || stack.status === "starting";
+  if (downBtn) downBtn.disabled = stack.status === "down" || stack.status === "stopping";
+  document.body.classList.toggle(
+    "is-waiting",
+    stack.status === "starting" || stack.status === "stopping",
+  );
+}
 
 function showToast(message, kind = "ok") {
   const stack = $("#toast-stack");
@@ -1771,14 +1850,30 @@ function formatTime(iso) {
   }
 }
 
-async function refresh() {
-  await main();
+async function refresh(opts = {}) {
+  const soft = opts.soft === true;
+  if (!soft) setLoading(true, "Syncing control plane…");
+  const content = document.querySelector(".content");
+  if (soft && content) content.classList.add("is-stale");
+  const livePill = $("#live-pill");
+  livePill?.classList.add("is-polling");
+  isRefreshing = true;
+  try {
+    await main();
+  } finally {
+    isRefreshing = false;
+    if (!soft) setLoading(false);
+    if (content) content.classList.remove("is-stale");
+    livePill?.classList.remove("is-polling");
+  }
 }
 
 async function main() {
   try {
     const view = await loadView();
     cachedView = view;
+    renderStackControl(view);
+    scheduleRefresh(view);
     renderMeta(view);
     renderPulse(view);
     renderCharts(view);
@@ -1818,5 +1913,6 @@ initTheme();
 initNav();
 initDetailDrawer();
 $("#refresh-btn")?.addEventListener("click", () => refresh());
-main();
-setInterval(refresh, REFRESH_MS);
+$("#stack-up-btn")?.addEventListener("click", () => stackAction("up"));
+$("#stack-down-btn")?.addEventListener("click", () => stackAction("down"));
+refresh({ soft: true });

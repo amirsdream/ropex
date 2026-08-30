@@ -125,6 +125,7 @@ export {
 } from "./budget.js";
 export { controlPlaneTick } from "./tick.js";
 export type { TickOptions, TickResult } from "./tick.js";
+export { DEFAULT_STACK_MANIFEST, stackDown, stackStatus, stackUp, isStackUp } from "./stack.js";
 export { cloneGitRepo, cloneAllGitRepos, planCloneAll, cloneStatusReport } from "./clone.js";
 export type { CloneResult, CloneOptions, ClonePhase, CloneProgressStep } from "./clone.js";
 export { simulatePolicies } from "./policy-sim.js";

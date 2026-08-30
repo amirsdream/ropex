@@ -105,6 +105,10 @@ npx tsx src/cli.ts demo --root /tmp/ropex-demo
 # Load example fleet + control-plane UI
 npx tsx src/cli.ts apply fleets/examples/github-control-plane.yaml
 npx tsx src/cli.ts ui                    # http://127.0.0.1:7780
+
+# One-click stack (Podman Compose or local fallback)
+npm run up                               # spin up dashboard on :7780
+npm run down                             # spin down
 ```
 
 `npm install` only pulls Ropex’s small deps (`yaml`, TypeScript, vitest). Live backends are **not** installed by default — `@deepseek-ai/dsh` is a huge tree and will make install look stuck. Simulated Hermes/DeepSeek work out of the box.

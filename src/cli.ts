@@ -21,6 +21,7 @@ import { hygieneReport, runHygiene } from "./hygiene.js";
 import { budgetReport } from "./budget.js";
 import { planAutoscale } from "./autoscale.js";
 import { controlPlaneTick } from "./tick.js";
+import { DEFAULT_STACK_MANIFEST, stackDown, stackUp } from "./stack.js";
 import { cloneAllGitRepos } from "./clone.js";
 import { simulatePolicies } from "./policy-sim.js";
 import { healthReport } from "./health.js";
@@ -126,6 +127,9 @@ Usage:
                   | sync [path] [--repos]
                   | export <id>|--all [--force] [--path dir]
                                      Show shared memory; promote a fact wider
+  ropex up [manifest] [--serve] [--no-tick] [--port N]
+                                     One-click spin up (apply + resume + tick)
+  ropex down                        One-click spin down (pause + sweep workers)
   ropex ui [--port N]             Serve control-plane UI + /api/v1/*
   ropex help
 `;
@@ -1096,6 +1100,40 @@ async function main(argv: string[]): Promise<number> {
       }
       for (const m of view.memory) {
         console.log(`[${m.scope}] ${m.agent}${m.fleet ? `@${m.fleet}` : ""}  ${m.id}  ${m.text}`);
+      }
+      return 0;
+    }
+    case "up": {
+      const state = loadState(root);
+      const serve = rest.includes("--serve");
+      const noTick = rest.includes("--no-tick");
+      const manifest =
+        positional(rest.filter((a) => a !== "--serve" && a !== "--no-tick"))[0] ??
+        DEFAULT_STACK_MANIFEST;
+      const result = await stackUp(root, state, { manifest, tick: !noTick, root });
+      saveState(root, state);
+      console.log(`stack ${result.stack.status}: ${result.stack.message}`);
+      if (!result.ok) return 1;
+      if (serve) {
+        const port = Number(flag(rest, "--port") ?? "7780");
+        const server = await startControlPlaneServer({
+          root,
+          port,
+          loadState,
+          saveState,
+        });
+        console.log(`ropex ui  http://127.0.0.1:${server.port}`);
+        await new Promise(() => {});
+      }
+      return 0;
+    }
+    case "down": {
+      const state = loadState(root);
+      const result = stackDown(root, state, { root });
+      saveState(root, state);
+      console.log(`stack ${result.stack.status}: ${result.stack.message}`);
+      if (result.workersDestroyed) {
+        console.log(`destroyed ${result.workersDestroyed} idle on-demand worker(s)`);
       }
       return 0;
     }
