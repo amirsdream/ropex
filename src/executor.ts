@@ -10,7 +10,7 @@ import { enqueueTask } from "./queue.js";
 import { drainQueue, type DrainOptions } from "./scheduler.js";
 import { planPipeline, type PipelineStagePlan } from "./pipeline.js";
 import type { TaskProgress } from "./runtime.js";
-import type { ClusterState, PipelineRun, PipelineStageRun, Task } from "./types.js";
+import type { ClusterState, PipelinePhase, PipelineRun, PipelineStageRun, Task } from "./types.js";
 
 export type ExecutorEventKind =
   | "pipeline.start"
@@ -251,6 +251,31 @@ function syncPipelineFromQueue(state: ClusterState, pipeline: PipelineRun): void
       .map((s) => `[${s.id}] ${s.output}`)
       .join("\n\n");
   }
+
+  if (pipeline.status === "done" || pipeline.status === "failed") {
+    finalizePipelineResult(pipeline);
+  }
+}
+
+/** Current phase of the start → transform → result spine for a run. */
+export function pipelinePhase(pipeline: PipelineRun): PipelinePhase {
+  if (pipeline.status === "done" || pipeline.status === "failed") return "result";
+  if (pipeline.stages.some((s) => s.status === "running" || s.status === "done")) return "execute";
+  return "intake";
+}
+
+/** Set the single terminal Result point exactly once when a run finishes. */
+function finalizePipelineResult(pipeline: PipelineRun): void {
+  if (pipeline.result) return;
+  const failedStage = pipeline.stages.find((s) => s.status === "failed");
+  pipeline.result = {
+    status: pipeline.status === "done" ? "done" : "failed",
+    output: pipeline.output ?? "",
+    stageCount: pipeline.stages.length,
+    producedBy: pipeline.stages.filter((s) => s.output).map((s) => s.agent),
+    at: nowIso(),
+    error: failedStage?.error,
+  };
 }
 
 function priorStageContext(stages: PipelineStageRun[], uptoIndex: number): string {
@@ -506,6 +531,11 @@ export async function submitPipeline(
     createdAt: nowIso(),
     updatedAt: nowIso(),
     status: "pending",
+    input: {
+      prompt,
+      agents: opts.agents?.length ? [...opts.agents] : undefined,
+      at: nowIso(),
+    },
     stages: stages.map((s) => ({
       ...s,
       basePrompt: s.prompt,

@@ -72,13 +72,35 @@ Response:
   "pipeline": {
     "id": "uuid",
     "status": "done",
+    "input": { "prompt": "…", "agents": ["researcher"], "at": "…" },
     "stages": […],
     "events": […],
-    "output": "…"
+    "output": "…",
+    "result": {
+      "status": "done",
+      "output": "…",
+      "stageCount": 2,
+      "producedBy": ["researcher", "synthesizer"],
+      "at": "…"
+    }
   },
   "drained": 2
 }
 ```
+
+## Phase spine: start → transform → result
+
+Every run has one explicit spine. It is never ambiguous where a run starts, where it does work, or where it ends:
+
+| Phase | Point | Field | Meaning |
+| --- | --- | --- | --- |
+| `intake` | **Start** | `input` | Normalized prompt (+ pinned `agents`) captured when the run is accepted. Set once, never mutated. |
+| `execute` | **Transform** | `stages` | The one place work happens — stages run sequentially with context handoff. |
+| `result` | **Result** | `result` | The single terminal outcome, written exactly once when the run reaches `done`/`failed`. |
+
+`pipelinePhase(run)` returns the current phase (`intake` before any stage runs, `execute` once a stage is running/done, `result` on terminal). The legacy `output` string is retained for backward compatibility and mirrors `result.output`.
+
+The per-task workflow (`compose · plan · execute · deliver · learn`) rolls up onto the same three phases via `workflowPhases()`: `compose`+`plan` → **Start**, `execute` → **Transform**, `deliver`+`learn` → **Result**.
 
 ## Async drain (Magentic pattern)
 

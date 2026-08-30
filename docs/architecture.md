@@ -201,13 +201,23 @@ flowchart LR
   C --> P --> X --> D --> L
 ```
 
-| Stage | Owner | Why |
-| --- | --- | --- |
-| `compose` | Hermes | SOUL / memory / skills are Hermes pillars |
-| `plan` | Hermes | Brain decides *what* to do |
-| `execute` | DeepSeek | Cordis loop + tools + profile (`tool-calls` / `code`) |
-| `deliver` | DeepSeek | Delivery plugin → comment / check / PR |
-| `learn` | Hermes | Distill trajectory → skill for the next replica |
+| Stage | Phase | Owner | Why |
+| --- | --- | --- | --- |
+| `compose` | Start | Hermes | SOUL / memory / skills are Hermes pillars |
+| `plan` | Start | Hermes | Brain decides *what* to do |
+| `execute` | Transform | DeepSeek | Cordis loop + tools + profile (`tool-calls` / `code`) |
+| `deliver` | Result | DeepSeek | Delivery plugin → comment / check / PR |
+| `learn` | Result | Hermes | Distill trajectory → skill for the next replica |
+
+### Three-phase spine (start → transform → result)
+
+The five stages roll up onto **one** explicit spine so a run's start point, execution point, and result point are never ambiguous. `workflowPhases()` (in `workflow.ts`) groups the stages; the executor pipeline mirrors the same phases with typed boundaries — `input` (Start), `stages` (Transform), and `result` (Result), with `pipelinePhase(run)` reporting the live phase. See [executor-api.md](./executor-api.md#phase-spine-start--transform--result).
+
+| Phase | Point | Workflow stages | Pipeline field |
+| --- | --- | --- | --- |
+| `intake` | **Start** | `compose`, `plan` | `input` |
+| `execute` | **Transform** | `execute` | `stages` |
+| `result` | **Result** | `deliver`, `learn` | `result` |
 
 ## Shared memory
 
