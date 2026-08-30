@@ -53,6 +53,7 @@ import {
   type SubmitPipelineOptions,
 } from "./executor.js";
 import { hygieneReport, runHygiene } from "./hygiene.js";
+import { stackDown, stackStatus, stackUp } from "./stack.js";
 import { promoteSkill, shareSkill, skillsCatalog } from "./skills.js";
 import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
@@ -134,6 +135,16 @@ export function buildControlPlaneView(state: ClusterState, root = process.cwd())
   return {
     brand: "ropex",
     tagline: "Admit → spawn → run → destroy. Memory stays.",
+    stack: (() => {
+      const s = stackStatus(state);
+      return {
+        status: s.status,
+        manifest: s.manifest,
+        updatedAt: s.updatedAt,
+        message: s.message,
+        queuePaused: isQueuePaused(state),
+      };
+    })(),
     revision: state.revision,
     source: state.source,
     lastReconcile: state.lastReconcile,
@@ -605,6 +616,38 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
   }
   if (url.pathname === API_ROUTES.view) {
     return json(res, buildControlPlaneView(state, opts.root));
+  }
+  if (url.pathname === API_ROUTES.stack) {
+    if (req.method === "GET") {
+      return json(res, { ok: true, stack: stackStatus(state), view: buildControlPlaneView(state, opts.root).stack });
+    }
+    if (req.method === "POST") {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      let body: { action?: string; manifest?: string; tick?: boolean } = {};
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as typeof body;
+      } catch {
+        return json(res, { error: "invalid json" }, 400);
+      }
+      const action = body.action ?? url.searchParams.get("action") ?? "";
+      if (action === "up") {
+        const result = await stackUp(opts.root, state, {
+          manifest: body.manifest,
+          tick: body.tick,
+          root: opts.root,
+        });
+        opts.saveState?.(opts.root, state);
+        return json(res, { ...result, view: buildControlPlaneView(state, opts.root).stack });
+      }
+      if (action === "down") {
+        const result = stackDown(opts.root, state, { root: opts.root });
+        opts.saveState?.(opts.root, state);
+        return json(res, { ...result, view: buildControlPlaneView(state, opts.root).stack });
+      }
+      return json(res, { error: "action must be up|down" }, 400);
+    }
+    return json(res, { error: "method not allowed" }, 405);
   }
   if (url.pathname === API_ROUTES.memory) {
     if (req.method === "POST") {

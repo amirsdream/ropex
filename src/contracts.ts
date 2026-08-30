@@ -161,6 +161,13 @@ export type HarnessSurfaceView = {
 export type ControlPlaneView = {
   brand: "ropex";
   tagline: string;
+  stack: {
+    status: string;
+    manifest: string;
+    updatedAt: string;
+    message?: string;
+    queuePaused: boolean;
+  };
   revision: number;
   source: string;
   lastReconcile?: string;
@@ -465,4 +472,5 @@ export const API_ROUTES = {
   hygiene: "/api/v1/hygiene",
   pipeline: "/api/v1/pipeline",
   events: "/api/v1/events",
+  stack: "/api/v1/stack",
 } as const;

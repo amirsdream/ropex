@@ -462,6 +462,17 @@ export type ClusterState = {
   /** Durable pipeline runs for external executor clients. */
   pipelines?: PipelineRun[];
   lastReconcile?: string;
+  /** One-click stack lifecycle (up/down from UI or `ropex up`). */
+  stack?: StackRecord;
+};
+
+export type StackStatus = "up" | "down" | "starting" | "stopping";
+
+export type StackRecord = {
+  status: StackStatus;
+  manifest: string;
+  updatedAt: string;
+  message?: string;
 };
 
 /** Sticky scheduling hint — prefer the same worker for a key until expiry. */

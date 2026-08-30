@@ -130,9 +130,29 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(900px 500px at 0% -10%, rgba(45, 212, 191, 0.12), transparent 55%),
-    radial-gradient(700px 480px at 100% 0%, rgba(251, 146, 60, 0.08), transparent 50%),
+    radial-gradient(900px 500px at 0% -10%, rgba(45, 212, 191, 0.16), transparent 55%),
+    radial-gradient(700px 480px at 100% 0%, rgba(20, 184, 166, 0.12), transparent 50%),
     var(--bg-base);
+}
+
+body.is-loading::before {
+  animation: teal-breathe 2.4s ease-in-out infinite;
+}
+
+body.is-waiting::before {
+  animation: teal-breathe 1.6s ease-in-out infinite;
+}
+
+@keyframes teal-breathe {
+  0%,
+  100% {
+    opacity: 1;
+    filter: hue-rotate(0deg);
+  }
+  50% {
+    opacity: 0.85;
+    filter: hue-rotate(8deg);
+  }
 }
 
 code {
@@ -179,7 +199,7 @@ code {
   width: 2rem;
   height: 2rem;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--accent), var(--accent-warm));
+  background: linear-gradient(135deg, var(--accent), #14b8a6);
   box-shadow: 0 0 20px rgba(45, 212, 191, 0.35);
 }
 
@@ -286,9 +306,9 @@ code {
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--success);
-  background: var(--success-muted);
-  border: 1px solid rgba(74, 222, 128, 0.2);
+  color: var(--accent);
+  background: var(--accent-muted);
+  border: 1px solid rgba(45, 212, 191, 0.25);
   border-radius: var(--radius-full);
 }
 
@@ -296,8 +316,124 @@ code {
   width: 0.4rem;
   height: 0.4rem;
   border-radius: 50%;
-  background: var(--success);
+  background: var(--accent);
   animation: pulse-dot 2s ease-in-out infinite;
+  box-shadow: 0 0 8px rgba(45, 212, 191, 0.6);
+}
+
+.live-pill.is-polling .live-dot {
+  animation: teal-pulse 1.2s ease-in-out infinite;
+}
+
+.stack-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.5rem 0.35rem 0.65rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.stack-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  padding-right: 0.35rem;
+}
+
+.stack-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stack-pill[data-status="up"] .stack-dot {
+  background: var(--accent);
+  box-shadow: 0 0 10px rgba(45, 212, 191, 0.7);
+}
+
+.stack-pill[data-status="down"] .stack-dot {
+  background: var(--text-muted);
+}
+
+.stack-pill[data-status="starting"] .stack-dot,
+.stack-pill[data-status="stopping"] .stack-dot,
+.stack-dot.is-waiting {
+  background: var(--accent);
+  animation: teal-pulse 1s ease-in-out infinite;
+}
+
+.btn-stack:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.loading-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  background: rgba(8, 10, 15, 0.55);
+  backdrop-filter: blur(4px);
+}
+
+[data-theme="light"] .loading-veil {
+  background: rgba(244, 247, 251, 0.65);
+}
+
+.loading-teal-ring {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  border: 3px solid var(--accent-muted);
+  border-top-color: var(--accent);
+  animation: spin-teal 0.85s linear infinite;
+  box-shadow: 0 0 24px rgba(45, 212, 191, 0.35);
+}
+
+.loading-text {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  animation: teal-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes spin-teal {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes teal-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.92);
+  }
+}
+
+.content.is-stale {
+  opacity: 0.72;
+  transition: opacity 0.2s ease;
 }
 
 @keyframes pulse-dot {
