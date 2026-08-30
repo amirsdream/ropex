@@ -53,6 +53,8 @@ curl -s -X POST http://127.0.0.1:7780/api/v1/pipeline \
   -d '{"prompt":"Hello from Magentic","drain":true}' | jq .
 ```
 
+The pipeline JSON follows one **start → transform → result** spine: `input` (the accepted prompt/agents), `stages` (sequential execution), and `result` (the single terminal outcome: `status`, `output`, `stageCount`, `producedBy`). Relay `result` as the final Magentic message; use `stages` for per-agent progress.
+
 Docs: [executor-api.md](../../docs/executor-api.md), [control-plane-ui.md](../../docs/control-plane-ui.md).
 
 ## Magentic side
