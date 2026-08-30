@@ -128,7 +128,7 @@ describe("snapshot export", () => {
     temps.push(root);
     const { next } = planReconcile(emptyState(), parseManifests(agentYaml(1, "s1")), "a");
     const { path, meta } = writeSnapshot(root, next);
-    expect(path).toContain(".ropex/snapshots");
+    expect(path).toContain(join(".ropex", "snapshots"));
     expect(meta.revision).toBe(1);
     expect(exportSnapshot(next)).toContain('"meta"');
   });

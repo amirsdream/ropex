@@ -75,7 +75,7 @@ spec:
     saveState(root, state);
 
     const after = loadState(root);
-    expect(after.memory.some((f) => f.manifestPath?.includes("memory/"))).toBe(true);
+    expect(after.memory.some((f) => f.manifestPath?.includes(join(root, "memory")))).toBe(true);
     const exported = after.memory.find((f) => f.manifestPath);
     expect(exported).toBeTruthy();
     expect(readFileSync(exported!.manifestPath!, "utf8")).toMatch(/remember this/);
