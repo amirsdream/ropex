@@ -78,7 +78,7 @@ flowchart TB
 | Queue | `#queue` | Pending work, pause, drain concurrency |
 | **Pipelines** | `#pipelines` | Executor API runs — submit, drain, drill-down |
 | Trajectories | `#trajectories` | Hermes→DeepSeek run history |
-| Harness | `#dsh` | DeepSeek profile packs + live/simulated status |
+| Harness | `#dsh` | DeepSeek profile packs + live/embedded status |
 | Hermes & DeepSeek | `#surfaces` | Per-agent brain + harness config |
 | Deliveries / Audit | `#journal` … | Journal and event trail |
 
@@ -112,16 +112,16 @@ Under **Hermes & DeepSeek**, click any agent card for:
 - DeepSeek: profile, loop mode, model, plugins, tools
 - Matching worker slot (if live)
 
-## Live vs simulated backends
+## Live vs embedded backends
 
 The **Harness** section shows backend readiness:
 
 | Component | Default | Live requires |
 | --- | --- | --- |
-| Hermes brain | `simulated` (`createHermes()`) | `ROPEX_HERMES_BACKEND=live`, `hermes-agent` |
-| DeepSeek harness | `simulated` (`bootDsh()`) | `ROPEX_DSH_BACKEND=live`, `@deepseek-ai/dsh`, **`OPENAI_API_KEY`** (preferred) or `DEEPSEEK_API_KEY` |
+| Hermes brain | `embedded` (`createHermes()`) | `ROPEX_HERMES_BACKEND=live`, `hermes-agent` |
+| DeepSeek harness | `embedded` (`bootDsh({ hermes })`) | `ROPEX_DSH_BACKEND=live`, `@deepseek-ai/dsh`, **`OPENAI_API_KEY`** (preferred) or `DEEPSEEK_API_KEY` |
 
-The control plane itself is always **live** (real state, real drain). Agent backends stay simulated in CI and offline demos.
+`bootDsh` always requires a Hermes brain — plan and execute are coupled in every environment, including tests.
 
 See [hermes.md](./hermes.md) and [dsh.md](./dsh.md) for wiring checklists.
 
@@ -145,8 +145,8 @@ See [hermes.md](./hermes.md) and [dsh.md](./dsh.md) for wiring checklists.
 | --- | --- |
 | `--port N` | UI port (default 7780) |
 | `ROPEX_PIPELINE_PLANNER` | `heuristic` (default) or `hermes` for pipeline planning |
-| `ROPEX_HERMES_BACKEND` | `simulated` \| `live` |
-| `ROPEX_DSH_BACKEND` | `simulated` \| `live` |
+| `ROPEX_HERMES_BACKEND` | `embedded` \| `live` |
+| `ROPEX_DSH_BACKEND` | `embedded` \| `live` |
 | `OPENAI_API_KEY` | Preferred live LLM key |
 | `DEEPSEEK_API_KEY` | Optional live LLM key fallback |
 

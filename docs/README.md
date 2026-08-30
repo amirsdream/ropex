@@ -12,8 +12,8 @@ GitOps control plane for agent fleets — Hermes plans, DeepSeek executes, git h
 | [HTTP API (v1)](./api.md) | All `/api/v1/*` routes |
 | [Executor API](./executor-api.md) | Multi-stage pipelines, SSE events, Magentic integration |
 | [Forge-neutral tasks](./forge-neutral.md) | Task YAML inbox without GitHub |
-| [Hermes live wiring](./hermes.md) | Offline brain vs live `hermes-agent` seam |
-| [DeepSeek (dsh) wiring](./dsh.md) | Profile packs, simulated vs live harness |
+| [Hermes live wiring](./hermes.md) | Embedded brain vs live `hermes-agent` seam |
+| [DeepSeek (dsh) wiring](./dsh.md) | Profile packs, embedded vs live harness |
 | [Magentic integration](../integrations/magentic/README.md) | External UI → Ropex executor |
 | [Ideas log](./ideas.md) | Shipped features and open seams |
 

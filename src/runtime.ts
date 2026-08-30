@@ -73,16 +73,27 @@ export async function runTask(
     ],
   });
 
-  // DeepSeek adapter (simulated profile pack; live stub until @deepseek-ai/dsh)
+  // DeepSeek harness — always coupled to Hermes (embedded by default).
   const dsh = await bootDsh(agent.spec, {
     ...policy,
     hermes,
     memory: hermes.port,
     cwd: worktree,
-    backend: undefined,
   });
 
-  // compose + plan (Hermes)
+  if (!hermes.port || !dsh.kernel) {
+    throw new Error("runTask requires Hermes brain and DeepSeek harness — both must be booted");
+  }
+
+  // compose (Hermes) — soul, memory, and skills are loaded at bootHermes time
+  opts.onProgress?.({
+    taskId: task.id,
+    agent: worker.agent,
+    kind: "plan",
+    message: `compose: soul=${workflow.brain.soul.slice(0, 60)} skills=${workflow.brain.skills.join(", ") || "none"}`,
+  });
+
+  // plan (Hermes)
   const planned = hermes.plan(task);
   for (const thought of planned.thoughts) {
     opts.onProgress?.({

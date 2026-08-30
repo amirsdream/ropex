@@ -1,13 +1,13 @@
 # Live DeepSeek Harness (dsh) wiring
 
-Ropex executes Hermes plans through `bootDsh` (`src/dsh.ts`). Today the default backend is **simulated** so every test and `ropex demo` stays network-free.
+Ropex executes Hermes plans through `bootDsh` (`src/dsh.ts`). The default backend is **embedded** (in-process Cordis harness) so every test and `ropex demo` runs the real Hermes→DeepSeek split without external packages.
 
 ## Contract
 
 | Piece | Role |
 | --- | --- |
 | `DSH_PROFILE_PACKS` | Canonical minimal/code/standard/creator packs (tools + Cordis plugin ids) |
-| `bootDsh(spec, { backend })` | Returns `DshAdapter` — same shape for simulated and future live |
+| `bootDsh(spec, { hermes })` | Returns `DshAdapter` — requires Hermes; embedded or live |
 | `liveDshScaffold()` | Checklist + env hints; `liveReady: false` until live lands |
 | Policy admission | Deny / requireApproval stay in front of tools (permissions plugin) |
 
@@ -16,7 +16,7 @@ Ropex executes Hermes plans through `bootDsh` (`src/dsh.ts`). Today the default 
 ## Install
 
 ```bash
-npm install          # small footprint — simulated backends only
+npm install          # small footprint — embedded harness only
 npm test
 ```
 
@@ -37,12 +37,12 @@ export ROPEX_DSH_BACKEND=live
 3. Map `DSH_PROFILE_PACKS[profile].plugins` onto Cordis pack loaders.
 4. Mount Policy deny/requireApproval before tool execution.
 5. Prove one path: `ropex run --root sandbox` with `ROPEX_DSH_BACKEND=live`.
-6. Keep `simulated` as the default for demos and vitest.
+6. Keep `embedded` as the default for demos and vitest.
 
 ## Env
 
 ```
-ROPEX_DSH_BACKEND=simulated|live
+ROPEX_DSH_BACKEND=embedded|live
 OPENAI_API_KEY=(preferred live key — default for Ropex)
 DEEPSEEK_API_KEY=(optional fallback)
 ```

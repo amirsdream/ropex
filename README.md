@@ -274,7 +274,7 @@ integrations/     Magentic adapter notes
 | Area | Shipped |
 | --- | --- |
 | Immutable workers + image digests | yes |
-| Hermes plan/learn + DeepSeek execute/deliver | yes (simulated backends) |
+| Hermes plan/learn + DeepSeek execute/deliver | yes (embedded backends) |
 | Scoped shared memory + git sync/export | yes |
 | Fair queue, leases, DLQ, retry, pause, affinity | yes |
 | HMAC webhooks + rate limits | yes |
