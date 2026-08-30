@@ -1,10 +1,24 @@
 apiVersion: ropex.dev/v1
+kind: Policy
+metadata:
+  name: default-guardrails
+spec:
+  maxReplicas: 8
+  budget:
+    maxUnits: 1000
+    windowMs: 3600000
+    scope: cluster
+  permissions:
+    deny: []
+    requireApproval: []
+---
+apiVersion: ropex.dev/v1
 kind: Agent
 metadata:
   name: docbot
 spec:
   scale: onDemand
-  maxConcurrent: 1
+  maxConcurrent: 2
   idleTTLMs: 0
   harness:
     profile: minimal

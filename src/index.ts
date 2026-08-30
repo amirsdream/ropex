@@ -177,11 +177,20 @@ export {
   syncTasksFromGitRepos,
   readTaskManifest,
   taskFromManifest,
+  submitNativeTask,
   deliverGitTaskManifest,
   DEFAULT_TASKS_DIR,
   taskGitSummary,
   taskGitSummaryFromRepos,
 } from "./tasks.js";
+export {
+  ensureConnectors,
+  ensureNativeTasks,
+  deliverTaskOutcome,
+  nativeTaskSummary,
+  setConnectorEnabled,
+  DEFAULT_CONNECTORS,
+} from "./connectors.js";
 export {
   syncMemoryFromDir,
   syncMemoryFromGitRepos,

@@ -33,6 +33,7 @@ import { fanOutTask } from "./fanout.js";
 import { syncGitRepos, syncDueGitRepos, syncMultiRepo } from "./gitrepo.js";
 import {
   readTaskManifest,
+  submitNativeTask,
   syncTasksFromDir,
   syncTasksFromGitRepos,
   taskFromManifest,
@@ -99,6 +100,8 @@ Usage:
   ropex policy dry-run --agent <name> <prompt>
   ropex policy simulate           Fleet-wide policy dry-run report
   ropex enqueue --agent <name> [--priority N] <prompt>
+  ropex tasks submit --agent <name> [--priority N] [--drain] <prompt>
+                                     Submit to native inbox (UI/API, no git required)
   ropex tasks sync [path] [--repos]   Enqueue pending Task YAML from git
   ropex tasks apply <task.yaml>       Enqueue one Task manifest file
   ropex chaos [--replicas N]          Stress reconcile scale + digest rolls
@@ -684,6 +687,22 @@ async function main(argv: string[]): Promise<number> {
     case "tasks": {
       const state = loadState(root);
       const sub = rest[0];
+      if (sub === "submit") {
+        const agent = flag(rest, "--agent");
+        const priority = Number(flag(rest, "--priority") ?? "0");
+        const drain = rest.includes("--drain");
+        const prompt = positional(rest.filter((x) => x !== "submit"), ["--drain"]).join(" ");
+        if (!agent || !prompt) return fail("usage: ropex tasks submit --agent <name> [--drain] <prompt>");
+        const { task, queued } = submitNativeTask(state, { agent, prompt, priority });
+        saveState(root, state);
+        console.log(`submitted ${task.id} agent=${agent} delivery=${task.delivery.mode} queue=${queued.status}`);
+        if (drain) {
+          const drained = await drainQueue(state, { root, limit: 1 });
+          saveState(root, state);
+          console.log(`drained ${drained.length} task(s)`);
+        }
+        return 0;
+      }
       if (sub === "apply") {
         const file = rest[1];
         if (!file) return fail("usage: ropex tasks apply <task.yaml>");
@@ -713,7 +732,7 @@ async function main(argv: string[]): Promise<number> {
         for (const e of result.errors) console.log(`  ! ${e.path}: ${e.error}`);
         return result.errors.length ? 1 : 0;
       }
-      return fail("usage: ropex tasks sync [path] [--repos] | ropex tasks apply <file>");
+      return fail("usage: ropex tasks submit --agent <name> <prompt> | ropex tasks sync [path] [--repos] | ropex tasks apply <file>");
     }
     case "enqueue": {
       const agent = flag(rest, "--agent");
@@ -721,14 +740,13 @@ async function main(argv: string[]): Promise<number> {
       const prompt = positional(rest).join(" ");
       if (!agent || !prompt) return fail("enqueue requires --agent and a prompt");
       const state = loadState(root);
-      const item = enqueueTask(
-        state,
-        { id: `enq-${Date.now()}`, agent, prompt },
-        "cli",
-        { priority },
-      );
+      const { task, queued } = submitNativeTask(state, {
+        agent,
+        prompt,
+        priority: Number.isFinite(priority) ? priority : 0,
+      });
       saveState(root, state);
-      console.log(`enqueued ${item.id}  priority=${item.priority}  status=${item.status}`);
+      console.log(`enqueued ${queued.id} (native) agent=${task.agent} priority=${queued.priority} status=${queued.status}`);
       return 0;
     }
     case "chaos": {
@@ -1188,10 +1206,11 @@ function flag(args: string[], name: string): string | undefined {
   return args[i + 1];
 }
 
-function positional(args: string[]): string[] {
+function positional(args: string[], booleanFlags: string[] = []): string[] {
   const out: string[] = [];
   for (let i = 0; i < args.length; i++) {
     if (args[i].startsWith("--")) {
+      if (booleanFlags.includes(args[i])) continue;
       i += 1;
       continue;
     }

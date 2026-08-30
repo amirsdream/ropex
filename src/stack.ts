@@ -12,7 +12,7 @@ import { destroyWorker, isOnDemandAgent, liveWorkersFor, sweepIdleWorkers } from
 import { controlPlaneTick } from "./tick.js";
 import type { ClusterState, StackRecord, StackStatus } from "./types.js";
 
-export const DEFAULT_STACK_MANIFEST = "fleets/examples/github-control-plane.yaml";
+export const DEFAULT_STACK_MANIFEST = "fleets/examples/forge-local.yaml";
 
 export type StackUpOptions = {
   manifest?: string;
