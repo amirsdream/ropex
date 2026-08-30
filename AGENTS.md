@@ -9,6 +9,7 @@ This repo is a GitOps control plane for agent fleets.
 - The controller reconciles definitions; the queue spawns ephemeral workers. Do not hard-code replica lists.
 - Memory and skills outlive workers: write to agent/fleet/cluster scopes (`src/memory.ts`, `src/gitmemory.ts`, skill registry). Worker-local facts are promoted on destroy.
 - Hermes plans (`src/hermes.ts`). DeepSeek-style harness executes via `bootDsh` (`src/dsh.ts` → `src/harness.ts`, `src/plugins.ts`).
+- Every run has one **start → transform → result** spine: `workflow.ts` phases (`intake`/`execute`/`result` via `workflowPhases()`); the executor `PipelineRun` mirrors it with typed `input`/`stages`/`result` (`pipelinePhase()` in `src/executor.ts`). Keep the spine intact when adding stages or ingress.
 - GitHub events, Task YAML, CLI, and **executor API** are work ingress (`src/github.ts`, `src/webhook.ts`, `src/tasks.ts`, `src/executor.ts`).
 - Delivery is comment / check / pull request / git writeback (`src/journal.ts`).
 - Policy is mandatory for scale: never spawn uncapped fleets (`src/admission.ts`, `src/scale.ts`, `src/approval.ts`).

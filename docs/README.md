@@ -6,7 +6,7 @@ GitOps control plane for agent fleets — Hermes plans, DeepSeek executes, git h
 
 | Doc | What you'll learn |
 | --- | --- |
-| [Architecture](./architecture.md) | Control plane vs data plane, immutable workers, workflow, queue, executor API |
+| [Architecture](./architecture.md) | Control plane vs data plane, immutable workers, the start → transform → result spine, queue, executor API |
 | [Control-plane UI](./control-plane-ui.md) | `ropex ui` — pipelines, trajectories, Hermes/DeepSeek drill-down, live SSE |
 | [HTTP API (v1)](./api.md) | All `/api/v1/*` routes |
 | [Executor API](./executor-api.md) | Multi-stage pipelines, SSE events, Magentic integration |
@@ -22,6 +22,9 @@ GitOps control plane for agent fleets — Hermes plans, DeepSeek executes, git h
 Git YAML (desired)  →  Controller  →  Workers (immutable image digests)
 GitHub / Task YAML  →  Queue       →  Drain  →  Hermes → DeepSeek → Deliver → Learn
 External UI         →  Executor API →  Pipeline stages (sequential, scoped drain)
+
+Every run is one spine:  Start (compose·plan)  →  Transform (execute)  →  Result (deliver·learn)
+                         pipeline: input        →  stages              →  result
 ```
 
 ## Quick commands
