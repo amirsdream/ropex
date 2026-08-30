@@ -33,7 +33,7 @@ On **Fleet → Workers**, replicas are grouped (`triage` ×3, `pr-factory` ×20)
 
 ## Workflow diagram
 
-Overview shows compose → plan → execute → deliver → learn as shaped flow nodes (Hermes teal / DeepSeek copper), not a flat top-of-page list.
+Overview shows compose → plan → execute → deliver → learn as shaped flow nodes (Hermes teal / DeepSeek copper), not a flat top-of-page list. The five stages group onto the three-phase spine — **Start** (compose·plan) → **Transform** (execute) → **Result** (deliver·learn); each node carries its `phase` from `GET /api/v1/view`.workflow.
 ```mermaid
 flowchart TB
   subgraph Browser["Browser (src/ui)"]
@@ -69,7 +69,7 @@ flowchart TB
 
 | Section | Hash | Purpose |
 | --- | --- | --- |
-| Workflow | `#workflow` | Fixed compose→plan→execute→deliver→learn pipeline |
+| Workflow | `#workflow` | Fixed compose→plan→execute→deliver→learn pipeline (Start · Transform · Result) |
 | Memory | `#memory` | Scoped facts; sync/export from git |
 | Tasks | `#tasks` | Forge-neutral Task YAML inbox |
 | Workers | `#workers` | Live replicas, digests, harness profile |
@@ -90,7 +90,7 @@ Click rows or agent cards to open a slide-over panel (Escape or **Close** to dis
 
 1. Enter a prompt in the Pipelines form → **Run**
 2. Drawer opens with **live SSE** from `/api/v1/events?pipelineId=…&format=ui`
-3. Shows stage list, persisted events, and final output when done
+3. Shows the run's `input` (Start), stage list (Transform), persisted events, and the terminal `result` (Result) when done
 
 Click any pipeline row (or **view**) to reopen a completed run without SSE.
 

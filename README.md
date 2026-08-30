@@ -42,12 +42,12 @@ flowchart TB
     WN["… under maxConcurrent\nworktree · then destroy"]
   end
 
-  subgraph wf["Per-task workflow"]
+  subgraph wf["Per-task workflow — start → transform → result"]
     direction LR
-    H1["compose\nHermes"] --> H2["plan\nHermes"]
-    H2 --> D1["execute\nDeepSeek"]
-    D1 --> D2["deliver\nDeepSeek"]
-    D2 --> H3["learn\nHermes"]
+    H1["compose\nHermes · Start"] --> H2["plan\nHermes · Start"]
+    H2 --> D1["execute\nDeepSeek · Transform"]
+    D1 --> D2["deliver\nDeepSeek · Result"]
+    D2 --> H3["learn\nHermes · Result"]
   end
 
   FLEET --> CTRL
@@ -209,6 +209,8 @@ Example fleets: `fleets/examples/github-control-plane.yaml`, `forge-local.yaml`.
 **DeepSeek Harness** (`src/dsh.ts`, `src/plugins.ts`) — Cordis-shaped kernel: loop mode, tools, permissions, delivery plugin.
 
 **Ropex glue** — `src/runtime.ts` runs the fixed workflow; `src/scale.ts` + `src/queue.ts` spawn/destroy on-demand workers; `src/controller.ts` reconciles definitions; `src/executor.ts` runs multi-stage pipelines for external orchestrators.
+
+**One spine, start → transform → result** — every run has an unambiguous shape: `compose`+`plan` (**Start**) → `execute` (**Transform**) → `deliver`+`learn` (**Result**). `workflowPhases()` groups the five stages onto that spine, and the executor pipeline mirrors it with typed boundaries — `input` (Start), `stages` (Transform), `result` (Result) — with `pipelinePhase(run)` reporting the live phase.
 
 **Shared memory** — scoped (`worker` | `agent` | `fleet` | `cluster`) with `hermes.share` policy. Contracts in `src/contracts.ts`; store in `src/memory.ts`.
 
