@@ -6,6 +6,7 @@ GitOps control plane for agent fleets — Hermes plans, DeepSeek executes, git h
 
 | Doc | What you'll learn |
 | --- | --- |
+| [**System architecture (visual)**](./system-architecture.md) | Diagrams — layers, ingress, workflow, state, module map |
 | [Architecture](./architecture.md) | Control plane vs data plane, immutable workers, workflow, queue, executor API |
 | [Control-plane UI](./control-plane-ui.md) | `ropex ui` — pipelines, trajectories, Hermes/DeepSeek drill-down, live SSE |
 | [HTTP API (v1)](./api.md) | All `/api/v1/*` routes |
