@@ -98,7 +98,10 @@ export async function drainQueue(
     const batch = claimed.slice(i, i + concurrency);
     const batchResults = await Promise.all(
       batch.map(async (c) => {
-        const worker = state.workers.find((w) => w.id === c.workerId);
+        // Prefer the live worker: retired records may share a reused id.
+        const worker =
+          state.workers.find((w) => w.id === c.workerId && w.status !== "retired") ??
+          state.workers.find((w) => w.id === c.workerId);
         if (!worker) {
           completeQueued(state, c.queueId, false, "worker missing", {
             maxAttempts: opts.maxAttempts,

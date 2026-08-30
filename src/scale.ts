@@ -150,6 +150,14 @@ export function spawnWorker(
   const replica = nextReplicaIndex(state, agentName);
   const worker = workerFromDesired(agent, replica, opts);
   worker.status = opts.status ?? "pending";
+  // Reusing a retired replica slot: drop the stale record so worker ids stay unique.
+  // Otherwise duplicate ids make later find-by-id lookups resolve to the retired
+  // record and orphan this worker in `running` (a phantom the health probe flags).
+  for (let i = state.workers.length - 1; i >= 0; i -= 1) {
+    if (state.workers[i].id === worker.id && state.workers[i].status === "retired") {
+      state.workers.splice(i, 1);
+    }
+  }
   // Seed skills from image only; registry skills are loaded at runTask time.
   state.workers.push(worker);
   recordAudit(state, {

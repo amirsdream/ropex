@@ -13,6 +13,7 @@ import {
   spawnWorker,
 } from "../src/scale.ts";
 import { SharedMemoryStore, memoryContextFor } from "../src/memory.ts";
+import { healthReport } from "../src/health.ts";
 
 const onDemandYaml = `
 apiVersion: ropex.dev/v1
@@ -138,6 +139,32 @@ describe("on-demand orchestration", () => {
     expect(next.memory.some((f) => f.scope === "worker")).toBe(true);
     promoteWorkerMemory(next, w.id);
     expect(next.memory.some((f) => f.scope === "agent" && f.text.includes("scratch"))).toBe(true);
+  });
+
+  it("reuses a retired replica slot without leaving a phantom running worker", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ropex-reuse-"));
+    temps.push(root);
+    const { next } = planReconcile(emptyState(), parseManifests(onDemandYaml), "fleets/", { root });
+
+    // First run spawns then retires triage:0.
+    enqueueTask(next, { id: "reuse-1", agent: "triage", prompt: "first" }, "cli");
+    await drainQueue(next, { root, limit: 1 });
+    expect(next.workers.filter((w) => w.status !== "retired")).toHaveLength(0);
+
+    // Second run reuses replica slot 0 — must not duplicate the id or orphan a worker.
+    enqueueTask(next, { id: "reuse-2", agent: "triage", prompt: "second" }, "cli");
+    const results = await drainQueue(next, { root, limit: 1 });
+    expect(results).toHaveLength(1);
+
+    // Worker ids stay unique (no retired + running duplicate of triage:0).
+    const ids = next.workers.map((w) => w.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    // Nothing left stuck in running.
+    expect(next.workers.filter((w) => w.status === "running")).toHaveLength(0);
+    // Health probe is green — the 503 regression.
+    const report = healthReport(next);
+    expect(report.ok).toBe(true);
+    expect(report.workers.every((w) => w.healthy)).toBe(true);
   });
 
   it("survives memory across destroy and next spawn", async () => {
