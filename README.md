@@ -295,4 +295,4 @@ Never spawn uncapped fleets. Always declare `Policy.maxReplicas`. The controller
 
 ## License
 
-[AGPL-3.0-only](./LICENSE) — GNU Affero General Public License v3. Network service operators must offer corresponding source to users.
+[MIT](./LICENSE)
