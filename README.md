@@ -148,6 +148,7 @@ npx tsx src/cli.ts health
 
 | Guide | Topics |
 | --- | --- |
+| [**System architecture (visual)**](./docs/system-architecture.md) | Diagrams — layers, ingress, workflow, state, module map |
 | [**Architecture**](./docs/architecture.md) | Kubernetes mapping, image digests, queue, workflow, executor layer |
 | [**Control-plane UI**](./docs/control-plane-ui.md) | Dashboard, deep-dive drawer, live pipeline SSE |
 | [**HTTP API**](./docs/api.md) | All `/api/v1/*` routes |
