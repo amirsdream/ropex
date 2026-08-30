@@ -198,7 +198,9 @@ Watch declared `GitRepo` paths on an interval, re-parse manifests, reconcile dig
 
 ## Map harness profiles to live DeepSeek Harness
 
-`harness.profile` (`minimal` | `code` | `standard` | `creator`) should load a real `@deepseek-ai/dsh` plugin pack instead of the simulated kernel. First slice: one adapter that boots dsh headless with the matching preset, runs a single Hermes-planned tool program, and returns the trajectory. Keep Policy denylist as a permissions plugin in front. No GitHub App required for this slice — prove it in `ropex --root sandbox run`.
+**Shipped (embedded harness):** `bootDsh({ hermes })` runs in-process Cordis kernel via `createHarness()` — default for tests and `ropex demo`.
+
+**Open (live CLI):** `harness.profile` loads `@deepseek-ai/dsh` headless when `ROPEX_DSH_BACKEND=live`. Keep Policy denylist as permissions plugin in front.
 
 **Partial (2026-08-21 night):** `bootDsh` + `DSH_PROFILE_PACKS` offline adapter; `backend: "live"` fails closed until `@deepseek-ai/dsh` is wired. Runtime executes through the adapter seam.
 

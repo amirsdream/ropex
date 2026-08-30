@@ -33,7 +33,7 @@ flowchart LR
 | `GET` | `/api/v1/events?pipelineId=<uuid>` | SSE stream (native `kind`) |
 | `GET` | `/api/v1/events?pipelineId=<uuid>&format=ui` | SSE with `{ type, data }` (Magentic-compatible) |
 
-Start the server: `ropex ui` (default port **7780**).
+Start the server: `npm run up` or `ropex up --serve` (default port **7780**).
 
 ## Submit pipeline
 
