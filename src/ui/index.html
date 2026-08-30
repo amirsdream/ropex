@@ -124,11 +124,16 @@
 
             <section id="tasks" class="section panel-quiet">
               <div class="section-head">
-                <h2>Task inbox</h2>
-                <p class="section-lede">Forge-neutral Task YAML — sync enqueues, drain writes status back.</p>
+                <h2>Tasks</h2>
+                <p class="section-lede">Native inbox by default — submit here or connect git/GitHub/webhook adapters.</p>
               </div>
+              <div class="memory-toolbar panel" id="tasks-submit"></div>
               <div class="memory-toolbar panel" id="tasks-toolbar"></div>
               <div class="memory-stream" id="tasks-stream"></div>
+              <details class="panel" style="margin-top:0.75rem">
+                <summary>Connectors</summary>
+                <div id="connectors-rail" class="data-table worker-rail"></div>
+              </details>
             </section>
 
             <section id="hygiene" class="section panel-quiet">

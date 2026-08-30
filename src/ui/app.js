@@ -705,39 +705,158 @@ function renderMemory(view) {
 }
 
 function renderTasks(view) {
+  const agents = (view.workers ?? [])
+    .map((w) => w.agent)
+    .filter((v, i, a) => a.indexOf(v) === i);
+  const desiredAgents = (view.hermes ?? []).map((h) => h.agent);
+  const agentOptions = [...new Set([...desiredAgents, ...agents])];
+  const defaultAgent = agentOptions[0] ?? "docbot";
+
+  const submit = $("#tasks-submit");
+  submit.innerHTML = `
+    <form id="native-task-form" class="worker-row" style="align-items:flex-end;gap:0.75rem;flex-wrap:wrap">
+      <label style="display:flex;flex-direction:column;gap:0.25rem;min-width:8rem">
+        <span class="digest">Agent</span>
+        <select id="native-task-agent" style="min-width:8rem">
+          ${agentOptions.map((a) => `<option value="${escapeHtml(a)}"${a === defaultAgent ? " selected" : ""}>${escapeHtml(a)}</option>`).join("")}
+          ${agentOptions.length ? "" : `<option value="docbot" selected>docbot</option>`}
+        </select>
+      </label>
+      <label style="display:flex;flex-direction:column;gap:0.25rem;flex:1;min-width:14rem">
+        <span class="digest">Prompt</span>
+        <input id="native-task-prompt" type="text" placeholder="What should the agent do?" style="width:100%" />
+      </label>
+      <label style="display:flex;align-items:center;gap:0.35rem">
+        <input id="native-task-drain" type="checkbox" checked />
+        <span class="digest">Run now</span>
+      </label>
+      <button type="submit" class="btn btn-primary btn-sm">Submit task</button>
+    </form>`;
+  $("#native-task-form")?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    void submitNativeTaskUi();
+  });
+
   const toolbar = $("#tasks-toolbar");
+  const nt = view.nativeTasks ?? { pending: 0, running: 0, done: 0, failed: 0, total: 0, items: [] };
   const tg = view.taskGit ?? { pending: 0, done: 0, failed: 0, scanned: 0, defaultDir: "tasks", items: [] };
   toolbar.innerHTML = `
     <div class="worker-row">
       <div>
-        <div class="worker-id">Git tasks</div>
-        <div class="digest">${tg.pending} pending · ${tg.done} done · ${tg.failed} failed · <code>${escapeHtml(tg.defaultDir)}/</code></div>
+        <div class="worker-id">Native inbox</div>
+        <div class="digest">${nt.pending} pending · ${nt.running} running · ${nt.done} done · ${nt.failed} failed</div>
       </div>
-      <button type="button" class="btn btn-secondary btn-sm" data-task-action="sync">Sync from git</button>
+      <div>
+        <div class="worker-id">Git tasks</div>
+        <div class="digest">${tg.pending} pending · ${tg.done} done · <code>${escapeHtml(tg.defaultDir)}/</code></div>
+      </div>
+      <button type="button" class="btn btn-secondary btn-sm" data-task-action="sync">Sync git</button>
     </div>`;
   toolbar.querySelectorAll("[data-task-action]").forEach((btn) => {
     btn.addEventListener("click", () => taskAction(btn.getAttribute("data-task-action")));
   });
 
+  const connectors = $("#connectors-rail");
+  const conns = view.connectors ?? [];
+  connectors.innerHTML =
+    conns
+      .map(
+        (c) => `
+      <div class="worker-row">
+        <div>
+          <div class="worker-id">${escapeHtml(c.label)} <span class="digest">(${escapeHtml(c.kind)})</span></div>
+          <div class="digest">${escapeHtml(c.description ?? "")}</div>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" data-connector="${escapeHtml(c.id)}" data-enabled="${c.enabled ? "0" : "1"}">
+          ${c.enabled ? "Disable" : "Enable"}
+        </button>
+      </div>`,
+      )
+      .join("") || `<p class="empty">No connectors configured.</p>`;
+  connectors.querySelectorAll("[data-connector]").forEach((btn) => {
+    btn.addEventListener("click", () =>
+      toggleConnector(btn.getAttribute("data-connector"), btn.getAttribute("data-enabled") === "1"),
+    );
+  });
+
   const el = $("#tasks-stream");
-  if (!tg.items?.length) {
-    el.innerHTML = `<p class="empty">No Task YAML yet. Add files under <code>tasks/</code> or run <code>ropex tasks sync</code>.</p>`;
+  const nativeItems = nt.items ?? [];
+  if (!nativeItems.length && !tg.items?.length) {
+    el.innerHTML = `<p class="empty">No tasks yet. Submit above — no git or GitHub required.</p>`;
     return;
   }
-  el.innerHTML = tg.items
+  const nativeRows = nativeItems
     .map(
       (t, i) => `
       <article class="mem-item" style="animation-delay:${Math.min(i, 12) * 0.04}s">
         <div class="mem-meta">
           <span class="scope">${escapeHtml(t.status)}</span>
+          <span>${escapeHtml(t.agent)}</span>
+          <span class="digest">${escapeHtml(t.delivery)}</span>
+        </div>
+        <p class="mem-text"><strong>${escapeHtml(t.id)}</strong> — ${escapeHtml(t.prompt)}</p>
+        ${
+          t.output
+            ? `<pre class="digest" style="white-space:pre-wrap;margin:0.35rem 0 0">${escapeHtml(t.output.slice(0, 1200))}</pre>`
+            : t.error
+              ? `<p class="digest" style="color:var(--danger,#e55)">${escapeHtml(t.error)}</p>`
+              : ""
+        }
+      </article>`,
+    )
+    .join("");
+  const gitRows = (tg.items ?? [])
+    .map(
+      (t, i) => `
+      <article class="mem-item" style="animation-delay:${Math.min(i + nativeItems.length, 12) * 0.04}s">
+        <div class="mem-meta">
+          <span class="scope">git · ${escapeHtml(t.status)}</span>
           ${t.inQueue ? `<span class="scope" title="queue">${escapeHtml(t.queueStatus ?? "queued")}</span>` : ""}
           <span>${escapeHtml(t.agent)}</span>
-          ${t.priority != null ? `<span>p${t.priority}</span>` : ""}
         </div>
         <p class="mem-text"><strong>${escapeHtml(t.id)}</strong> — ${escapeHtml(t.prompt)}</p>
       </article>`,
     )
     .join("");
+  el.innerHTML = nativeRows + gitRows;
+}
+
+async function submitNativeTaskUi() {
+  const agent = ($("#native-task-agent")?.value ?? "docbot").trim();
+  const prompt = ($("#native-task-prompt")?.value ?? "").trim();
+  const drain = $("#native-task-drain")?.checked ?? true;
+  if (!prompt) {
+    showToast("Enter a prompt", "err");
+    return;
+  }
+  const res = await fetch("/api/v1/tasks", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "submit", agent, prompt, drain }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    showToast(body.error || `Submit failed (${res.status})`, "err");
+    return;
+  }
+  showToast(`Submitted ${body.task?.id ?? "task"}`, "ok");
+  const promptEl = $("#native-task-prompt");
+  if (promptEl) promptEl.value = "";
+  await refresh();
+}
+
+async function toggleConnector(id, enabled) {
+  const res = await fetch("/api/v1/connectors", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id, enabled }),
+  });
+  if (!res.ok) {
+    showToast(`Connector update failed`, "err");
+    return;
+  }
+  showToast(`${id} ${enabled ? "enabled" : "disabled"}`, "ok");
+  await refresh();
 }
 
 async function taskAction(action) {
@@ -1915,4 +2034,4 @@ initDetailDrawer();
 $("#refresh-btn")?.addEventListener("click", () => refresh());
 $("#stack-up-btn")?.addEventListener("click", () => stackAction("up"));
 $("#stack-down-btn")?.addEventListener("click", () => stackAction("down"));
-refresh({ soft: true });
+setLoading(false); refresh({ soft: true });

@@ -1,6 +1,6 @@
 # Ropex
 
-Git is the control plane. Agents are the workload. **The queue is pluggable** — git-native Task YAML, CLI, optional GitHub webhooks, or the **executor API** for external orchestrators like Magentic.
+Git is the control plane. Agents are the workload. **The queue is pluggable** — native UI/API inbox (no external forge), git Task YAML, CLI, optional GitHub webhooks, or the **executor API** for external orchestrators like Magentic.
 
 The name is from **RoPE** (rotary position embeddings) — the trick that lets a transformer keep many tokens in one coherent sequence. Ropex does the same for agents: one git sequence, many workers in position.
 

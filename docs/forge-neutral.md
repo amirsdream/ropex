@@ -1,8 +1,43 @@
 # Forge-neutral Ropex
 
-Ropex does not require GitHub. **Any git server** (or local git) can hold both fleet config and the work queue.
+Ropex does not require GitHub. **Submit tasks in the UI or API**, optionally sync from git, or enable GitHub/webhook connectors.
 
-## Two git roles
+## Entry points (pick any)
+
+| Ingress | How work arrives | Results |
+| --- | --- | --- |
+| **Native UI / API** | `POST /api/v1/tasks` `{ action: "submit", agent, prompt }` or control-plane form | Stored in `.ropex/state.json` (`nativeTasks`) and shown in UI |
+| **Git tasks** | `Task` YAML under `tasks/` | Same file updated (`status`, `result`) |
+| **GitHub** (optional) | Webhook events | Comment / check / PR journal |
+| **Webhook** (optional) | Enable connector + `delivery.mode: webhook` | Outbound POST (stub offline) |
+
+Default stack manifest: `fleets/examples/forge-local.yaml` (no GitHub).
+
+## Native submit (no external system)
+
+```sh
+npx tsx src/cli.ts apply fleets/examples/forge-local.yaml
+npx tsx src/cli.ts tasks submit --agent docbot --drain "Review README for clarity"
+# or
+curl -s localhost:7780/api/v1/tasks -H 'content-type: application/json' \
+  -d '{"action":"submit","agent":"docbot","prompt":"hello","drain":true}'
+```
+
+Open the control-plane UI → **Tasks** section to submit and read results without git.
+
+## Connectors
+
+Connectors are optional adapters. The native UI connector is always available; enable others when needed:
+
+```sh
+curl -s localhost:7780/api/v1/connectors
+curl -s localhost:7780/api/v1/connectors -H 'content-type: application/json' \
+  -d '{"id":"github","enabled":true}'
+```
+
+Kinds: `ui`, `git`, `webhook`, `github`.
+
+## Two git roles (optional)
 
 | Role | What lives in git | Ropex command |
 | --- | --- | --- |

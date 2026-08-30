@@ -205,6 +205,31 @@ export type ControlPlaneView = {
       queueStatus?: string;
     }>;
   };
+  nativeTasks: {
+    total: number;
+    pending: number;
+    running: number;
+    done: number;
+    failed: number;
+    items: Array<{
+      id: string;
+      agent: string;
+      prompt: string;
+      status: string;
+      delivery: string;
+      createdAt: string;
+      finishedAt?: string;
+      output?: string;
+      error?: string;
+    }>;
+  };
+  connectors: Array<{
+    id: string;
+    kind: string;
+    enabled: boolean;
+    label: string;
+    description?: string;
+  }>;
   hermes: HermesSurfaceView[];
   harness: HarnessSurfaceView[];
   skills: LearnedSkill[];
@@ -449,6 +474,7 @@ export const API_ROUTES = {
   view: "/api/v1/view",
   memory: "/api/v1/memory",
   tasks: "/api/v1/tasks",
+  connectors: "/api/v1/connectors",
   workers: "/api/v1/workers",
   queue: "/api/v1/queue",
   metrics: "/api/v1/metrics",

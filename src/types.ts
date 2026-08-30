@@ -166,7 +166,7 @@ export type TaskManifest = {
     prompt: string;
     priority?: number;
     status?: "pending" | "claimed" | "done" | "failed" | "cancelled";
-    delivery?: { mode?: "git" };
+    delivery?: { mode?: TaskDeliveryMode };
     result?: {
       output?: string;
       workerId?: string;
@@ -439,8 +439,12 @@ export type ClusterState = {
   rateLimits: RateLimitBucket[];
   /** Pending/decided approvals for gated tools. */
   approvals: ApprovalRequest[];
-  /** Durable work queue (webhook / simulate / CLI). */
+  /** Durable work queue (API / git / webhook / CLI). */
   queue: QueuedTask[];
+  /** Native tasks submitted via API/UI (primary inbox when no external forge). */
+  nativeTasks?: NativeTaskRecord[];
+  /** Configured ingress/egress connectors (GitHub optional). */
+  connectors?: ConnectorRecord[];
   metrics: ClusterMetrics;
   /** Append-only control-plane audit trail. */
   audit: AuditEvent[];
@@ -522,6 +526,45 @@ export type GithubEvent = {
   labels?: string[];
 };
 
+/** Where task results are delivered after a worker finishes. */
+export type TaskDeliveryMode = "ui" | "git" | "webhook" | "github";
+
+export type TaskDeliverySpec = {
+  mode: TaskDeliveryMode;
+  connectorId?: string;
+  webhookUrl?: string;
+};
+
+/** First-class task submitted via API/UI (not git or GitHub). */
+export type NativeTaskRecord = {
+  id: string;
+  agent: string;
+  prompt: string;
+  status: "pending" | "running" | "done" | "failed" | "cancelled";
+  delivery: TaskDeliverySpec;
+  priority?: number;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  workerId?: string;
+  output?: string;
+  error?: string;
+  manifestPath?: string;
+};
+
+export type ConnectorKind = TaskDeliveryMode;
+
+/** Optional ingress/egress adapter (GitHub, webhook, git, native UI). */
+export type ConnectorRecord = {
+  id: string;
+  kind: ConnectorKind;
+  enabled: boolean;
+  label: string;
+  description?: string;
+  config?: Record<string, string>;
+};
+
 export type Task = {
   id: string;
   agent: string;
@@ -529,9 +572,10 @@ export type Task = {
   event?: GithubEvent;
   /** Absolute path to source Task YAML for git delivery writeback. */
   manifestPath?: string;
+  delivery?: TaskDeliverySpec;
 };
 
-/** Work-queue item — GitHub webhook / CLI / simulate all land here. */
+/** Work-queue item — API / git / GitHub / pipeline ingress. */
 export type QueuedTask = {
   id: string;
   task: Task;
@@ -545,7 +589,7 @@ export type QueuedTask = {
   /** Last heartbeat that extended the lease. */
   heartbeatAt?: string;
   attempts: number;
-  source: "cli" | "github" | "webhook" | "git" | "pipeline";
+  source: "cli" | "api" | "github" | "webhook" | "git" | "pipeline";
   /** Higher runs first (default 0). */
   priority: number;
   error?: string;

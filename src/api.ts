@@ -59,7 +59,8 @@ import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { ensureQueue, queueSummary, pauseQueue, resumeQueue, requeueDead, deadLetters, isQueuePaused } from "./queue.js";
 import { trajectoriesFor, exportTrajectoriesJsonl, ensureTrajectories, getTrajectory } from "./trajectory.js";
-import { syncTasksFromDir, syncTasksFromGitRepos, taskGitSummaryFromRepos } from "./tasks.js";
+import { ensureConnectors, nativeTaskSummary, setConnectorEnabled } from "./connectors.js";
+import { submitNativeTask, syncTasksFromDir, syncTasksFromGitRepos, taskGitSummaryFromRepos } from "./tasks.js";
 import { WORKFLOW_STAGES } from "./workflow.js";
 import type { ClusterState, DesiredAgent } from "./types.js";
 
@@ -127,6 +128,8 @@ export function buildControlPlaneView(state: ClusterState, root = process.cwd())
 
   const memGit = memoryGitSummary(state);
   const taskGit = taskGitSummaryFromRepos(state, root);
+  const native = nativeTaskSummary(state);
+  ensureConnectors(state);
 
   const hermes: HermesSurfaceView[] = state.desired.map((a) => hermesSurface(a));
   const harness: HarnessSurfaceView[] = state.desired.map((a) => harnessSurface(a));
@@ -173,6 +176,31 @@ export function buildControlPlaneView(state: ClusterState, root = process.cwd())
       defaultDir: taskGit.defaultDir,
       items: taskGit.items.map((t) => ({ ...t })),
     },
+    nativeTasks: {
+      total: native.total,
+      pending: native.pending,
+      running: native.running,
+      done: native.done,
+      failed: native.failed,
+      items: native.items.map((t) => ({
+        id: t.id,
+        agent: t.agent,
+        prompt: t.prompt,
+        status: t.status,
+        delivery: t.delivery.mode,
+        createdAt: t.createdAt,
+        finishedAt: t.finishedAt,
+        output: t.output,
+        error: t.error,
+      })),
+    },
+    connectors: (state.connectors ?? []).map((c) => ({
+      id: c.id,
+      kind: c.kind,
+      enabled: c.enabled,
+      label: c.label,
+      description: c.description,
+    })),
     hermes,
     harness,
     skills: [...state.skills],
@@ -696,10 +724,25 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
     return json(res, { facts: state.memory, summary: memoryGitSummary(state) });
   }
   if (url.pathname === API_ROUTES.tasks) {
+    const taskId = url.searchParams.get("id");
+    if (req.method === "GET" && taskId) {
+      const rec = state.nativeTasks?.find((t) => t.id === taskId);
+      if (!rec) return json(res, { error: `task not found: ${taskId}` }, 404);
+      return json(res, rec);
+    }
     if (req.method === "POST") {
       const chunks: Buffer[] = [];
       for await (const c of req) chunks.push(c as Buffer);
-      let body: { action?: string; all?: boolean } = {};
+      let body: {
+        action?: string;
+        all?: boolean;
+        id?: string;
+        agent?: string;
+        prompt?: string;
+        priority?: number;
+        delivery?: { mode?: string; webhookUrl?: string };
+        drain?: boolean;
+      } = {};
       try {
         body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as typeof body;
       } catch {
@@ -719,9 +762,68 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
           summary: taskGitSummaryFromRepos(state, opts.root),
         });
       }
-      return json(res, { error: "action must be sync" }, 400);
+      if (action === "submit") {
+        const agent = body.agent?.trim();
+        const prompt = body.prompt?.trim();
+        if (!agent || !prompt) return json(res, { error: "need agent and prompt" }, 400);
+        const mode = body.delivery?.mode;
+        const delivery =
+          mode === "git" || mode === "webhook" || mode === "github" || mode === "ui"
+            ? { mode, webhookUrl: body.delivery?.webhookUrl }
+            : undefined;
+        try {
+          const { task, queued } = submitNativeTask(state, {
+            id: body.id,
+            agent,
+            prompt,
+            priority: body.priority,
+            delivery,
+          });
+          let drained: Awaited<ReturnType<typeof drainQueue>> | undefined;
+          if (body.drain) {
+            drained = await drainQueue(state, { root: opts.root, limit: 1 });
+          }
+          opts.saveState?.(opts.root, state);
+          return json(res, {
+            ok: true,
+            action: "submit",
+            task,
+            queued: { id: queued.id, status: queued.status },
+            drained,
+          });
+        } catch (err) {
+          return json(res, { error: err instanceof Error ? err.message : String(err) }, 400);
+        }
+      }
+      return json(res, { error: "action must be sync|submit" }, 400);
     }
-    return json(res, { summary: taskGitSummaryFromRepos(state, opts.root) });
+    return json(res, {
+      native: nativeTaskSummary(state),
+      git: taskGitSummaryFromRepos(state, opts.root),
+      connectors: ensureConnectors(state),
+    });
+  }
+  if (url.pathname === API_ROUTES.connectors) {
+    ensureConnectors(state);
+    if (req.method === "POST") {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      let body: { id?: string; enabled?: boolean } = {};
+      try {
+        body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as typeof body;
+      } catch {
+        return json(res, { error: "invalid json" }, 400);
+      }
+      const id = body.id ?? url.searchParams.get("id") ?? "";
+      if (!id || body.enabled === undefined) {
+        return json(res, { error: "need id and enabled" }, 400);
+      }
+      const updated = setConnectorEnabled(state, id, Boolean(body.enabled));
+      if (!updated) return json(res, { error: `connector not found: ${id}` }, 404);
+      opts.saveState?.(opts.root, state);
+      return json(res, { ok: true, connector: updated, connectors: state.connectors });
+    }
+    return json(res, { connectors: state.connectors });
   }
   if (url.pathname === API_ROUTES.workers) {
     return json(res, buildControlPlaneView(state).workers);
