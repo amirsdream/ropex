@@ -8,60 +8,11 @@ Each worker is **DeepSeek Harness** (Cordis plugin kernel) plus **Hermes** (soul
 
 ## System architecture
 
-```mermaid
-flowchart TB
-  subgraph git["Git — source of truth"]
-    FLEET["fleets/**/*.yaml\nAgent · Fleet · Policy · GitRepo"]
-    TASKS["tasks/*.yaml\nforge-neutral inbox"]
-    MEM["memory/*.yaml\nshared facts"]
-  end
+![Ropex architecture — git desired state → ingress → control plane → ephemeral workers → the start · transform · result spine → delivery](./docs/architecture.png)
 
-  subgraph ingress["Work ingress"]
-    GH["GitHub webhooks\nHMAC + rate limit"]
-    CLI["ropex enqueue · tasks sync"]
-    EXT["External UI\nPOST /api/v1/pipeline"]
-  end
+> Source: [`docs/architecture.excalidraw`](./docs/architecture.excalidraw) — open in [Excalidraw](https://excalidraw.com) to edit. Regenerate the PNG with `node scripts/gen-arch-excalidraw.mjs`.
 
-  subgraph cp["Ropex control plane"]
-    CTRL["Controller\nexpand · cap · reconcile · canary"]
-    Q["Queue\npause · DLQ · affinity · leases"]
-    EXEC["Executor\nmulti-stage pipelines · SSE"]
-    TICK["Tick\nreclaim · drain · sync · GC"]
-    API["HTTP API + UI\n:7780"]
-    STATE[".ropex/state.json"]
-    CTRL --> STATE
-    Q --> STATE
-    EXEC --> STATE
-    TICK --> STATE
-    API --> STATE
-  end
-
-  subgraph workers["Ephemeral workers"]
-    W1["triage:0\nspawned · digest"]
-    W2["reviewer:1\nactive run"]
-    WN["… under maxConcurrent\nworktree · then destroy"]
-  end
-
-  subgraph wf["Per-task workflow"]
-    direction LR
-    H1["compose\nHermes"] --> H2["plan\nHermes"]
-    H2 --> D1["execute\nDeepSeek"]
-    D1 --> D2["deliver\nDeepSeek"]
-    D2 --> H3["learn\nHermes"]
-  end
-
-  FLEET --> CTRL
-  TASKS --> CLI --> Q
-  MEM --> CTRL
-  GH --> Q
-  EXT --> EXEC --> Q
-  CTRL -->|"definitions + digests"| workers
-  Q -->|"claim or spawn"| workers
-  TICK -->|"bounded drain"| workers
-  workers --> wf
-  wf -->|"comment / check / PR / git"| GH
-  API -.->|"observe · operate"| cp
-```
+Top to bottom: git desired state → work ingress (GitHub webhooks with **HMAC + rate limit**, CLI, executor API) → control plane (controller · queue · executor · tick) → ephemeral workers claimed by a **bounded drain** → the **start → transform → result** spine → delivery.
 
 **Scale is a concurrency commit:** raise `maxConcurrent` (on-demand) or `replicas` (static). `Policy.maxReplicas` caps blast radius. Workers spawn on request and destroy when idle — memory stays on the agent/fleet bus. Operators pause, drain, run pipelines, and inspect trajectories from CLI or [`ropex ui`](./docs/control-plane-ui.md).
 
@@ -215,6 +166,8 @@ Example fleets: `fleets/examples/github-control-plane.yaml`, `forge-local.yaml`.
 **DeepSeek Harness** (`src/dsh.ts`, `src/plugins.ts`) — Cordis-shaped kernel: loop mode, tools, permissions, delivery plugin.
 
 **Ropex glue** — `src/runtime.ts` runs the fixed workflow; `src/scale.ts` + `src/queue.ts` spawn/destroy on-demand workers; `src/controller.ts` reconciles definitions; `src/executor.ts` runs multi-stage pipelines for external orchestrators.
+
+**One spine, start → transform → result** — every run has an unambiguous shape: `compose`+`plan` (**Start**) → `execute` (**Transform**) → `deliver`+`learn` (**Result**). `workflowPhases()` groups the five stages onto that spine, and the executor pipeline mirrors it with typed boundaries — `input` (Start), `stages` (Transform), `result` (Result) — with `pipelinePhase(run)` reporting the live phase.
 
 **Shared memory** — scoped (`worker` | `agent` | `fleet` | `cluster`) with `hermes.share` policy. Contracts in `src/contracts.ts`; store in `src/memory.ts`.
 

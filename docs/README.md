@@ -8,7 +8,7 @@ GitOps control plane for agent fleets — **Hermes plans, DeepSeek executes**, g
 | --- | --- |
 | [**Operations**](./operations.md) | **One-click `npm run up/down`**, Podman Compose, stack API |
 | [**System architecture (visual)**](./system-architecture.md) | Diagrams — layers, ingress, workflow, state, module map |
-| [Architecture](./architecture.md) | Control plane vs data plane, immutable workers, queue, executor |
+| [Architecture](./architecture.md) | Control plane vs data plane, immutable workers, the start → transform → result spine, queue, executor |
 | [Control-plane UI](./control-plane-ui.md) | Teal dashboard, Start/Stop stack, pipelines, live SSE |
 | [HTTP API (v1)](./api.md) | All `/api/v1/*` routes including `/stack` |
 | [Executor API](./executor-api.md) | Multi-stage pipelines, SSE, Magentic integration |
@@ -24,6 +24,9 @@ GitOps control plane for agent fleets — **Hermes plans, DeepSeek executes**, g
 Git YAML (desired)  →  Controller  →  On-demand workers (immutable digests)
 GitHub / Task YAML  →  Queue       →  Drain  →  Hermes → DeepSeek → Deliver → Learn
 External UI         →  Executor API →  Pipeline stages (sequential, scoped drain)
+
+Every run is one spine:  Start (compose·plan)  →  Transform (execute)  →  Result (deliver·learn)
+                         pipeline: input        →  stages              →  result
 ```
 
 **Default scale:** `onDemand` — spawn on claim, destroy when idle (`idleTTLMs: 0`).  

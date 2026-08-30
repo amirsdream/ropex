@@ -55,7 +55,7 @@ Serve everything with `ropex ui` or `npm run up` (teal dashboard + API on one po
 | POST | `/api/v1/pipeline` | Submit `{ prompt, drain?, stages?, agents? }` |
 | POST | `/api/v1/pipeline` | Drain `{ "action": "drain", "pipelineId": "…" }` |
 | GET | `/api/v1/pipeline` | List recent pipelines |
-| GET | `/api/v1/pipeline?id=<uuid>` | Full pipeline + stages + persisted events |
+| GET | `/api/v1/pipeline?id=<uuid>` | Full pipeline: `input` (Start), `stages` (Transform), `result` (Result), persisted events |
 | GET | `/api/v1/events?pipelineId=<uuid>` | SSE executor events (native `kind`) |
 | GET | `/api/v1/events?pipelineId=<uuid>&format=ui` | SSE Magentic-shaped `{ type, data }` |
 
@@ -84,12 +84,12 @@ curl -N 'http://127.0.0.1:7780/api/v1/events?pipelineId=<uuid>&format=ui'
 | Field | Content |
 | --- | --- |
 | `stack` | Lifecycle: status, manifest, message, `queuePaused` |
-| `workflow` | Fixed 5-stage pipeline owners |
+| `workflow` | Fixed 5-stage pipeline owners + `phase` (Start / Execute / Result) |
 | `workers` | Live replicas, digests, harness, worktrees |
 | `hermes` / `harness` | Per-agent surface config |
 | `hermesLive` / `dsh` | Backend readiness + scaffold hints |
 | `queue` / `drain` | Pending items, concurrency, pause |
-| `pipelines` | Recent executor runs |
+| `pipelines` | Recent executor runs (each with current `phase`) |
 | `trajectories` | Recent Hermes→DeepSeek runs |
 | `memory` | Scoped facts |
 | `drift` / `fairness` / `health` | Ops panels |

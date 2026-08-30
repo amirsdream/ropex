@@ -2,6 +2,12 @@
 
 Nightly capture. Newest first. Each entry should be one shippable idea, not a slogan.
 
+## Explicit start → transform → result spine
+
+Make every run's start, execution, and result points first-class instead of implicit. `workflow.ts` tags each of the five stages with a `WorkflowPhase` (`intake`/`execute`/`result`) and `workflowPhases()` rolls them onto Start/Execute/Result. The executor `PipelineRun` mirrors the spine with typed boundaries — `input` (Start, captured on submit), `stages` (Transform), and `result` (Result, written once on terminal) — and `pipelinePhase(run)` reports the live phase. View model, README, architecture, executor-api, control-plane-ui, and Magentic docs all surface the phase.
+
+**Shipped (2026-08-30):** `WorkflowPhase` / `workflowPhases`, `PipelineInput` / `PipelineResult` / `pipelinePhase`, `tests/pipeline-phases.test.ts`, docs refresh.
+
 ## Executor API + UI deep-dive + docs
 
 Engine-neutral `POST/GET /api/v1/pipeline`, scoped sequential drain, SSE with Magentic `format=ui`, terminal gating, context handoff. Control-plane UI: Pipelines form, detail drawer, live EventSource logs, trajectory drill-down (`GET /api/v1/trajectories?id=`), clickable Hermes/DeepSeek surfaces. Magentic adapter notes in `integrations/magentic/`. Deep docs refresh: README architecture diagram, layered architecture, control-plane-ui.md, executor-api.md.
