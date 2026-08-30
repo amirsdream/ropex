@@ -63,7 +63,7 @@ import { trajectoriesFor, exportTrajectoriesJsonl, ensureTrajectories, getTrajec
 import { ensureConnectors, nativeTaskSummary, setConnectorEnabled } from "./connectors.js";
 import { submitNativeTask, syncTasksFromDir, syncTasksFromGitRepos, taskGitSummaryFromRepos } from "./tasks.js";
 import { WORKFLOW_STAGES } from "./workflow.js";
-import type { ClusterState, DesiredAgent } from "./types.js";
+import type { ClusterState, DesiredAgent, TaskDeliveryMode } from "./types.js";
 
 const UI_DIR = resolveUiDir();
 
@@ -742,7 +742,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
         agent?: string;
         prompt?: string;
         priority?: number;
-        delivery?: { mode?: string; webhookUrl?: string };
+        delivery?: { mode?: TaskDeliveryMode; webhookUrl?: string };
         drain?: boolean;
       } = {};
       try {
