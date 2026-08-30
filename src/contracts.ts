@@ -233,7 +233,7 @@ export type ControlPlaneView = {
   hermes: HermesSurfaceView[];
   harness: HarnessSurfaceView[];
   skills: LearnedSkill[];
-  workflow: Array<{ id: string; owner: string; purpose: string }>;
+  workflow: Array<{ id: string; owner: string; phase: string; purpose: string }>;
   queue: Array<{
     id: string;
     status: string;
@@ -461,6 +461,8 @@ export type ControlPlaneView = {
     recent: Array<{
       id: string;
       status: string;
+      /** Current phase of the start → transform → result spine. */
+      phase: string;
       prompt: string;
       stages: number;
       doneStages: number;

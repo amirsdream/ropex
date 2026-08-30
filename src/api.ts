@@ -46,6 +46,7 @@ import {
   getPipeline,
   getExecutorEvents,
   mapExecutorEventToUi,
+  pipelinePhase,
   submitPipeline,
   drainPipeline,
   subscribeExecutorEvents,
@@ -204,7 +205,7 @@ export function buildControlPlaneView(state: ClusterState, root = process.cwd())
     hermes,
     harness,
     skills: [...state.skills],
-    workflow: WORKFLOW_STAGES.map((s) => ({ id: s.id, owner: s.owner, purpose: s.purpose })),
+    workflow: WORKFLOW_STAGES.map((s) => ({ id: s.id, owner: s.owner, phase: s.phase, purpose: s.purpose })),
     queue: state.queue.slice(-40).map((item) => ({
       id: item.id,
       status: item.status,
@@ -514,6 +515,7 @@ export function buildControlPlaneView(state: ClusterState, root = process.cwd())
           .map((p) => ({
             id: p.id,
             status: p.status,
+            phase: pipelinePhase(p),
             prompt: p.prompt.slice(0, 160),
             stages: p.stages.length,
             doneStages: p.stages.filter((s) => s.status === "done").length,

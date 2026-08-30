@@ -391,14 +391,42 @@ export type PipelineStageRun = {
   error?: string;
 };
 
+/** Which phase of the start → transform → result spine a pipeline is currently in. */
+export type PipelinePhase = "intake" | "execute" | "result";
+
+/** The Start point: the normalized input a run was accepted with. */
+export type PipelineInput = {
+  prompt: string;
+  /** Agents the plan was scoped to, when the caller pinned them. */
+  agents?: string[];
+  at: string;
+};
+
+/** The Result point: the single terminal outcome of a run. */
+export type PipelineResult = {
+  status: "done" | "failed";
+  /** Concatenated stage outputs (empty string on failure with no output). */
+  output: string;
+  stageCount: number;
+  /** Agents that produced output, in stage order. */
+  producedBy: string[];
+  at: string;
+  /** Present when the run ended in failure. */
+  error?: string;
+};
+
 export type PipelineRun = {
   id: string;
   prompt: string;
   createdAt: string;
   updatedAt: string;
   status: "pending" | "running" | "done" | "failed";
+  /** Start point — normalized input captured when the run was accepted. */
+  input: PipelineInput;
   stages: PipelineStageRun[];
   output?: string;
+  /** Result point — terminal outcome, set exactly once when the run finishes. */
+  result?: PipelineResult;
   /** Recent executor events (persisted, capped). */
   events?: PipelineEventRecord[];
 };
