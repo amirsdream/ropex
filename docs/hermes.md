@@ -1,45 +1,57 @@
-# Live hermes-agent wiring
+# Hermes wiring
 
-Ropex plans through `createHermes` (`src/hermes.ts`) — soul, MemoryPort, skills, and a closed learn loop. The offline brain implements `HermesContract` so UI and runtime share one interface.
+Ropex plans through `createHermes` (`src/hermes.ts`) — soul, MemoryPort, skills, and a closed learn loop. The **embedded** brain implements `HermesContract` so UI, tests, and runtime share one interface.
+
+`bootDsh` **requires** a Hermes instance — plan and execute are always coupled.
 
 ## Contract
 
 | Piece | Role |
 | --- | --- |
-| `createHermes(spec)` | Offline brain (default for tests / demo) |
+| `createHermes(spec)` | Embedded brain (default; network-free) |
+| `bootHermes(spec)` | Same; fails closed for `live` when package missing |
 | `HermesContract` | `plan` / `remember` / `learn` + MemoryPort |
-| `liveHermesScaffold()` | Checklist; `liveReady: false` until process/RPC lands |
-| DeepSeek execute | Hermes plans; dsh/harness runs tools (see [dsh.md](./dsh.md)) |
+| `liveHermesScaffold()` | Checklist for optional `hermes-agent` CLI |
+| DeepSeek execute | Hermes plans; `bootDsh({ hermes })` runs tools (see [dsh.md](./dsh.md)) |
 
-Live hermes-agent is a **future process/RPC seam**. Do not require network or the package in CI.
+## Backends
+
+| Mode | Env | Behavior |
+| --- | --- | --- |
+| **embedded** (default) | — | In-process `createHermes()` |
+| **live** (optional) | `ROPEX_HERMES_BACKEND=live` | Spawns `hermes-agent` CLI for `plan()` |
+
+Live hermes-agent is an **optional seam**. CI and `npm test` use embedded only.
 
 ## Install
 
 ```bash
-npm install          # core only — simulated brain by default
+npm install          # embedded Hermes — no extra packages
 ```
 
-Install `hermes-agent` only when enabling live mode (`ROPEX_HERMES_BACKEND=live`). It is not part of the default `npm install` (keeps installs fast and network-light).
+```bash
+npm install hermes-agent   # only for live mode
+export ROPEX_HERMES_BACKEND=live
+```
 
 ## Steps to wire live
 
-1. Optional peer: `npm install hermes-agent` (never a hard CI dependency).
-2. Implement `createLiveHermes(spec)` returning `HermesContract` over stdio/RPC.
-3. Load `hermes.soul` (SOUL.md path) into the live process identity.
-4. Bridge MemoryPort to `SharedMemoryStore` with the same scope rules.
-5. Prove plan→learn parity against `createHermes()` in a sandbox.
-6. Keep offline `createHermes()` as the default.
+1. Optional peer: `npm install hermes-agent`.
+2. Set `ROPEX_HERMES_BACKEND=live`.
+3. `bootHermes()` invokes hermes-agent CLI for `plan()`; harness still executes via dsh.
+4. Bridge MemoryPort to `SharedMemoryStore` (same scopes as embedded).
+5. Prove plan→learn parity with embedded brain in sandbox.
 
 ## Env
 
 ```
-ROPEX_HERMES_BACKEND=simulated|live
+ROPEX_HERMES_BACKEND=embedded|live
 HERMES_AGENT_BIN=(live only)
 ```
 
 ## Surfaces
 
-- Control-plane UI DeepSeek/Hermes section (`view.hermesLive`)
+- Control-plane UI Hermes section (`view.hermesLive`)
 - `liveHermesScaffold()` for docs/CLI checks
 
-See [architecture.md](./architecture.md), [control-plane-ui.md](./control-plane-ui.md), and [dsh.md](./dsh.md).
+See [architecture.md](./architecture.md), [control-plane-ui.md](./control-plane-ui.md), [dsh.md](./dsh.md), and [operations.md](./operations.md).

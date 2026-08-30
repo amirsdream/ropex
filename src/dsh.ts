@@ -1,5 +1,5 @@
 /**
- * Offline DeepSeek Harness (dsh) adapter.
+ * DeepSeek Harness (dsh) adapter.
  * Profile packs mirror `@deepseek-ai/dsh` presets; swap backend to "live" when
  * `@deepseek-ai/dsh` is installed and ROPEX_DSH_BACKEND=live.
  */
@@ -14,7 +14,8 @@ import type { Kernel } from "./plugins.js";
 
 const require = createRequire(import.meta.url);
 
-export type DshBackend = "simulated" | "live";
+/** In-process Cordis harness (default). `live` invokes @deepseek-ai/dsh CLI. */
+export type DshBackend = "embedded" | "live";
 
 /** Preferred live LLM credential for Ropex (OpenAI first, DeepSeek fallback). */
 export type LlmApiKeySource = "OPENAI_API_KEY" | "DEEPSEEK_API_KEY";
@@ -104,11 +105,11 @@ export function dshPackageInstalled(): boolean {
   }
 }
 
-/** Resolve backend from explicit opt, then ROPEX_DSH_BACKEND, else simulated. */
+/** Resolve backend from explicit opt, then ROPEX_DSH_BACKEND, else embedded. */
 export function resolveDshBackend(explicit?: DshBackend): DshBackend {
   if (explicit) return explicit;
   if (process.env.ROPEX_DSH_BACKEND === "live") return "live";
-  return "simulated";
+  return "embedded";
 }
 
 export type DshAdapter = {
@@ -158,18 +159,17 @@ export function liveDshScaffold(): LiveDshScaffold {
       ? apiKeyPresent
         ? `Live dsh ready (${key.source}) — set ROPEX_DSH_BACKEND=live to boot the headless adapter.`
         : "Live dsh package present — set OPENAI_API_KEY (default) or DEEPSEEK_API_KEY, then ROPEX_DSH_BACKEND=live."
-      : "Install @deepseek-ai/dsh for live backend; tests and default boot stay simulated.",
+      : "Install @deepseek-ai/dsh for live backend; embedded harness is the default.",
     steps: [
-      "Add optional peer dependency @deepseek-ai/dsh (never required by tests).",
+      "Add optional peer dependency @deepseek-ai/dsh for live CLI execution.",
       "Set OPENAI_API_KEY (preferred) or DEEPSEEK_API_KEY for live runs.",
       "Set ROPEX_DSH_BACKEND=live to boot the headless adapter.",
       "bootLiveDsh runs `dsh --profile headless` for Hermes-planned tool programs.",
-      "Map DSH_PROFILE_PACKS[profile].plugins onto Cordis pack loaders.",
-      "Mount Policy deny/requireApproval as a permissions plugin before tools.",
-      "Keep backend: simulated as the default for CI and network-free demos.",
+      "bootDsh requires a Hermes brain — plan and execute stay coupled.",
+      "Embedded harness (createHarness) is always used unless live is explicitly set.",
     ],
     env: [
-      "ROPEX_DSH_BACKEND=simulated|live",
+      "ROPEX_DSH_BACKEND=embedded|live",
       "OPENAI_API_KEY=(preferred live key)",
       "DEEPSEEK_API_KEY=(optional fallback)",
     ],
@@ -259,7 +259,7 @@ export function runHeadlessDsh(
   });
 }
 
-async function bootSimulatedDsh(
+async function bootEmbeddedDsh(
   spec: AgentSpec,
   opts: BootDshOptions,
   backend: DshBackend,
@@ -341,9 +341,13 @@ async function bootLiveDsh(spec: AgentSpec, opts: BootDshOptions): Promise<DshAd
 
 /**
  * Boot a DeepSeek-shaped harness for an agent profile.
+ * Requires a Hermes brain — plan and execute are always coupled.
  * Live backend requires @deepseek-ai/dsh installed; otherwise fail closed.
  */
 export async function bootDsh(spec: AgentSpec, opts: BootDshOptions = {}): Promise<DshAdapter> {
+  if (!opts.hermes) {
+    throw new Error("bootDsh requires Hermes — pass hermes from bootHermes(); simulation shortcuts are not supported");
+  }
   const backend = resolveDshBackend(opts.backend);
   if (backend === "live") {
     if (!dshPackageInstalled()) {
@@ -359,5 +363,5 @@ export async function bootDsh(spec: AgentSpec, opts: BootDshOptions = {}): Promi
     }
     return bootLiveDsh(spec, opts);
   }
-  return bootSimulatedDsh(spec, opts, backend);
+  return bootEmbeddedDsh(spec, opts, backend);
 }

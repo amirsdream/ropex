@@ -21,6 +21,7 @@ import { hygieneReport, runHygiene } from "./hygiene.js";
 import { budgetReport } from "./budget.js";
 import { planAutoscale } from "./autoscale.js";
 import { controlPlaneTick } from "./tick.js";
+import { DEFAULT_STACK_MANIFEST, stackDown, stackUp } from "./stack.js";
 import { cloneAllGitRepos } from "./clone.js";
 import { simulatePolicies } from "./policy-sim.js";
 import { healthReport } from "./health.js";
@@ -32,6 +33,7 @@ import { fanOutTask } from "./fanout.js";
 import { syncGitRepos, syncDueGitRepos, syncMultiRepo } from "./gitrepo.js";
 import {
   readTaskManifest,
+  submitNativeTask,
   syncTasksFromDir,
   syncTasksFromGitRepos,
   taskFromManifest,
@@ -98,6 +100,8 @@ Usage:
   ropex policy dry-run --agent <name> <prompt>
   ropex policy simulate           Fleet-wide policy dry-run report
   ropex enqueue --agent <name> [--priority N] <prompt>
+  ropex tasks submit --agent <name> [--priority N] [--drain] <prompt>
+                                     Submit to native inbox (UI/API, no git required)
   ropex tasks sync [path] [--repos]   Enqueue pending Task YAML from git
   ropex tasks apply <task.yaml>       Enqueue one Task manifest file
   ropex chaos [--replicas N]          Stress reconcile scale + digest rolls
@@ -126,6 +130,9 @@ Usage:
                   | sync [path] [--repos]
                   | export <id>|--all [--force] [--path dir]
                                      Show shared memory; promote a fact wider
+  ropex up [manifest] [--serve] [--no-tick] [--port N]
+                                     One-click spin up (apply + resume + tick)
+  ropex down                        One-click spin down (pause + sweep workers)
   ropex ui [--port N]             Serve control-plane UI + /api/v1/*
   ropex help
 `;
@@ -680,6 +687,22 @@ async function main(argv: string[]): Promise<number> {
     case "tasks": {
       const state = loadState(root);
       const sub = rest[0];
+      if (sub === "submit") {
+        const agent = flag(rest, "--agent");
+        const priority = Number(flag(rest, "--priority") ?? "0");
+        const drain = rest.includes("--drain");
+        const prompt = positional(rest.filter((x) => x !== "submit"), ["--drain"]).join(" ");
+        if (!agent || !prompt) return fail("usage: ropex tasks submit --agent <name> [--drain] <prompt>");
+        const { task, queued } = submitNativeTask(state, { agent, prompt, priority });
+        saveState(root, state);
+        console.log(`submitted ${task.id} agent=${agent} delivery=${task.delivery.mode} queue=${queued.status}`);
+        if (drain) {
+          const drained = await drainQueue(state, { root, limit: 1 });
+          saveState(root, state);
+          console.log(`drained ${drained.length} task(s)`);
+        }
+        return 0;
+      }
       if (sub === "apply") {
         const file = rest[1];
         if (!file) return fail("usage: ropex tasks apply <task.yaml>");
@@ -709,7 +732,7 @@ async function main(argv: string[]): Promise<number> {
         for (const e of result.errors) console.log(`  ! ${e.path}: ${e.error}`);
         return result.errors.length ? 1 : 0;
       }
-      return fail("usage: ropex tasks sync [path] [--repos] | ropex tasks apply <file>");
+      return fail("usage: ropex tasks submit --agent <name> <prompt> | ropex tasks sync [path] [--repos] | ropex tasks apply <file>");
     }
     case "enqueue": {
       const agent = flag(rest, "--agent");
@@ -717,14 +740,13 @@ async function main(argv: string[]): Promise<number> {
       const prompt = positional(rest).join(" ");
       if (!agent || !prompt) return fail("enqueue requires --agent and a prompt");
       const state = loadState(root);
-      const item = enqueueTask(
-        state,
-        { id: `enq-${Date.now()}`, agent, prompt },
-        "cli",
-        { priority },
-      );
+      const { task, queued } = submitNativeTask(state, {
+        agent,
+        prompt,
+        priority: Number.isFinite(priority) ? priority : 0,
+      });
       saveState(root, state);
-      console.log(`enqueued ${item.id}  priority=${item.priority}  status=${item.status}`);
+      console.log(`enqueued ${queued.id} (native) agent=${task.agent} priority=${queued.priority} status=${queued.status}`);
       return 0;
     }
     case "chaos": {
@@ -1099,6 +1121,40 @@ async function main(argv: string[]): Promise<number> {
       }
       return 0;
     }
+    case "up": {
+      const state = loadState(root);
+      const serve = rest.includes("--serve");
+      const noTick = rest.includes("--no-tick");
+      const manifest =
+        positional(rest.filter((a) => a !== "--serve" && a !== "--no-tick"))[0] ??
+        DEFAULT_STACK_MANIFEST;
+      const result = await stackUp(root, state, { manifest, tick: !noTick, root });
+      saveState(root, state);
+      console.log(`stack ${result.stack.status}: ${result.stack.message}`);
+      if (!result.ok) return 1;
+      if (serve) {
+        const port = Number(flag(rest, "--port") ?? "7780");
+        const server = await startControlPlaneServer({
+          root,
+          port,
+          loadState,
+          saveState,
+        });
+        console.log(`ropex ui  http://127.0.0.1:${server.port}`);
+        await new Promise(() => {});
+      }
+      return 0;
+    }
+    case "down": {
+      const state = loadState(root);
+      const result = stackDown(root, state, { root });
+      saveState(root, state);
+      console.log(`stack ${result.stack.status}: ${result.stack.message}`);
+      if (result.workersDestroyed) {
+        console.log(`destroyed ${result.workersDestroyed} idle on-demand worker(s)`);
+      }
+      return 0;
+    }
     case "ui": {
       const port = Number(flag(rest, "--port") ?? "7780");
       const server = await startControlPlaneServer({
@@ -1150,10 +1206,11 @@ function flag(args: string[], name: string): string | undefined {
   return args[i + 1];
 }
 
-function positional(args: string[]): string[] {
+function positional(args: string[], booleanFlags: string[] = []): string[] {
   const out: string[] = [];
   for (let i = 0; i < args.length; i++) {
     if (args[i].startsWith("--")) {
+      if (booleanFlags.includes(args[i])) continue;
       i += 1;
       continue;
     }

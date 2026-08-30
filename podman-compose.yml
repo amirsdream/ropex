@@ -1,0 +1,29 @@
+# Podman / Docker Compose — one command to spin the control plane up or down.
+#   podman compose up -d --build
+#   podman compose down
+# Or: npm run up / npm run down
+
+services:
+  ropex:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: ropex-control-plane:latest
+    container_name: ropex
+    ports:
+      - "${ROPEX_PORT:-7780}:7780"
+    volumes:
+      - ropex-state:/app/.ropex
+      - ./fleets:/app/fleets:ro
+    environment:
+      NODE_ENV: production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:7780/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+
+volumes:
+  ropex-state:

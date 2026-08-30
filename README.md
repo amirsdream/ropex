@@ -1,6 +1,6 @@
 # Ropex
 
-Git is the control plane. Agents are the workload. **The queue is pluggable** — git-native Task YAML, CLI, optional GitHub webhooks, or the **executor API** for external orchestrators like Magentic.
+Git is the control plane. Agents are the workload. **The queue is pluggable** — native UI/API inbox (no external forge), git Task YAML, CLI, optional GitHub webhooks, or the **executor API** for external orchestrators like Magentic.
 
 The name is from **RoPE** (rotary position embeddings) — the trick that lets a transformer keep many tokens in one coherent sequence. Ropex does the same for agents: one git sequence, many workers in position.
 
@@ -11,6 +11,8 @@ Each worker is **DeepSeek Harness** (Cordis plugin kernel) plus **Hermes** (soul
 ![Ropex architecture — git desired state → ingress → control plane → ephemeral workers → the start · transform · result spine → delivery](./docs/architecture.png)
 
 > Source: [`docs/architecture.excalidraw`](./docs/architecture.excalidraw) — open in [Excalidraw](https://excalidraw.com) to edit. Regenerate the PNG with `node scripts/gen-arch-excalidraw.mjs`.
+
+Top to bottom: git desired state → work ingress (GitHub webhooks with **HMAC + rate limit**, CLI, executor API) → control plane (controller · queue · executor · tick) → ephemeral workers claimed by a **bounded drain** → the **start → transform → result** spine → delivery.
 
 **Scale is a concurrency commit:** raise `maxConcurrent` (on-demand) or `replicas` (static). `Policy.maxReplicas` caps blast radius. Workers spawn on request and destroy when idle — memory stays on the agent/fleet bus. Operators pause, drain, run pipelines, and inspect trajectories from CLI or [`ropex ui`](./docs/control-plane-ui.md).
 
@@ -54,6 +56,10 @@ npx tsx src/cli.ts demo --root /tmp/ropex-demo
 # Load example fleet + control-plane UI
 npx tsx src/cli.ts apply fleets/examples/github-control-plane.yaml
 npx tsx src/cli.ts ui                    # http://127.0.0.1:7780
+
+# One-click stack (Podman Compose or local fallback)
+npm run up                               # spin up dashboard on :7780
+npm run down                             # spin down
 ```
 
 `npm install` only pulls Ropex’s small deps (`yaml`, TypeScript, vitest). Live backends are **not** installed by default — `@deepseek-ai/dsh` is a huge tree and will make install look stuck. Simulated Hermes/DeepSeek work out of the box.
@@ -97,13 +103,15 @@ npx tsx src/cli.ts health
 
 | Guide | Topics |
 | --- | --- |
+| [**Operations**](./docs/operations.md) | One-click `npm run up/down`, Podman Compose, stack API |
+| [**System architecture (visual)**](./docs/system-architecture.md) | Diagrams — layers, ingress, workflow, state, module map |
 | [**Architecture**](./docs/architecture.md) | Kubernetes mapping, image digests, queue, workflow, executor layer |
-| [**Control-plane UI**](./docs/control-plane-ui.md) | Dashboard, deep-dive drawer, live pipeline SSE |
+| [**Control-plane UI**](./docs/control-plane-ui.md) | Teal dashboard, Start/Stop stack, pipeline SSE |
 | [**HTTP API**](./docs/api.md) | All `/api/v1/*` routes |
 | [**Executor API**](./docs/executor-api.md) | Pipelines, SSE events, Magentic contract |
 | [**Forge-neutral tasks**](./docs/forge-neutral.md) | Task YAML without GitHub |
-| [**Hermes wiring**](./docs/hermes.md) | Offline brain vs live process |
-| [**DeepSeek wiring**](./docs/dsh.md) | Profile packs vs `@deepseek-ai/dsh` |
+| [**Hermes wiring**](./docs/hermes.md) | Embedded brain vs live `hermes-agent` |
+| [**DeepSeek wiring**](./docs/dsh.md) | Embedded harness vs live `@deepseek-ai/dsh` |
 | [**Magentic integration**](./integrations/magentic/README.md) | External chat UI → Ropex executor |
 | [**Docs index**](./docs/README.md) | Full table of contents |
 
@@ -203,13 +211,17 @@ GitHub provides auth, review, CI, and blame. Ropex uses that instead of inventin
 
 ```
 fleets/           Desired state YAML
+Containerfile     Container image for control plane
+podman-compose.yml
+scripts/          stack-up.sh, stack-down.sh, bootstrap.sh
 src/
+  stack.ts        One-click up/down
   controller.ts   GitOps reconciler
   scheduler.ts    Queue drain + leases
   runtime.ts      Per-task workflow
   executor.ts     Pipeline API + SSE
   api.ts          HTTP control plane
-  ui/             Static dashboard
+  ui/             Control-plane dashboard (teal live theme)
   hermes.ts       Brain contract
   dsh.ts          Harness adapter
   contracts.ts    Shared types for CLI/API/UI
@@ -224,7 +236,7 @@ integrations/     Magentic adapter notes
 | Area | Shipped |
 | --- | --- |
 | Immutable workers + image digests | yes |
-| Hermes plan/learn + DeepSeek execute/deliver | yes (simulated backends) |
+| Hermes plan/learn + DeepSeek execute/deliver | yes (embedded backends) |
 | Scoped shared memory + git sync/export | yes |
 | Fair queue, leases, DLQ, retry, pause, affinity | yes |
 | HMAC webhooks + rate limits | yes |
@@ -232,6 +244,8 @@ integrations/     Magentic adapter notes
 | Trajectories, skills registry, audit trail | yes |
 | Health probes + backlog SLO | yes |
 | Control-plane UI + `/api/v1/view` | yes |
+| **One-click stack** (`npm run up`, `ropex up/down`, UI Start/Stop) | yes |
+| **Podman Compose** deploy (`Containerfile`, `podman-compose.yml`) | yes |
 | **Executor API** (pipelines, SSE, scoped drain) | yes |
 | **UI deep-dive** (pipelines, trajectories, agent surfaces) | yes |
 | **UI live pipeline SSE** | yes |

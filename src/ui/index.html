@@ -49,7 +49,19 @@
             </p>
           </div>
           <div class="topbar-actions">
-            <span class="live-pill" id="live-pill" title="Auto-refresh every 5s">
+            <div class="stack-control panel" id="stack-control" aria-live="polite">
+              <span class="stack-pill" id="stack-pill">
+                <span class="stack-dot" id="stack-dot"></span>
+                <span id="stack-label">Stack</span>
+              </span>
+              <button type="button" class="btn btn-primary btn-stack" id="stack-up-btn" title="Apply fleet, resume queue, drain">
+                Start
+              </button>
+              <button type="button" class="btn btn-ghost btn-stack" id="stack-down-btn" title="Pause queue and sweep workers">
+                Stop
+              </button>
+            </div>
+            <span class="live-pill" id="live-pill" title="Auto-refresh">
               <span class="live-dot"></span> Live
             </span>
             <button type="button" class="btn btn-primary" id="refresh-btn">Refresh</button>
@@ -112,11 +124,16 @@
 
             <section id="tasks" class="section panel-quiet">
               <div class="section-head">
-                <h2>Task inbox</h2>
-                <p class="section-lede">Forge-neutral Task YAML — sync enqueues, drain writes status back.</p>
+                <h2>Tasks</h2>
+                <p class="section-lede">Native inbox by default — submit here or connect git/GitHub/webhook adapters.</p>
               </div>
+              <div class="memory-toolbar panel" id="tasks-submit"></div>
               <div class="memory-toolbar panel" id="tasks-toolbar"></div>
               <div class="memory-stream" id="tasks-stream"></div>
+              <details class="panel" style="margin-top:0.75rem">
+                <summary>Connectors</summary>
+                <div id="connectors-rail" class="data-table worker-rail"></div>
+              </details>
             </section>
 
             <section id="hygiene" class="section panel-quiet">
@@ -228,7 +245,7 @@
             <section id="dsh" class="section panel-quiet">
               <div class="section-head">
                 <h2>DeepSeek harness</h2>
-                <p class="section-lede">Live vs simulated — profile packs and API key status.</p>
+                <p class="section-lede">Live vs embedded — profile packs and API key status.</p>
               </div>
               <div id="dsh-rail" class="data-table worker-rail"></div>
             </section>
@@ -312,6 +329,10 @@
     </div>
 
     <div class="toast-stack" id="toast-stack" aria-live="polite"></div>
+    <div class="loading-veil" id="loading-veil" hidden aria-hidden="true">
+      <div class="loading-teal-ring" aria-label="Loading"></div>
+      <p class="loading-text" id="loading-text">Syncing control plane…</p>
+    </div>
 
     <div id="detail-drawer" class="detail-drawer" hidden aria-hidden="true">
       <div class="detail-backdrop" data-close-drawer tabindex="-1"></div>

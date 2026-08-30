@@ -3,6 +3,7 @@ import { buildControlPlaneView } from "../src/api.ts";
 import { rememberAffinity } from "../src/affinity.ts";
 import { emptyState, planReconcile } from "../src/controller.ts";
 import { bootDsh, liveDshScaffold } from "../src/dsh.ts";
+import { createHermes } from "../src/hermes.ts";
 import { pauseQueue } from "../src/queue.ts";
 import { parseManifests } from "../src/spec.ts";
 
@@ -45,14 +46,16 @@ describe("view pause + affinity + dsh scaffold", () => {
 });
 
 describe("live dsh scaffold", () => {
-  it("documents fail-closed live backend", async () => {
+  it("requires Hermes and documents fail-closed live backend", async () => {
     const scaffold = liveDshScaffold();
     expect(scaffold.liveReady).toBe(false);
     expect(scaffold.steps.length).toBeGreaterThan(3);
     expect(scaffold.env.some((e) => e.includes("OPENAI_API_KEY"))).toBe(true);
     const { next } = planReconcile(emptyState(), parseManifests(yaml), "t");
     const agent = next.desired[0];
-    await expect(bootDsh(agent.spec, { backend: "live" })).rejects.toThrow(/live backend unavailable/);
+    await expect(bootDsh(agent.spec, { backend: "live" })).rejects.toThrow(/requires Hermes/);
+    const hermes = createHermes(agent.spec);
+    await expect(bootDsh(agent.spec, { hermes, backend: "live" })).rejects.toThrow(/live backend unavailable/);
   });
 
   it("prefers OPENAI_API_KEY over DEEPSEEK_API_KEY", async () => {

@@ -1,15 +1,29 @@
 # Control-plane UI
 
-`ropex ui` serves a static **tabbed** dashboard and the full `/api/v1/*` API on one port (default **7780**).
+`ropex ui` serves a **tabbed teal dashboard** and the full `/api/v1/*` API on one port (default **7780**).
 
 ```bash
-ropex apply fleets/examples/github-control-plane.yaml
-ropex ui
+npm run up
+# or:
+ropex up fleets/examples/github-control-plane.yaml --serve
 # → http://127.0.0.1:7780
 # → http://127.0.0.1:7780/api/v1/view
 ```
 
+See [operations.md](./operations.md) for Podman Compose and stack CLI.
+
 The UI is an **operations and observability** surface — not a chat agent. Tabs organize the control plane; workers of the same agent are **collapsed by default** and expand to show replicas.
+
+## Stack controls (top bar)
+
+| Control | Action |
+| --- | --- |
+| **Start** | `POST /api/v1/stack` `{ action: "up" }` — apply fleet, resume queue |
+| **Stop** | `POST /api/v1/stack` `{ action: "down" }` — pause queue, sweep workers |
+| **Live pill** | Teal pulse — auto-refresh (5s idle, ~1.2s when queue/stack active) |
+| **Refresh** | Manual `GET /api/v1/view` with teal loading veil |
+
+Stack status pill shows **Running** / **Stopped** / **Starting…** / **Stopping…**.
 
 ## Tabs
 
@@ -18,7 +32,7 @@ The UI is an **operations and observability** surface — not a chat agent. Tabs
 | **Overview** | Snapshot charts, workflow flow diagram, health |
 | **Fleet** | Grouped workers, memory, tasks, hygiene, drift, fairness, canary, skills, autoscale |
 | **Queue** | Drain controls, pipelines, affinity, approvals, budget, policy |
-| **Observe** | Harness live/sim status, trajectories, deliveries, rate limits, audit |
+| **Observe** | Harness embedded/live status, trajectories, deliveries, rate limits, audit |
 | **Agents** | Hermes & DeepSeek surfaces (click for deep-dive) |
 
 ## Overview charts
@@ -33,11 +47,11 @@ On **Fleet → Workers**, replicas are grouped (`triage` ×3, `pr-factory` ×20)
 
 ## Workflow diagram
 
-Overview shows compose → plan → execute → deliver → learn as shaped flow nodes (Hermes teal / DeepSeek copper), not a flat top-of-page list. The five stages group onto the three-phase spine — **Start** (compose·plan) → **Transform** (execute) → **Result** (deliver·learn); each node carries its `phase` from `GET /api/v1/view`.workflow.
+Overview shows compose → plan → execute → deliver → learn as shaped flow nodes (Hermes teal / DeepSeek teal-accent), not a flat top-of-page list. The five stages group onto the three-phase spine — **Start** (compose·plan) → **Transform** (execute) → **Result** (deliver·learn); each node carries its `phase` from `GET /api/v1/view`.workflow.
 ```mermaid
 flowchart TB
   subgraph Browser["Browser (src/ui)"]
-    APP["app.js — 5s auto-refresh"]
+    APP["app.js — adaptive refresh"]
     DRAWER["Detail drawer\npipelines · trajectories · agents"]
     SSE["EventSource\nlive pipeline logs"]
   end
@@ -78,7 +92,7 @@ flowchart TB
 | Queue | `#queue` | Pending work, pause, drain concurrency |
 | **Pipelines** | `#pipelines` | Executor API runs — submit, drain, drill-down |
 | Trajectories | `#trajectories` | Hermes→DeepSeek run history |
-| Harness | `#dsh` | DeepSeek profile packs + live/simulated status |
+| Harness | `#dsh` | DeepSeek profile packs + live/embedded status |
 | Hermes & DeepSeek | `#surfaces` | Per-agent brain + harness config |
 | Deliveries / Audit | `#journal` … | Journal and event trail |
 
@@ -112,16 +126,16 @@ Under **Hermes & DeepSeek**, click any agent card for:
 - DeepSeek: profile, loop mode, model, plugins, tools
 - Matching worker slot (if live)
 
-## Live vs simulated backends
+## Live vs embedded backends
 
 The **Harness** section shows backend readiness:
 
 | Component | Default | Live requires |
 | --- | --- | --- |
-| Hermes brain | `simulated` (`createHermes()`) | `ROPEX_HERMES_BACKEND=live`, `hermes-agent` |
-| DeepSeek harness | `simulated` (`bootDsh()`) | `ROPEX_DSH_BACKEND=live`, `@deepseek-ai/dsh`, **`OPENAI_API_KEY`** (preferred) or `DEEPSEEK_API_KEY` |
+| Hermes brain | `embedded` (`createHermes()`) | `ROPEX_HERMES_BACKEND=live`, `hermes-agent` |
+| DeepSeek harness | `embedded` (`bootDsh({ hermes })`) | `ROPEX_DSH_BACKEND=live`, `@deepseek-ai/dsh`, **`OPENAI_API_KEY`** (preferred) or `DEEPSEEK_API_KEY` |
 
-The control plane itself is always **live** (real state, real drain). Agent backends stay simulated in CI and offline demos.
+`bootDsh` always requires a Hermes brain — plan and execute are coupled in every environment, including tests.
 
 See [hermes.md](./hermes.md) and [dsh.md](./dsh.md) for wiring checklists.
 
@@ -129,7 +143,8 @@ See [hermes.md](./hermes.md) and [dsh.md](./dsh.md) for wiring checklists.
 
 | Action | API |
 | --- | --- |
-| Refresh view | `GET /api/v1/view` (also auto every 5s) |
+| Start / stop stack | `POST /api/v1/stack` `{ action: "up" \| "down" }` |
+| Refresh view | `GET /api/v1/view` (auto; faster when queue/stack active) |
 | Pause / resume queue | `POST /api/v1/queue` `{ action: "pause" \| "resume" }` |
 | Drain | `POST /api/v1/drain` `{ concurrency }` |
 | Set drain preference | `PUT /api/v1/drain` `{ concurrency }` |
@@ -145,8 +160,8 @@ See [hermes.md](./hermes.md) and [dsh.md](./dsh.md) for wiring checklists.
 | --- | --- |
 | `--port N` | UI port (default 7780) |
 | `ROPEX_PIPELINE_PLANNER` | `heuristic` (default) or `hermes` for pipeline planning |
-| `ROPEX_HERMES_BACKEND` | `simulated` \| `live` |
-| `ROPEX_DSH_BACKEND` | `simulated` \| `live` |
+| `ROPEX_HERMES_BACKEND` | `embedded` \| `live` |
+| `ROPEX_DSH_BACKEND` | `embedded` \| `live` |
 | `OPENAI_API_KEY` | Preferred live LLM key |
 | `DEEPSEEK_API_KEY` | Optional live LLM key fallback |
 

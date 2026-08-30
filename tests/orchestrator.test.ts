@@ -82,7 +82,8 @@ describe("worktrees", () => {
 
     expect(result.worktree).toBe(worker.worktree);
     const fsStep = result.steps.find((s) => s.calls.some((c) => c.name === "fs"));
-    expect(fsStep?.observation).toContain(worker.worktree!);
+    const obs = JSON.parse(fsStep!.observation) as { cwd?: string };
+    expect(obs.cwd).toBe(worker.worktree);
     removeWorktree(root, worker.id);
   });
 });

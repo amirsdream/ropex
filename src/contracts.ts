@@ -161,6 +161,13 @@ export type HarnessSurfaceView = {
 export type ControlPlaneView = {
   brand: "ropex";
   tagline: string;
+  stack: {
+    status: string;
+    manifest: string;
+    updatedAt: string;
+    message?: string;
+    queuePaused: boolean;
+  };
   revision: number;
   source: string;
   lastReconcile?: string;
@@ -198,6 +205,31 @@ export type ControlPlaneView = {
       queueStatus?: string;
     }>;
   };
+  nativeTasks: {
+    total: number;
+    pending: number;
+    running: number;
+    done: number;
+    failed: number;
+    items: Array<{
+      id: string;
+      agent: string;
+      prompt: string;
+      status: string;
+      delivery: string;
+      createdAt: string;
+      finishedAt?: string;
+      output?: string;
+      error?: string;
+    }>;
+  };
+  connectors: Array<{
+    id: string;
+    kind: string;
+    enabled: boolean;
+    label: string;
+    description?: string;
+  }>;
   hermes: HermesSurfaceView[];
   harness: HarnessSurfaceView[];
   skills: LearnedSkill[];
@@ -349,7 +381,7 @@ export type ControlPlaneView = {
     bindings: Array<{ key: string; workerId: string; agent: string; expiresAt: string }>;
   };
   dsh: {
-    backend: "simulated" | "live";
+    backend: "embedded" | "live";
     profiles: Array<{ profile: string; loop: string; plugins: string[]; description: string; dshProfile: string }>;
     liveReady: boolean;
     packageInstalled: boolean;
@@ -359,7 +391,7 @@ export type ControlPlaneView = {
     scaffoldHint: string;
   };
   hermesLive: {
-    backend: "simulated" | "live";
+    backend: "embedded" | "live";
     liveReady: boolean;
     packageInstalled: boolean;
     scaffoldHint: string;
@@ -444,6 +476,7 @@ export const API_ROUTES = {
   view: "/api/v1/view",
   memory: "/api/v1/memory",
   tasks: "/api/v1/tasks",
+  connectors: "/api/v1/connectors",
   workers: "/api/v1/workers",
   queue: "/api/v1/queue",
   metrics: "/api/v1/metrics",
@@ -467,4 +500,5 @@ export const API_ROUTES = {
   hygiene: "/api/v1/hygiene",
   pipeline: "/api/v1/pipeline",
   events: "/api/v1/events",
+  stack: "/api/v1/stack",
 } as const;

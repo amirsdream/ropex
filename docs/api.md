@@ -2,7 +2,7 @@
 
 Stable routes from `API_ROUTES` in `src/contracts.ts`. All JSON unless noted. The local control plane has no auth — add authentication before exposing beyond localhost.
 
-Serve everything with `ropex ui` (static dashboard + API on one port, default **7780**).
+Serve everything with `ropex ui` or `npm run up` (teal dashboard + API on one port, default **7780**).
 
 ## Core routes
 
@@ -10,6 +10,8 @@ Serve everything with `ropex ui` (static dashboard + API on one port, default **
 | --- | --- | --- |
 | GET | `/api/v1/health` | Worker probes + backlog SLO (`ok` / HTTP 503) |
 | GET | `/api/v1/view` | Full control-plane UI model (`buildControlPlaneView`) |
+| GET | `/api/v1/stack` | Stack lifecycle status (`up` / `down` / `starting` / `stopping`) |
+| POST | `/api/v1/stack` | `{ "action": "up" \| "down", "manifest"?, "tick"? }` |
 | GET | `/api/v1/workers` | Live worker views |
 | GET | `/api/v1/memory` | Shared memory (`?worker=`) |
 | POST | `/api/v1/memory` | Sync / export / promote actions |
@@ -81,6 +83,7 @@ curl -N 'http://127.0.0.1:7780/api/v1/events?pipelineId=<uuid>&format=ui'
 
 | Field | Content |
 | --- | --- |
+| `stack` | Lifecycle: status, manifest, message, `queuePaused` |
 | `workflow` | Fixed 5-stage pipeline owners + `phase` (Start / Execute / Result) |
 | `workers` | Live replicas, digests, harness, worktrees |
 | `hermes` / `harness` | Per-agent surface config |
@@ -97,6 +100,9 @@ See [control-plane-ui.md](./control-plane-ui.md) for UI mapping.
 
 | API | CLI |
 | --- | --- |
+| `POST /api/v1/stack` `{ action: "up" }` | `ropex up [manifest]` |
+| `POST /api/v1/stack` `{ action: "down" }` | `ropex down` |
+| `npm run up` / `npm run down` | `scripts/stack-up.sh` / `stack-down.sh` (Podman Compose) |
 | `POST /api/v1/pipeline` | `ropex pipeline "<prompt>"` |
 | `POST /api/v1/drain` | `ropex drain --concurrency N` |
 | `GET /api/v1/trajectories?format=jsonl` | `ropex trajectories --jsonl` |
@@ -105,6 +111,7 @@ See [control-plane-ui.md](./control-plane-ui.md) for UI mapping.
 
 ## Related
 
+- [Operations](./operations.md) — one-click up/down, Podman Compose
 - [Architecture](./architecture.md)
 - [Executor API](./executor-api.md)
 - [Control-plane UI](./control-plane-ui.md)

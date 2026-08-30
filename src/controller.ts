@@ -20,6 +20,7 @@ import { ensureTrajectories } from "./trajectory.js";
 import { ensureRateLimits } from "./ratelimit.js";
 import { ensureApprovals } from "./approval.js";
 import { ensureBudgets } from "./budget.js";
+import { ensureConnectors, ensureNativeTasks } from "./connectors.js";
 import { applyWorktrees } from "./worktree.js";
 import { selectCanaryRolls, type RolloutOptions } from "./canary.js";
 import type { ClusterState, Manifest, ReconcilePlan, SharedMemoryFact, Worker } from "./types.js";
@@ -65,6 +66,8 @@ export function loadState(root: string): ClusterState {
     ensureRateLimits(state);
     ensureApprovals(state);
     ensureAudit(state);
+    ensureConnectors(state);
+    ensureNativeTasks(state);
     if (!state.pipelines) state.pipelines = [];
     return state;
   } catch {

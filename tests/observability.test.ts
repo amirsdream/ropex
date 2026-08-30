@@ -52,15 +52,15 @@ describe("dsh adapter", () => {
     expect(profilePack("minimal").tools).toContain("bash");
   });
 
-  it("boots simulated adapter and executes a Hermes plan", async () => {
+  it("boots embedded adapter and executes a Hermes plan", async () => {
     const agent = expandDesired(parseManifests(yaml))[0];
     const store = new SharedMemoryStore([]);
     const hermes = createHermes(agent.spec, {
       store,
       worker: { id: "builder:0", agent: "builder" },
     });
-    const dsh = await bootDsh(agent.spec, { hermes, backend: "simulated" });
-    expect(dsh.backend).toBe("simulated");
+    const dsh = await bootDsh(agent.spec, { hermes });
+    expect(dsh.backend).toBe("embedded");
     expect(dsh.pack.profile).toBe("code");
     const planned = hermes.plan({ id: "1", agent: "builder", prompt: "implement tests" });
     const { steps } = await dsh.execute(planned);
@@ -68,9 +68,15 @@ describe("dsh adapter", () => {
     expect(steps[0].calls[0].plugin).toBe("dsh");
   });
 
+  it("refuses bootDsh without Hermes", async () => {
+    const agent = expandDesired(parseManifests(yaml))[0];
+    await expect(bootDsh(agent.spec)).rejects.toThrow(/requires Hermes/);
+  });
+
   it("refuses live backend until wired", async () => {
     const agent = expandDesired(parseManifests(yaml))[0];
-    await expect(bootDsh(agent.spec, { backend: "live" })).rejects.toThrow(/live backend unavailable/);
+    const hermes = createHermes(agent.spec);
+    await expect(bootDsh(agent.spec, { hermes, backend: "live" })).rejects.toThrow(/live backend unavailable/);
   });
 });
 

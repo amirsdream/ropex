@@ -133,6 +133,7 @@ export {
 } from "./budget.js";
 export { controlPlaneTick } from "./tick.js";
 export type { TickOptions, TickResult } from "./tick.js";
+export { DEFAULT_STACK_MANIFEST, stackDown, stackStatus, stackUp, isStackUp } from "./stack.js";
 export { cloneGitRepo, cloneAllGitRepos, planCloneAll, cloneStatusReport } from "./clone.js";
 export type { CloneResult, CloneOptions, ClonePhase, CloneProgressStep } from "./clone.js";
 export { simulatePolicies } from "./policy-sim.js";
@@ -184,11 +185,20 @@ export {
   syncTasksFromGitRepos,
   readTaskManifest,
   taskFromManifest,
+  submitNativeTask,
   deliverGitTaskManifest,
   DEFAULT_TASKS_DIR,
   taskGitSummary,
   taskGitSummaryFromRepos,
 } from "./tasks.js";
+export {
+  ensureConnectors,
+  ensureNativeTasks,
+  deliverTaskOutcome,
+  nativeTaskSummary,
+  setConnectorEnabled,
+  DEFAULT_CONNECTORS,
+} from "./connectors.js";
 export {
   syncMemoryFromDir,
   syncMemoryFromGitRepos,

@@ -13,9 +13,9 @@ import {
   queueSummary,
   reclaimExpiredLeases,
 } from "./queue.js";
+import { deliverTaskOutcome, markNativeTaskRunning } from "./connectors.js";
 import { runTask, type RunTaskOptions } from "./runtime.js";
 import { sweepIdleWorkers } from "./scale.js";
-import { deliverGitTaskFromQueueItem } from "./tasks.js";
 import type { ClusterState, RunResult } from "./types.js";
 
 /** Hard ceiling so UI/API cannot spawn uncapped parallel drains. */
@@ -109,19 +109,27 @@ export async function drainQueue(
         }
         try {
           heartbeatClaim(state, c.queueId, { leaseMs: opts.leaseMs });
+          const queueItem = state.queue.find((q) => q.id === c.queueId);
+          if (queueItem) markNativeTaskRunning(state, queueItem);
           const result = await runTask(state, worker, c.task, opts);
           const updated = completeQueued(state, c.queueId, true, undefined, {
             maxAttempts: opts.maxAttempts,
             root: opts.root,
           });
-          if (updated) deliverGitTaskFromQueueItem(updated, result.output);
+          if (updated)
+            deliverTaskOutcome(state, updated, {
+              output: result.output,
+              delivery: result.delivery,
+              worker: result.worker,
+              imageDigest: result.imageDigest,
+            });
           return result;
         } catch (err) {
           const updated = completeQueued(state, c.queueId, false, err instanceof Error ? err.message : String(err), {
             maxAttempts: opts.maxAttempts,
             root: opts.root,
           });
-          if (updated) deliverGitTaskFromQueueItem(updated);
+          if (updated) deliverTaskOutcome(state, updated);
           return undefined;
         }
       }),

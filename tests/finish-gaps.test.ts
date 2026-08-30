@@ -34,8 +34,8 @@ spec:
 `;
 
 describe("finish gaps", () => {
-  it("resolveDshBackend defaults to simulated", () => {
-    expect(resolveDshBackend()).toBe("simulated");
+  it("resolveDshBackend defaults to embedded", () => {
+    expect(resolveDshBackend()).toBe("embedded");
     expect(dshPackageInstalled()).toBe(false);
     expect(liveDshScaffold().liveReady).toBe(false);
   });
@@ -75,7 +75,7 @@ spec:
     saveState(root, state);
 
     const after = loadState(root);
-    expect(after.memory.some((f) => f.manifestPath?.includes("memory/"))).toBe(true);
+    expect(after.memory.some((f) => f.manifestPath?.includes(join(root, "memory")))).toBe(true);
     const exported = after.memory.find((f) => f.manifestPath);
     expect(exported).toBeTruthy();
     expect(readFileSync(exported!.manifestPath!, "utf8")).toMatch(/remember this/);

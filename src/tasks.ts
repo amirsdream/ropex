@@ -7,10 +7,11 @@ import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "
 import { isAbsolute, join, resolve } from "node:path";
 import { parseDocument, YAMLMap } from "yaml";
 import { recordAudit } from "./audit.js";
+import { ensureNativeTasks } from "./connectors.js";
 import { enqueueTask } from "./queue.js";
 import { resolveRepoLocalPath } from "./gitrepo.js";
 import { parseManifests } from "./spec.js";
-import type { ClusterState, QueuedTask, Task, TaskManifest } from "./types.js";
+import type { ClusterState, NativeTaskRecord, QueuedTask, Task, TaskDeliverySpec, TaskManifest } from "./types.js";
 
 export const DEFAULT_TASKS_DIR = "tasks";
 
@@ -41,12 +42,66 @@ export function readTaskManifest(path: string): TaskManifest {
 }
 
 export function taskFromManifest(m: TaskManifest, manifestPath: string): Task {
+  const delivery =
+    m.spec.delivery?.mode != null ? { mode: m.spec.delivery.mode } : { mode: "git" as const };
   return {
     id: m.metadata.name,
     agent: m.spec.agent,
     prompt: m.spec.prompt,
     manifestPath,
+    delivery,
   };
+}
+
+export type SubmitNativeTaskOptions = {
+  id?: string;
+  agent: string;
+  prompt: string;
+  priority?: number;
+  delivery?: TaskDeliverySpec;
+};
+
+function slugId(prefix: string): string {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+/** Submit a task to the native inbox (API/UI) — no git or GitHub required. */
+export function submitNativeTask(
+  state: ClusterState,
+  opts: SubmitNativeTaskOptions,
+): { task: NativeTaskRecord; queued: QueuedTask } {
+  ensureNativeTasks(state);
+  const id = opts.id?.trim() || slugId("task");
+  if (state.nativeTasks!.some((t) => t.id === id)) {
+    throw new Error(`native task already exists: ${id}`);
+  }
+  const delivery = opts.delivery ?? { mode: "ui" };
+  const now = new Date().toISOString();
+  const rec: NativeTaskRecord = {
+    id,
+    agent: opts.agent,
+    prompt: opts.prompt,
+    status: "pending",
+    delivery,
+    priority: opts.priority,
+    createdAt: now,
+    updatedAt: now,
+  };
+  state.nativeTasks!.push(rec);
+  const queued = enqueueTask(
+    state,
+    { id, agent: opts.agent, prompt: opts.prompt, delivery },
+    "api",
+    { priority: opts.priority },
+  );
+  recordAudit(state, {
+    kind: "enqueue",
+    message: "native task submitted",
+    agent: opts.agent,
+    taskId: id,
+    meta: { source: "api", delivery: delivery.mode },
+  });
+  return { task: rec, queued };
 }
 
 export function isTaskEnqueueable(m: TaskManifest): boolean {
