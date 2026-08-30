@@ -472,4 +472,4 @@ Tools, delivery transport, live `@deepseek-ai/dsh`, and live Hermes process. The
 
 ## License
 
-Ropex is licensed under the [GNU Affero General Public License v3](../LICENSE) (`AGPL-3.0-only`).
+Ropex is licensed under the [MIT License](../LICENSE).
