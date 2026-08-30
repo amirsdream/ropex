@@ -349,7 +349,7 @@ export type ControlPlaneView = {
     bindings: Array<{ key: string; workerId: string; agent: string; expiresAt: string }>;
   };
   dsh: {
-    backend: "simulated" | "live";
+    backend: "embedded" | "live";
     profiles: Array<{ profile: string; loop: string; plugins: string[]; description: string; dshProfile: string }>;
     liveReady: boolean;
     packageInstalled: boolean;
@@ -359,7 +359,7 @@ export type ControlPlaneView = {
     scaffoldHint: string;
   };
   hermesLive: {
-    backend: "simulated" | "live";
+    backend: "embedded" | "live";
     liveReady: boolean;
     packageInstalled: boolean;
     scaffoldHint: string;

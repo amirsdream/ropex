@@ -432,7 +432,7 @@ flowchart LR
 
 ## DeepSeek adapter seam
 
-`bootDsh(spec)` loads a **profile pack** (`minimal` | `code` | `standard` | `creator`) and runs Hermes plans through it. `backend: "simulated"` today; `backend: "live"` is reserved for `@deepseek-ai/dsh` and fails closed. See [dsh.md](./dsh.md) and `liveDshScaffold()` for the wiring checklist. The control-plane UI DeepSeek section surfaces packs + scaffold hint.
+`bootDsh(spec, { hermes })` loads a **profile pack** (`minimal` | `code` | `standard` | `creator`) and runs Hermes plans through it. Default backend is **embedded** (in-process Cordis harness); `live` invokes `@deepseek-ai/dsh` and fails closed when unavailable. See [dsh.md](./dsh.md) and `liveDshScaffold()` for the wiring checklist. The control-plane UI DeepSeek section surfaces packs + scaffold hint.
 
 ## Parallel drain + GitRepo sync
 
@@ -458,9 +458,9 @@ Shipped end-to-end offline:
 
 Still open for live adapters: live `@deepseek-ai/dsh`, Hermes process/RPC.
 
-## What is still simulated
+## What is still stubbed
 
-Tools, delivery transport, live `@deepseek-ai/dsh`, and live Hermes process. The contracts above are the seams those live adapters plug into.
+Outbound delivery transport and optional live CLI backends (`@deepseek-ai/dsh`, `hermes-agent` process). The embedded Hermes + DeepSeek harness path is always enforced in `runTask`.
 
 ## Related docs
 

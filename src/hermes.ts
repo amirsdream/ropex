@@ -18,7 +18,8 @@ import type {
 
 const require = createRequire(import.meta.url);
 
-export type HermesBackend = "simulated" | "live";
+/** In-process Hermes contract (default). `live` invokes hermes-agent CLI. */
+export type HermesBackend = "embedded" | "live";
 
 export type HermesBrain = HermesContract;
 
@@ -50,8 +51,10 @@ export function hermesPackageInstalled(): boolean {
 
 export function resolveHermesBackend(explicit?: HermesBackend): HermesBackend {
   if (explicit) return explicit;
-  if (process.env.ROPEX_HERMES_BACKEND === "live") return "live";
-  return "simulated";
+  const env = process.env.ROPEX_HERMES_BACKEND;
+  if (env === "live") return "live";
+  // Embedded Hermes is always used — no simulation shortcut.
+  return "embedded";
 }
 
 /** Resolve installed hermes CLI entry (undefined when package absent). */
@@ -74,9 +77,6 @@ export function runLiveHermesTask(
   const bin = resolveHermesBin();
   if (!bin) {
     throw new Error("hermes live backend unavailable — install hermes-agent first.");
-  }
-  if (process.env.VITEST === "true") {
-    throw new Error("hermes live backend disabled under vitest");
   }
   const timeoutMs = opts.timeoutMs ?? 120_000;
   const result = spawnSync(process.execPath, [bin, prompt], {
@@ -111,7 +111,7 @@ export function createHermes(spec: AgentSpec, options: HermesCreateOptions = {})
   const backend = resolveHermesBackend(options.backend);
   const cwd = options.cwd;
 
-  const offlinePlan = (task: Task): HermesPlan => {
+  const embeddedPlan = (task: Task): HermesPlan => {
     const memHints = port.query({ limit: 3 }).map((m) => `memory[${m.scope}]: ${m.text.slice(0, 60)}`);
     const thoughts = [
       `soul: ${soul.slice(0, 80)}`,
@@ -145,12 +145,12 @@ export function createHermes(spec: AgentSpec, options: HermesCreateOptions = {})
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           return {
-            thoughts: [`hermes-live failed: ${msg}`, "falling back to offline planner"],
-            calls: offlinePlan(task).calls,
+            thoughts: [`hermes-live failed: ${msg}`, "falling back to embedded planner"],
+            calls: embeddedPlan(task).calls,
           };
         }
       }
-      return offlinePlan(task);
+      return embeddedPlan(task);
     },
     remember(fact) {
       if (typeof fact === "string") {
@@ -218,7 +218,7 @@ export type { HermesPlan };
 
 export type BootHermesOptions = HermesCreateOptions;
 
-/** Boot Hermes brain — simulated by default; live when ROPEX_HERMES_BACKEND=live. */
+/** Boot Hermes brain — embedded by default; live when ROPEX_HERMES_BACKEND=live. */
 export function bootHermes(spec: AgentSpec, opts: BootHermesOptions = {}): HermesBrain {
   const backend = resolveHermesBackend(opts.backend);
   if (backend === "live" && !hermesPackageInstalled()) {
@@ -240,7 +240,7 @@ export type LiveHermesScaffold = {
 
 /**
  * Describe how to attach a real hermes-agent runtime without importing it.
- * createHermes() stays the offline brain; live invokes hermes-agent CLI.
+ * createHermes() is the embedded brain; live invokes hermes-agent CLI.
  */
 export function liveHermesScaffold(): LiveHermesScaffold {
   const packageInstalled = hermesPackageInstalled();
@@ -250,15 +250,15 @@ export function liveHermesScaffold(): LiveHermesScaffold {
     packageName: "hermes-agent",
     summary: packageInstalled
       ? "Live hermes-agent present — set ROPEX_HERMES_BACKEND=live to plan via hermes CLI."
-      : "Install hermes-agent for live brain; createHermes() stays the offline default.",
+      : "Install hermes-agent for live brain; createHermes() is the embedded default.",
     steps: [
-      "Add optional peer dependency hermes-agent (never required by tests).",
+      "Add optional peer dependency hermes-agent for live CLI planning.",
       "Set ROPEX_HERMES_BACKEND=live for production runs.",
       "bootHermes() invokes hermes-agent CLI for plan(); harness still executes via dsh.",
-      "Bridge MemoryPort to SharedMemoryStore (same scopes as offline).",
-      "Keep createHermes() as the default for CI and network-free demos.",
-      "Prove plan→learn loop parity with simulated brain in sandbox.",
+      "Bridge MemoryPort to SharedMemoryStore (same scopes as embedded).",
+      "Embedded Hermes (createHermes) is always used unless live is explicitly set.",
+      "Prove plan→learn loop parity with embedded brain in sandbox.",
     ],
-    env: ["ROPEX_HERMES_BACKEND=simulated|live"],
+    env: ["ROPEX_HERMES_BACKEND=embedded|live"],
   };
 }

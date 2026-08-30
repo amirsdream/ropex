@@ -6,7 +6,7 @@ Ropex plans through `createHermes` (`src/hermes.ts`) — soul, MemoryPort, skill
 
 | Piece | Role |
 | --- | --- |
-| `createHermes(spec)` | Offline brain (default for tests / demo) |
+| `createHermes(spec)` | Embedded brain (default for tests / demo) |
 | `HermesContract` | `plan` / `remember` / `learn` + MemoryPort |
 | `liveHermesScaffold()` | Checklist; `liveReady: false` until process/RPC lands |
 | DeepSeek execute | Hermes plans; dsh/harness runs tools (see [dsh.md](./dsh.md)) |
@@ -16,7 +16,7 @@ Live hermes-agent is a **future process/RPC seam**. Do not require network or th
 ## Install
 
 ```bash
-npm install          # core only — simulated brain by default
+npm install          # core only — embedded Hermes by default
 ```
 
 Install `hermes-agent` only when enabling live mode (`ROPEX_HERMES_BACKEND=live`). It is not part of the default `npm install` (keeps installs fast and network-light).
@@ -33,7 +33,7 @@ Install `hermes-agent` only when enabling live mode (`ROPEX_HERMES_BACKEND=live`
 ## Env
 
 ```
-ROPEX_HERMES_BACKEND=simulated|live
+ROPEX_HERMES_BACKEND=embedded|live
 HERMES_AGENT_BIN=(live only)
 ```
 

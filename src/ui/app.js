@@ -1492,8 +1492,8 @@ function renderDsh(view) {
         <div class="worker-id">hermes brain</div>
         <div class="digest">${escapeHtml(h.scaffoldHint)}</div>
       </div>
-      <div class="status status-${h.liveReady ? "idle" : "failed"}">${h.liveReady ? "live" : "simulated"}</div>
-      <div class="digest">backend ${escapeHtml(h.backend ?? "simulated")} · pkg ${h.packageInstalled ? "yes" : "no"}</div>
+      <div class="status status-${h.liveReady ? "idle" : "failed"}">${h.liveReady ? "live" : "embedded"}</div>
+      <div class="digest">backend ${escapeHtml(h.backend ?? "embedded")} · pkg ${h.packageInstalled ? "yes" : "no"}</div>
       <div class="digest"></div>
     </div>`
     : "";
@@ -1503,7 +1503,7 @@ function renderDsh(view) {
         <div class="worker-id">deepseek harness</div>
         <div class="digest">${escapeHtml(d.scaffoldHint)}</div>
       </div>
-      <div class="status status-${d.liveReady ? "idle" : "failed"}">${d.liveReady ? "live" : "simulated"}</div>
+      <div class="status status-${d.liveReady ? "idle" : "failed"}">${d.liveReady ? "live" : "embedded"}</div>
       <div class="digest">backend ${escapeHtml(d.backend)} · pkg ${d.packageInstalled ? "yes" : "no"} · key ${d.apiKeyPresent ? escapeHtml(d.apiKeySource ?? "yes") : "no"}</div>
       <div class="digest">profiles ${d.profiles?.length ?? 0}</div>
     </div>`;

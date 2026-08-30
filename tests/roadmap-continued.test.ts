@@ -33,8 +33,8 @@ spec:
 `;
 
 describe("roadmap continued: live hermes", () => {
-  it("resolveHermesBackend defaults simulated and bootHermes fails closed for live", () => {
-    expect(resolveHermesBackend()).toBe("simulated");
+  it("resolveHermesBackend defaults embedded and bootHermes fails closed for live", () => {
+    expect(resolveHermesBackend()).toBe("embedded");
     expect(hermesPackageInstalled()).toBe(false);
     expect(liveHermesScaffold().packageInstalled).toBe(false);
     const { next } = planReconcile(emptyState(), parseManifests(agentYaml), "t");
@@ -45,7 +45,7 @@ describe("roadmap continued: live hermes", () => {
   it("projects hermesLive backend on the control-plane view", () => {
     const { next } = planReconcile(emptyState(), parseManifests(agentYaml), "t");
     const view = buildControlPlaneView(next);
-    expect(view.hermesLive.backend).toBe("simulated");
+    expect(view.hermesLive.backend).toBe("embedded");
     expect(view.hermesLive.packageInstalled).toBe(false);
   });
 });

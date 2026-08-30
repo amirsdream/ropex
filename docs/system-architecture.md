@@ -389,9 +389,9 @@ flowchart LR
     EX["executor.ts"]
   end
 
-  subgraph Backends["Backends (simulated by default)"]
-    H2["Hermes<br/>offline / live seam"]
-    D2["DeepSeek dsh<br/>simulated / live seam"]
+  subgraph Backends["Backends (embedded by default)"]
+    H2["Hermes<br/>embedded / live seam"]
+    D2["DeepSeek dsh<br/>embedded / live seam"]
   end
 
   GH --> WH --> API
