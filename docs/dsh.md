@@ -8,7 +8,7 @@ Ropex executes Hermes plans through `bootDsh` (`src/dsh.ts`). The default backen
 | --- | --- |
 | `DSH_PROFILE_PACKS` | Canonical minimal/code/standard/creator packs (tools + Cordis plugin ids) |
 | `bootDsh(spec, { hermes })` | Returns `DshAdapter` — requires Hermes; embedded or live |
-| `liveDshScaffold()` | Checklist + env hints; `liveReady: false` until live lands |
+| `liveDshScaffold()` | Checklist + env hints for optional `@deepseek-ai/dsh` CLI |
 | Policy admission | Deny / requireApproval stay in front of tools (permissions plugin) |
 
 `backend: "live"` **fails closed** with an error that points at the next scaffold step. Do not call network APIs from tests.
@@ -56,4 +56,4 @@ Configure non-DeepSeek models in dsh provider settings (`llm-pi-ai`) so headless
 - Control-plane UI **DeepSeek harness** section (from `/api/v1/view`.dsh) shows `apiKeySource`
 - `liveDshScaffold()` / `resolveLlmApiKey()` for CLI/docs/programmatic checks
 
-See also [architecture.md](./architecture.md), [control-plane-ui.md](./control-plane-ui.md), and [executor-api.md](./executor-api.md).
+See also [architecture.md](./architecture.md), [control-plane-ui.md](./control-plane-ui.md), [hermes.md](./hermes.md), [operations.md](./operations.md), and [executor-api.md](./executor-api.md).

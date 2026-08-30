@@ -110,7 +110,7 @@ Magentic display roles (e.g. "Research Analyst") must map to these names, or Mag
 | Variable | Effect |
 | --- | --- |
 | `ROPEX_PIPELINE_PLANNER=heuristic` | Default regex planner |
-| `ROPEX_PIPELINE_PLANNER=hermes` | Hermes offline brain seeds stages |
+| `ROPEX_PIPELINE_PLANNER=hermes` | Embedded Hermes brain seeds stages |
 | `ROPEX_HERMES_BACKEND=live` | Live hermes-agent per task (worktree cwd) |
 | `ROPEX_DSH_BACKEND=live` | Live `@deepseek-ai/dsh` (needs `OPENAI_API_KEY` preferred, or `DEEPSEEK_API_KEY`) |
 

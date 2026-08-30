@@ -273,7 +273,7 @@ Key properties:
 - **Terminal gating** — `pipeline.complete` / `pipeline.error` / `pipeline.end` fire only when the run is fully terminal
 - **Persisted events** — capped `pipeline.events` in state; SSE replays on subscribe
 
-Planners: `ROPEX_PIPELINE_PLANNER=heuristic` (regex) or `hermes` (offline brain seed). Full contract: [executor-api.md](./executor-api.md).
+Planners: `ROPEX_PIPELINE_PLANNER=heuristic` (regex) or `hermes` (embedded brain seed). Full contract: [executor-api.md](./executor-api.md).
 
 ## Magentic integration (external UI)
 
@@ -434,6 +434,21 @@ flowchart LR
 
 `bootDsh(spec, { hermes })` loads a **profile pack** (`minimal` | `code` | `standard` | `creator`) and runs Hermes plans through it. Default backend is **embedded** (in-process Cordis harness); `live` invokes `@deepseek-ai/dsh` and fails closed when unavailable. See [dsh.md](./dsh.md) and `liveDshScaffold()` for the wiring checklist. The control-plane UI DeepSeek section surfaces packs + scaffold hint.
 
+## One-click stack lifecycle
+
+`src/stack.ts` implements the same contract as the UI buttons and `npm run up`:
+
+```mermaid
+flowchart LR
+  UP["stack up"] --> APPLY["apply manifest"]
+  APPLY --> RESUME["resume queue"]
+  RESUME --> TICK["optional tick drain"]
+  DOWN["stack down"] --> PAUSE["pause queue"]
+  PAUSE --> SWEEP["destroy idle on-demand workers"]
+```
+
+Deploy: [operations.md](./operations.md) (`Containerfile`, `podman-compose.yml`).
+
 ## Parallel drain + GitRepo sync
 
 - `ropex drain --concurrency N` runs claimed tasks in parallel batches.
@@ -450,13 +465,14 @@ Shipped end-to-end offline:
 | Desired state | `fleets/**`, `spec`, `controller`, `image`, `worktree` |
 | Ingress | `webhook`, `ratelimit`, `github`, **`executor`** |
 | Schedule | fair LRU `queue`, concurrent `scheduler`, priority, retry/DLQ, `fanout` |
-| Brain / kernel | Hermes compose/plan/learn, `bootDsh` profile packs |
+| Brain / kernel | Hermes compose/plan/learn (embedded), `bootDsh({ hermes })` |
 | Governance | `admission`, `approval`, `policy` dry-run |
 | Memory / skills | scoped `SharedMemoryStore`, versioned `skillRegistry` |
 | Observability | journal, trajectories, metrics, health/SLO, audit |
-| Surfaces | CLI, `/api/v1/*`, `ropex ui`, **deep-dive drawer**, **pipeline SSE** |
+| Stack / deploy | `stack.ts`, `Containerfile`, `podman-compose.yml`, `scripts/stack-*.sh` |
+| Surfaces | CLI (`up`/`down`), `/api/v1/*`, `ropex ui`, **Start/Stop** buttons, pipeline SSE |
 
-Still open for live adapters: live `@deepseek-ai/dsh`, Hermes process/RPC.
+Optional live CLI backends: `@deepseek-ai/dsh`, `hermes-agent` process — see [hermes.md](./hermes.md) and [dsh.md](./dsh.md).
 
 ## What is still stubbed
 
@@ -464,6 +480,7 @@ Outbound delivery transport and optional live CLI backends (`@deepseek-ai/dsh`, 
 
 ## Related docs
 
+- [Operations](./operations.md)
 - [Control-plane UI](./control-plane-ui.md)
 - [Executor API](./executor-api.md)
 - [HTTP API](./api.md)

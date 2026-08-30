@@ -417,16 +417,28 @@ Live backends are optional seams — see [hermes.md](./hermes.md) and [dsh.md](.
 | Queue / scale | `queue.ts`, `scheduler.ts`, `scale.ts`, `fanout.ts`, `admission.ts`, `approval.ts`, `autoscale.ts`, `budget.ts`, `placement.ts`, `fairness.ts` |
 | Ingress / audit | `webhook.ts`, `ratelimit.ts`, `journal.ts`, `deliver.ts`, `trajectory.ts`, `metrics.ts`, `health.ts`, `audit.ts` |
 | Lifecycle | `lifecycle.ts`, `hygiene.ts`, `chaos.ts` |
-| Surfaces | `api.ts`, `ui/`, `cli.ts`, `demo.ts` |
+| Surfaces | `api.ts`, `ui/`, `cli.ts`, `demo.ts`, `stack.ts` |
+
+---
+
+## One-click operations
+
+```bash
+npm run up      # Podman/Docker Compose or local ropex up --serve
+npm run down
+```
+
+Dashboard **Start** / **Stop** → `POST /api/v1/stack`. Full guide: [operations.md](./operations.md).
 
 ---
 
 ## View locally
 
 ```bash
-# Open in browser after starting the control plane
-npx tsx src/cli.ts apply fleets/examples/github-control-plane.yaml
-npx tsx src/cli.ts ui    # http://127.0.0.1:7780
+npm run up
+# or:
+npx tsx src/cli.ts up fleets/examples/github-control-plane.yaml --serve
+# → http://127.0.0.1:7780
 ```
 
 On GitHub, open this file directly — Mermaid diagrams render in the file preview.
