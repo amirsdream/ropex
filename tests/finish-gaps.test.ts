@@ -21,6 +21,7 @@ kind: Agent
 metadata:
   name: docbot
 spec:
+  scale: static
   replicas: 1
   harness:
     profile: minimal

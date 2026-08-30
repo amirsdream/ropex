@@ -7,12 +7,14 @@ import { recordDelivery } from "./journal.js";
 import { SharedMemoryStore } from "./memory.js";
 import { registerSkill, skillsForAgent } from "./skills.js";
 import { maybeExportRememberedFact } from "./gitmemory.js";
+import { isOnDemandAgent } from "./scale.js";
 import { recordTrajectory } from "./trajectory.js";
 import { composeWorkflow } from "./workflow.js";
 import { ensureWorktree } from "./worktree.js";
 import type {
   ClusterState,
   DesiredAgent,
+  MemoryScope,
   Policy,
   RunResult,
   Task,
@@ -174,12 +176,17 @@ export async function runTask(
     worker.skills = [...new Set([...worker.skills, learned.name])];
     registerSkill(state, learned, `via ${dsh.pack.profile} pack`);
   }
+  // Prefer durable scopes for on-demand agents — worker ids do not survive destroy.
+  let rememberScope: MemoryScope = hermes.port.context.policy.write;
+  if (isOnDemandAgent(agent) && rememberScope === "worker") {
+    rememberScope = "agent";
+  }
   const remembered = hermes.remember({
     id: `${task.id}-done`,
     agent: worker.agent,
     text: task.prompt,
     at: new Date().toISOString(),
-    scope: hermes.port.context.policy.write,
+    scope: rememberScope,
     sourceWorker: worker.id,
     fleet: worker.fleet,
     tags: ["task-complete"],

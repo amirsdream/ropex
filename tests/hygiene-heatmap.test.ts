@@ -21,6 +21,7 @@ kind: Agent
 metadata:
   name: heat
 spec:
+  scale: static
   replicas: 3
   harness:
     profile: minimal

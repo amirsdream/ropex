@@ -1,10 +1,11 @@
 /**
- * Config drift detector — compare live workers to desired digests/replicas/labels
- * without applying a reconcile. Complements `ropex diff` (plan) with a readable report.
+ * Config drift detector — compare live workers to desired digests / static slots /
+ * on-demand concurrency caps. Complements `ropex diff` (plan) with a readable report.
  */
 
 import { buildAgentImage, type ImageResolveOptions } from "./image.js";
 import { expandWorkers } from "./runtime.js";
+import { resolveMaxConcurrent } from "./scale.js";
 import {
   applyReplicaCap,
   collectPolicies,
@@ -12,7 +13,7 @@ import {
   maxReplicas,
   parseManifests,
 } from "./spec.js";
-import type { ClusterState, Manifest, Worker } from "./types.js";
+import type { ClusterState, DesiredAgent, Manifest, Worker } from "./types.js";
 
 export type DriftKind =
   | "missing"
@@ -163,6 +164,28 @@ export function detectDrift(
   }
 
   for (const have of live) {
+    const agent = state.desired.find((a) => a.metadata.name === have.agent);
+    if (agent?.spec.scale === "onDemand") {
+      // Ephemeral runners are expected; only flag digest drift vs definition.
+      const wantDigest = buildAgentImage(agent, imageOpts).digest;
+      if (have.imageDigest !== wantDigest) {
+        findings.push({
+          kind: "digest",
+          agent: have.agent,
+          workerId: have.id,
+          detail: `onDemand ${have.id} digest ${have.imageDigest.slice(0, 8)}… ≠ desired ${wantDigest.slice(0, 8)}…`,
+        });
+      }
+      if (have.cordoned) {
+        findings.push({
+          kind: "cordoned",
+          agent: have.agent,
+          workerId: have.id,
+          detail: `${have.id} is cordoned`,
+        });
+      }
+      continue;
+    }
     if (!desiredById.has(have.id)) {
       findings.push({
         kind: "extra",
@@ -181,20 +204,41 @@ export function detectDrift(
     }
   }
 
-  // Per-agent replica counts
+  // On-demand concurrency: live must not exceed maxConcurrent
+  const agentsForCap: DesiredAgent[] = state.desired ?? [];
+  for (const agent of agentsForCap) {
+    if (agent.spec.scale !== "onDemand") continue;
+    const cap = resolveMaxConcurrent(agent.spec);
+    const n = live.filter((w) => w.agent === agent.metadata.name).length;
+    if (n > cap) {
+      findings.push({
+        kind: "replica",
+        agent: agent.metadata.name,
+        detail: `onDemand live=${n} exceeds maxConcurrent=${cap}`,
+      });
+    }
+  }
+
+  // Per-agent replica counts (static standing pools only)
   const wantCount = new Map<string, number>();
   const haveCount = new Map<string, number>();
   for (const w of desiredWorkers) wantCount.set(w.agent, (wantCount.get(w.agent) ?? 0) + 1);
-  for (const w of live) haveCount.set(w.agent, (haveCount.get(w.agent) ?? 0) + 1);
+  for (const w of live) {
+    const agent = state.desired.find((a) => a.metadata.name === w.agent);
+    if (agent?.spec.scale === "onDemand") continue;
+    haveCount.set(w.agent, (haveCount.get(w.agent) ?? 0) + 1);
+  }
   const agents = new Set([...wantCount.keys(), ...haveCount.keys()]);
-  for (const agent of agents) {
-    const w = wantCount.get(agent) ?? 0;
-    const h = haveCount.get(agent) ?? 0;
+  for (const agentName of agents) {
+    const agent = state.desired.find((a) => a.metadata.name === agentName);
+    if (agent?.spec.scale === "onDemand") continue;
+    const w = wantCount.get(agentName) ?? 0;
+    const h = haveCount.get(agentName) ?? 0;
     if (w !== h) {
       findings.push({
         kind: "replica",
-        agent,
-        detail: `agent ${agent}: live=${h} desired=${w}`,
+        agent: agentName,
+        detail: `agent ${agentName}: live=${h} desired=${w}`,
       });
     }
   }

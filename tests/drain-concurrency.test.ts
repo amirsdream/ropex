@@ -28,6 +28,7 @@ kind: Agent
 metadata:
   name: drainbot
 spec:
+  scale: static
   replicas: 2
   harness:
     profile: minimal

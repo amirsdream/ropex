@@ -17,6 +17,7 @@ kind: Agent
 metadata:
   name: triage
 spec:
+  scale: static
   replicas: 2
   harness:
     profile: minimal
@@ -34,6 +35,7 @@ kind: Fleet
 metadata:
   name: factory
 spec:
+  scale: static
   replicas: 4
   template:
     spec:

@@ -5,7 +5,7 @@ This repo is a GitOps control plane for agent fleets.
 ## Core rules
 
 - Desired state lives in `fleets/**/*.yaml` as agent/fleet **definitions** + policy caps — not warm replica inventory.
-- Default capacity model is **on-demand**: admit → spawn under `maxConcurrent` ∩ `Policy.maxReplicas` → run → destroy (`idleTTLMs: 0`). Use `scale: static` + `replicas` only when you explicitly want a standing pool.
+- **Default scale is on-demand:** admit → spawn under `maxConcurrent` ∩ `Policy.maxReplicas` → run → destroy (`idleTTLMs: 0`). Opt into standing pools only with `scale: static`.
 - The controller reconciles definitions; the queue spawns ephemeral workers. Do not hard-code replica lists.
 - Memory and skills outlive workers: write to agent/fleet/cluster scopes (`src/memory.ts`, `src/gitmemory.ts`, skill registry). Worker-local facts are promoted on destroy.
 - Hermes plans (`src/hermes.ts`). DeepSeek-style harness executes via `bootDsh` (`src/dsh.ts` → `src/harness.ts`, `src/plugins.ts`).

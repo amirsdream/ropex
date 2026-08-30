@@ -16,6 +16,7 @@ kind: Agent
 metadata:
   name: triage
 spec:
+  scale: static
   replicas: ${replicas}
   harness:
     profile: minimal

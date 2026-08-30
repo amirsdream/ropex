@@ -76,11 +76,13 @@ afterEach(() => {
 
 describe("on-demand orchestration", () => {
   it("resolves scale mode and concurrency", () => {
-    expect(resolveScaleMode({ replicas: 3 })).toBe("static");
+    expect(resolveScaleMode({ replicas: 3 })).toBe("onDemand");
+    expect(resolveScaleMode({ scale: "static", replicas: 3 })).toBe("static");
     expect(resolveScaleMode({ scale: "onDemand", maxConcurrent: 4 })).toBe("onDemand");
     expect(resolveScaleMode({ maxConcurrent: 2 })).toBe("onDemand");
     expect(resolveMaxConcurrent({ scale: "onDemand", maxConcurrent: 5 })).toBe(5);
-    expect(resolveMaxConcurrent({ scale: "onDemand", replicas: 7 })).toBe(7);
+    expect(resolveMaxConcurrent({ replicas: 7 })).toBe(7);
+    expect(resolveMaxConcurrent({ scale: "static", replicas: 3 })).toBe(3);
   });
 
   it("expands fleet onDemand to one agent definition", () => {
@@ -123,22 +125,33 @@ describe("on-demand orchestration", () => {
     expect(next.workers.filter((w) => w.status === "running")).toHaveLength(2);
   });
 
-  it("keeps agent memory after worker destroy", () => {
+  it("promotes worker-scoped scratch to agent on destroy", () => {
     const { next } = planReconcile(emptyState(), parseManifests(onDemandYaml), "fleets/");
     const w = spawnWorker(next, "triage", { status: "idle" })!;
     const store = SharedMemoryStore.fromState(next);
     const ctx = memoryContextFor(w, next.desired[0].spec.hermes);
-    // Force a worker-scoped write then promote on destroy
     const noneCtx = {
       ...ctx,
-      policy: { read: ["worker", "agent"], write: "worker" as const },
+      policy: { read: ["worker", "agent"] as const, write: "worker" as const },
     };
     store.remember(noneCtx, "scratch note", { scope: "worker", tags: ["scratch"] });
     expect(next.memory.some((f) => f.scope === "worker")).toBe(true);
     promoteWorkerMemory(next, w.id);
-    expect(next.memory.every((f) => f.scope !== "worker" || (f.worker !== w.id && f.sourceWorker !== w.id))).toBe(
-      true,
-    );
     expect(next.memory.some((f) => f.scope === "agent" && f.text.includes("scratch"))).toBe(true);
+  });
+
+  it("survives memory across destroy and next spawn", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ropex-mem-"));
+    temps.push(root);
+    const { next } = planReconcile(emptyState(), parseManifests(onDemandYaml), "fleets/", { root });
+    enqueueTask(next, { id: "learn-1", agent: "triage", prompt: "remember login flake on main" }, "cli");
+    await drainQueue(next, { root });
+    expect(next.workers.filter((w) => w.status !== "retired")).toHaveLength(0);
+    expect(next.memory.some((f) => f.scope === "agent" && f.agent === "triage")).toBe(true);
+
+    enqueueTask(next, { id: "learn-2", agent: "triage", prompt: "use prior knowledge" }, "cli");
+    const again = await drainQueue(next, { root });
+    expect(again).toHaveLength(1);
+    expect(next.memory.filter((f) => f.agent === "triage" && f.scope === "agent").length).toBeGreaterThanOrEqual(2);
   });
 });

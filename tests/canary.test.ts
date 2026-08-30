@@ -22,6 +22,7 @@ kind: Agent
 metadata:
   name: canary
 spec:
+  scale: static
   replicas: ${replicas}
   harness:
     profile: minimal

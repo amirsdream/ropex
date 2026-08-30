@@ -19,6 +19,7 @@ kind: Agent
 metadata:
   name: triage
 spec:
+  scale: static
   replicas: 2
   harness:
     profile: minimal
@@ -36,6 +37,7 @@ kind: Fleet
 metadata:
   name: factory
 spec:
+  scale: static
   replicas: 2
   template:
     spec:
@@ -148,6 +150,7 @@ describe("hermes + deepseek contracts", () => {
   it("Hermes brain exposes MemoryPort and plans with share hints", () => {
     const store = new SharedMemoryStore([]);
     const spec: AgentSpec = {
+      scale: "static" as const,
       replicas: 1,
       harness: { profile: "minimal", plugins: ["github"] },
       hermes: {

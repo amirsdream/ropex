@@ -32,6 +32,7 @@ kind: Agent
 metadata:
   name: alpha
 spec:
+  scale: static
   replicas: 1
   harness:
     profile: minimal
@@ -57,6 +58,7 @@ kind: Agent
 metadata:
   name: beta
 spec:
+  scale: static
   replicas: 2
   harness:
     profile: code

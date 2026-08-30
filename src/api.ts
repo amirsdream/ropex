@@ -133,7 +133,7 @@ export function buildControlPlaneView(state: ClusterState, root = process.cwd())
 
   return {
     brand: "ropex",
-    tagline: "One git sequence. Many workers in position.",
+    tagline: "Admit → spawn → run → destroy. Memory stays.",
     revision: state.revision,
     source: state.source,
     lastReconcile: state.lastReconcile,
@@ -510,6 +510,26 @@ function harnessSurface(agent: DesiredAgent): HarnessSurfaceView {
 
 function buildFleetViews(state: ClusterState): FleetView[] {
   const byFleet = new Map<string, FleetView>();
+  // Seed from desired definitions so on-demand agents appear with 0 live runners.
+  for (const a of state.desired ?? []) {
+    const name = a.derivedFrom?.fleet ?? `solo:${a.metadata.name}`;
+    const scale = a.spec.scale === "static" ? "static" : "onDemand";
+    const maxConcurrent =
+      scale === "onDemand" ? (a.spec.maxConcurrent ?? a.spec.replicas ?? 1) : a.spec.replicas;
+    const cur = byFleet.get(name) ?? {
+      name,
+      replicas: 0,
+      live: 0,
+      maxConcurrent: 0,
+      scale,
+      profile: a.spec.harness.profile,
+      memoryFacts: 0,
+    };
+    cur.maxConcurrent = (cur.maxConcurrent ?? 0) + maxConcurrent;
+    cur.scale = scale;
+    cur.profile = a.spec.harness.profile;
+    byFleet.set(name, cur);
+  }
   for (const w of state.workers.filter((x) => x.status !== "retired")) {
     const name = w.fleet ?? `solo:${w.agent}`;
     const cur = byFleet.get(name) ?? {
@@ -521,10 +541,13 @@ function buildFleetViews(state: ClusterState): FleetView[] {
     };
     cur.replicas += 1;
     cur.live += 1;
+    cur.profile = w.harness;
     byFleet.set(name, cur);
   }
   for (const f of byFleet.values()) {
-    f.memoryFacts = state.memory.filter((m) => m.fleet === f.name || (!m.fleet && f.name.startsWith("solo:"))).length;
+    f.memoryFacts = state.memory.filter(
+      (m) => m.fleet === f.name || (!m.fleet && f.name.startsWith("solo:")),
+    ).length;
   }
   return [...byFleet.values()].sort((a, b) => a.name.localeCompare(b.name));
 }

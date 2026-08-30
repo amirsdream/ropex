@@ -22,6 +22,7 @@ kind: Agent
 metadata:
   name: researcher
 spec:
+  scale: static
   replicas: 1
   harness:
     profile: minimal
@@ -36,6 +37,7 @@ kind: Agent
 metadata:
   name: synthesizer
 spec:
+  scale: static
   replicas: 1
   harness:
     profile: minimal

@@ -16,6 +16,7 @@ function builderDesired(): DesiredAgent {
     kind: "Agent",
     metadata: { name: "builder" },
     spec: {
+      scale: "static" as const,
       replicas: 1,
       harness: { profile: "code", plugins: ["github"] },
       hermes: { memory: "none", learning: false, skills: [] },
