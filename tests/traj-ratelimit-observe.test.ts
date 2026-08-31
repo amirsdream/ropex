@@ -92,11 +92,8 @@ describe("trajectory + rate-limit observability", () => {
 
   it("exposes ratelimits API route and UI sections", () => {
     expect(API_ROUTES.ratelimits).toBe("/api/v1/ratelimits");
-    const html = readFileSync(join(process.cwd(), "src/ui/index.html"), "utf8");
-    const js = readFileSync(join(process.cwd(), "src/ui/app.js"), "utf8");
-    expect(html).toContain('id="trajectories"');
-    expect(html).toContain('id="ratelimits"');
-    expect(js).toContain("renderTrajectories");
-    expect(js).toContain("renderRateLimits");
+    const observe = readFileSync(join(process.cwd(), "web/src/pages/Observe.tsx"), "utf8");
+    expect(observe).toContain("Trajectories");
+    expect(observe).toContain("Rate limits");
   });
 });

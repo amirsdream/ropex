@@ -128,10 +128,11 @@ describe("operator queue + policy UI actions", () => {
   });
 
   it("UI wires pause/retry/policy simulate controls", () => {
-    const js = readFileSync(join(process.cwd(), "src/ui/app.js"), "utf8");
-    expect(js).toContain("queueAction");
-    expect(js).toContain("runPolicySim");
-    expect(js).toContain("retry all");
+    const api = readFileSync(join(process.cwd(), "web/src/lib/api.ts"), "utf8");
+    const queue = readFileSync(join(process.cwd(), "web/src/pages/Queue.tsx"), "utf8");
+    expect(api).toContain("queue:");
+    expect(api).toContain("policySim");
+    expect(queue).toContain("retry all");
     const readme = readFileSync(join(process.cwd(), "README.md"), "utf8");
     expect(readme).toContain("HMAC + rate limit");
     expect(readme).toContain("bounded drain");
