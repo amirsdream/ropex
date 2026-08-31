@@ -10,8 +10,10 @@
     ".": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc && mkdir -p dist/ui && cp -r src/ui/. dist/ui/",
+    "build": "tsc && npm run build:web",
+    "build:web": "npm --prefix web install --no-fund --no-audit && npm --prefix web run build",
     "dev": "tsx src/cli.ts",
+    "web:dev": "npm --prefix web run dev",
     "up": "bash scripts/stack-up.sh",
     "down": "bash scripts/stack-down.sh",
     "test": "vitest run",

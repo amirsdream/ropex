@@ -121,10 +121,10 @@ describe("drain concurrency preference", () => {
   });
 
   it("UI includes drain controls", () => {
-    const html = readFileSync(join(process.cwd(), "src/ui/index.html"), "utf8");
-    const js = readFileSync(join(process.cwd(), "src/ui/app.js"), "utf8");
-    expect(html).toContain("drain-controls");
-    expect(js).toContain("runDrain");
-    expect(js).toContain("preferDrain");
+    const api = readFileSync(join(process.cwd(), "web/src/lib/api.ts"), "utf8");
+    const queue = readFileSync(join(process.cwd(), "web/src/pages/Queue.tsx"), "utf8");
+    expect(queue).toContain("DrainControls");
+    expect(api).toContain("runDrain");
+    expect(api).toContain("preferDrain");
   });
 });

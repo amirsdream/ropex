@@ -68,20 +68,40 @@ import type { ClusterState, DesiredAgent, TaskDeliveryMode } from "./types.js";
 const UI_DIR = resolveUiDir();
 
 function resolveUiDir(): string {
-  const beside = join(dirname(fileURLToPath(import.meta.url)), "ui");
-  try {
-    readFileSync(join(beside, "index.html"));
-    return beside;
-  } catch {
-    return join(process.cwd(), "src", "ui");
+  const here = dirname(fileURLToPath(import.meta.url));
+  // The UI is a Vite SPA built into dist/ui. Prefer the built output next to the
+  // running module (prod: dist/api.js → dist/ui), then the repo build dir (dev:
+  // `ropex ui` via tsx → <cwd>/dist/ui), then the legacy static ui.
+  const candidates = [
+    join(here, "ui"),
+    join(process.cwd(), "dist", "ui"),
+    join(process.cwd(), "src", "ui"),
+  ];
+  for (const dir of candidates) {
+    try {
+      readFileSync(join(dir, "index.html"));
+      return dir;
+    } catch {
+      /* try next */
+    }
   }
+  return candidates[0];
 }
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
   ".svg": "image/svg+xml",
   ".json": "application/json",
+  ".map": "application/json",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".webp": "image/webp",
+  ".ico": "image/x-icon",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
 };
 
 export function buildControlPlaneView(state: ClusterState, root = process.cwd()): ControlPlaneView {

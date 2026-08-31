@@ -130,12 +130,11 @@ describe("skills promote + canary + budget alerts", () => {
   });
 
   it("UI wires canary and skills promote", () => {
-    const html = readFileSync(join(process.cwd(), "src/ui/index.html"), "utf8");
-    const js = readFileSync(join(process.cwd(), "src/ui/app.js"), "utf8");
-    expect(html).toContain('id="canary"');
-    expect(html).toContain('id="skills"');
-    expect(js).toContain("renderCanary");
-    expect(js).toContain("promoteSkillUi");
+    const fleet = readFileSync(join(process.cwd(), "web/src/pages/Fleet.tsx"), "utf8");
+    const api = readFileSync(join(process.cwd(), "web/src/lib/api.ts"), "utf8");
+    expect(fleet).toContain("Canary");
+    expect(fleet).toContain("Skills");
+    expect(api).toContain("promoteSkill");
     expect(API_ROUTES.canary).toBe("/api/v1/canary");
   });
 });

@@ -98,13 +98,10 @@ describe("hygiene + pool heatmap", () => {
   });
 
   it("UI includes heatmap and hygiene controls", () => {
-    const html = readFileSync(join(process.cwd(), "src/ui/index.html"), "utf8");
-    const js = readFileSync(join(process.cwd(), "src/ui/app.js"), "utf8");
-    const css = readFileSync(join(process.cwd(), "src/ui/styles.css"), "utf8");
-    expect(html).toContain("pool-heatmap");
-    expect(html).toContain("queue-depth");
-    expect(js).toContain("renderHygiene");
-    expect(js).toContain("runHygieneAction");
-    expect(css).toContain("heat-cell");
+    const fleet = readFileSync(join(process.cwd(), "web/src/pages/Fleet.tsx"), "utf8");
+    const api = readFileSync(join(process.cwd(), "web/src/lib/api.ts"), "utf8");
+    expect(fleet).toContain("Hygiene");
+    expect(fleet).toContain("heat-cell");
+    expect(api).toContain("hygiene");
   });
 });

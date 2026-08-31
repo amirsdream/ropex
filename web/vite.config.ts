@@ -1,0 +1,19 @@
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+
+// Build the SPA straight into dist/ui so the Ropex control-plane server
+// (resolveUiDir) serves it in both dev (`ropex ui`) and prod.
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  base: "/",
+  build: {
+    outDir: "../dist/ui",
+    emptyOutDir: true,
+  },
+  server: {
+    proxy: {
+      "/api": "http://127.0.0.1:7780",
+    },
+  },
+});
