@@ -53,7 +53,8 @@ npm test
 # End-to-end sandbox (no network, no API keys)
 npx tsx src/cli.ts demo --root /tmp/ropex-demo
 
-# Load example fleet + control-plane UI
+# Load example fleet + control-plane UI (build the React SPA → dist/ui first)
+npm run build:web                        # Vite build of web/ → dist/ui
 npx tsx src/cli.ts apply fleets/examples/github-control-plane.yaml
 npx tsx src/cli.ts ui                    # http://127.0.0.1:7780
 
@@ -106,7 +107,7 @@ npx tsx src/cli.ts health
 | [**Operations**](./docs/operations.md) | One-click `npm run up/down`, Podman Compose, stack API |
 | [**System architecture (visual)**](./docs/system-architecture.md) | Diagrams — layers, ingress, workflow, state, module map |
 | [**Architecture**](./docs/architecture.md) | Kubernetes mapping, image digests, queue, workflow, executor layer |
-| [**Control-plane UI**](./docs/control-plane-ui.md) | Teal dashboard, Start/Stop stack, pipeline SSE |
+| [**Control-plane UI**](./docs/control-plane-ui.md) | React SPA — live Grafana-style monitoring, Hermes/DeepSeek console, pipeline SSE |
 | [**HTTP API**](./docs/api.md) | All `/api/v1/*` routes |
 | [**Executor API**](./docs/executor-api.md) | Pipelines, SSE events, Magentic contract |
 | [**Forge-neutral tasks**](./docs/forge-neutral.md) | Task YAML without GitHub |
@@ -195,7 +196,9 @@ Flow: submit prompt → plan stages → scoped sequential drain → stream `{ ty
 
 See [executor-api.md](./docs/executor-api.md) and [integrations/magentic/README.md](./integrations/magentic/README.md).
 
-The built-in **control-plane UI** also submits pipelines, streams live stage logs, and drill-down into trajectories and agent surfaces — see [control-plane-ui.md](./docs/control-plane-ui.md).
+The built-in **control-plane UI** — a Vite + React SPA — adds Grafana-style live monitoring, an interactive Hermes ↔ DeepSeek console that streams runs over SSE, and drill-down into trajectories and agent surfaces. See [control-plane-ui.md](./docs/control-plane-ui.md).
+
+![Ropex control-plane dashboard — live monitoring](./docs/img/dashboard-monitor.png)
 
 ## GitHub as optional agent OS
 
@@ -220,11 +223,11 @@ src/
   scheduler.ts    Queue drain + leases
   runtime.ts      Per-task workflow
   executor.ts     Pipeline API + SSE
-  api.ts          HTTP control plane
-  ui/             Control-plane dashboard (teal live theme)
+  api.ts          HTTP control plane + serves built SPA
   hermes.ts       Brain contract
   dsh.ts          Harness adapter
   contracts.ts    Shared types for CLI/API/UI
+web/              Control-plane dashboard — Vite + React + TS SPA (→ dist/ui)
 tests/            Network-free vitest suite
 docs/             Architecture, API, wiring guides
 integrations/     Magentic adapter notes
@@ -243,7 +246,7 @@ integrations/     Magentic adapter notes
 | Policy admission, budget, fan-out | yes |
 | Trajectories, skills registry, audit trail | yes |
 | Health probes + backlog SLO | yes |
-| Control-plane UI + `/api/v1/view` | yes |
+| Control-plane UI (React SPA: monitoring + Hermes/DeepSeek console) | yes |
 | **One-click stack** (`npm run up`, `ropex up/down`, UI Start/Stop) | yes |
 | **Podman Compose** deploy (`Containerfile`, `podman-compose.yml`) | yes |
 | **Executor API** (pipelines, SSE, scoped drain) | yes |

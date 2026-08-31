@@ -38,7 +38,7 @@ flowchart TB
     TASKS["tasks/*.yaml"]
     MEMORY["memory/*.yaml"]
     SRC["src/ — TypeScript control plane"]
-    UI["src/ui/ — dashboard"]
+    UI["web/ — React SPA dashboard (→ dist/ui)"]
     TESTS["tests/ — vitest suite"]
     DOCS["docs/ — guides"]
     INTEG["integrations/magentic/"]
@@ -60,7 +60,7 @@ flowchart TB
 | `tasks/*.yaml` | Forge-neutral work inbox |
 | `memory/*.yaml` | Git-declared shared memory facts |
 | `src/` | Control plane implementation (~58 modules) |
-| `src/ui/` | Static control-plane dashboard (`ropex ui`) |
+| `web/` | Control-plane dashboard — Vite + React + TS SPA, built to `dist/ui` and served by `ropex ui` |
 | `.ropex/state.json` | Local cluster state (etcd stand-in) |
 | `integrations/magentic/` | External UI adapter notes |
 
@@ -93,7 +93,7 @@ flowchart TB
     SCALE["spawn / destroy<br/>scale.ts"]
     EXEC["pipelines + SSE<br/>executor.ts · pipeline.ts"]
     TICK["heartbeat<br/>tick.ts"]
-    API["HTTP + UI<br/>api.ts · ui/"]
+    API["HTTP + UI<br/>api.ts · web/ SPA"]
     STATE[".ropex/state.json"]
   end
 
@@ -172,7 +172,7 @@ flowchart TB
   subgraph L5["Layer 5 — Surfaces"]
     CLI["cli.ts"]
     API["api.ts"]
-    UI["ui/"]
+    UI["web/ (React SPA)"]
     DEMO["demo.ts"]
   end
 
