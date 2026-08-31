@@ -70,9 +70,12 @@ export function TimeSeries({
   height?: number;
   stack?: boolean;
 }) {
+  // Recharts mutates the data array/items internally; hand it fresh, extensible
+  // copies so it never trips over shared/sealed objects (React 19 + Recharts 3).
+  const rows = data.map((d) => ({ ...d }));
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={data} margin={{ top: 8, right: 10, bottom: 0, left: -18 }}>
+      <AreaChart data={rows} margin={{ top: 8, right: 10, bottom: 0, left: -18 }}>
         <defs>
           {series.map((s) => (
             <linearGradient key={String(s.key)} id={`grad-${String(s.key)}`} x1="0" y1="0" x2="0" y2="1">

@@ -1,6 +1,7 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sidebar, Topbar, type TabId } from "./components/Shell";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useView, useHistory } from "./hooks/useView";
 import { api } from "./lib/api";
 import { Overview } from "./pages/Overview";
@@ -13,9 +14,27 @@ import { cn } from "./lib/cn";
 
 type Toast = { id: number; text: string; tone: "ok" | "err" };
 
+const TABS: TabId[] = ["overview", "monitor", "services", "fleet", "queue", "observe"];
+
+function tabFromHash(): TabId {
+  const h = window.location.hash.replace(/^#\/?/, "") as TabId;
+  return TABS.includes(h) ? h : "overview";
+}
+
 export default function App() {
-  const [tab, setTab] = useState<TabId>("overview");
+  const [tab, setTabState] = useState<TabId>(tabFromHash);
   const [toasts, setToasts] = useState<Toast[]>([]);
+
+  const setTab = useCallback((t: TabId) => {
+    setTabState(t);
+    if (window.location.hash.replace(/^#\/?/, "") !== t) window.location.hash = t;
+  }, []);
+
+  useEffect(() => {
+    const onHash = () => setTabState(tabFromHash());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
   const q = useView();
   const history = useHistory();
   const view = q.data;
@@ -66,14 +85,14 @@ export default function App() {
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-teal-500/30 border-t-teal-400" />
             </div>
           ) : (
-            <>
+            <ErrorBoundary key={tab}>
               {tab === "overview" && <Overview view={view} history={history} />}
               {tab === "monitor" && <Monitor view={view} history={history} />}
               {tab === "services" && <Services view={view} />}
               {tab === "fleet" && <Fleet view={view} />}
               {tab === "queue" && <Queue view={view} />}
               {tab === "observe" && <Observe view={view} />}
-            </>
+            </ErrorBoundary>
           )}
         </main>
       </div>
