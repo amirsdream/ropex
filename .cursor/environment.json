@@ -1,7 +1,7 @@
 {
   "name": "Ropex control plane",
-  "install": "npm install",
-  "start": "npm run build",
+  "install": "npm install && npm run build",
+  "start": "npm run build:web",
   "ports": [
     {
       "name": "Ropex UI",

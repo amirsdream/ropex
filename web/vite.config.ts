@@ -10,6 +10,16 @@ export default defineConfig({
   build: {
     outDir: "../dist/ui",
     emptyOutDir: true,
+    chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (/node_modules[\\/](recharts|d3-|d3|victory-vendor|internmap)/.test(id)) return "charts";
+          if (/node_modules[\\/]@tanstack[\\/]/.test(id)) return "query";
+          if (/node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return "react";
+        },
+      },
+    },
   },
   server: {
     proxy: {
