@@ -99,7 +99,7 @@ flowchart TB
   subgraph L5["Layer 5 — Surfaces"]
     CLI["cli.ts"]
     API["api.ts"]
-    UI["src/ui/"]
+    UI["web/ (React SPA → dist/ui)"]
   end
 
   YAML --> CTRL --> Q
@@ -245,7 +245,7 @@ flowchart TB
   W0 -.->|no| F2
 ```
 
-Control-plane UI: `ropex ui` serves `src/ui/` and `/api/v1/view` (Hermes + DeepSeek surfaces, memory rope, workers, **pipelines**, trajectories). See [control-plane-ui.md](./control-plane-ui.md).
+Control-plane UI: `ropex ui` serves the built React SPA (`dist/ui`, source in `web/`) and `/api/v1/view` — live Grafana-style monitoring, a streaming Hermes ↔ DeepSeek console, workers, pipelines, and trajectories. See [control-plane-ui.md](./control-plane-ui.md).
 
 ## Executor API (multi-stage pipelines)
 
@@ -480,7 +480,7 @@ Shipped end-to-end offline:
 | Memory / skills | scoped `SharedMemoryStore`, versioned `skillRegistry` |
 | Observability | journal, trajectories, metrics, health/SLO, audit |
 | Stack / deploy | `stack.ts`, `Containerfile`, `podman-compose.yml`, `scripts/stack-*.sh` |
-| Surfaces | CLI (`up`/`down`), `/api/v1/*`, `ropex ui`, **Start/Stop** buttons, pipeline SSE |
+| Surfaces | CLI (`up`/`down`), `/api/v1/*`, `ropex ui` (React SPA: monitoring + Hermes/DeepSeek console), pipeline SSE |
 
 Optional live CLI backends: `@deepseek-ai/dsh`, `hermes-agent` process — see [hermes.md](./hermes.md) and [dsh.md](./dsh.md).
 

@@ -2,6 +2,18 @@
 
 Nightly capture. Newest first. Each entry should be one shippable idea, not a slogan.
 
+## React SPA dashboard — live monitoring + Hermes/DeepSeek console
+
+Replace the vanilla `src/ui` with a modern single-page app in `web/` (Vite + React 19 + TypeScript, Tailwind v4, Recharts, TanStack Query, lucide-react), built to `dist/ui` and served by `ropex ui`. Adds a Grafana-style **Monitor** view (radial gauges + live time-series sampled from `/api/v1/view`), a **Services** view with an interactive console that streams a run stage-by-stage over SSE (Hermes plan → DeepSeek execute → deliver → result), and an **Overview** whose per-task workflow flow is rendered from the real `view.workflow` (ordered stages, phase bands, owners, and live per-stage run counts). Deep-linkable tabs, error boundary, code-split bundle.
+
+**Shipped (2026-08-31):** `web/` SPA, `resolveUiDir` serves `dist/ui`, `build:web`, retargeted UI tests; docs + screenshots refreshed.
+
+## On-demand worker ids stay unique (health 503 fix)
+
+`nextReplicaIndex` reused a retired replica slot while the retired record still sat in `state.workers`, creating duplicate ids so find-by-id resolved to the stale record and orphaned the live worker in `running` — tripping the health probe. `spawnWorker` now drops the stale retired record on reuse; `drainQueue` prefers the live worker.
+
+**Shipped (2026-08-31):** `spawnWorker` dedup, scheduler live-worker preference, `tests/ondemand-orchestration.test.ts` regression.
+
 ## Explicit start → transform → result spine
 
 Make every run's start, execution, and result points first-class instead of implicit. `workflow.ts` tags each of the five stages with a `WorkflowPhase` (`intake`/`execute`/`result`) and `workflowPhases()` rolls them onto Start/Execute/Result. The executor `PipelineRun` mirrors the spine with typed boundaries — `input` (Start, captured on submit), `stages` (Transform), and `result` (Result, written once on terminal) — and `pipelinePhase(run)` reports the live phase. View model, README, architecture, executor-api, control-plane-ui, and Magentic docs all surface the phase.

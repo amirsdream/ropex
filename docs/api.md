@@ -2,7 +2,7 @@
 
 Stable routes from `API_ROUTES` in `src/contracts.ts`. All JSON unless noted. The local control plane has no auth — add authentication before exposing beyond localhost.
 
-Serve everything with `ropex ui` or `npm run up` (teal dashboard + API on one port, default **7780**).
+Serve everything with `ropex ui` or `npm run up` (React SPA dashboard + API on one port, default **7780**).
 
 ## Core routes
 

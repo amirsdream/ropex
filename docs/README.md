@@ -9,7 +9,7 @@ GitOps control plane for agent fleets — **Hermes plans, DeepSeek executes**, g
 | [**Operations**](./operations.md) | **One-click `npm run up/down`**, Podman Compose, stack API |
 | [**System architecture (visual)**](./system-architecture.md) | Diagrams — layers, ingress, workflow, state, module map |
 | [Architecture](./architecture.md) | Control plane vs data plane, immutable workers, the start → transform → result spine, queue, executor |
-| [Control-plane UI](./control-plane-ui.md) | Teal dashboard, Start/Stop stack, pipelines, live SSE |
+| [Control-plane UI](./control-plane-ui.md) | React SPA — live monitoring, Hermes/DeepSeek console, pipelines, live SSE |
 | [HTTP API (v1)](./api.md) | All `/api/v1/*` routes including `/stack` |
 | [Executor API](./executor-api.md) | Multi-stage pipelines, SSE, Magentic integration |
 | [Forge-neutral tasks](./forge-neutral.md) | Task YAML inbox without GitHub |
@@ -58,7 +58,7 @@ npx tsx src/cli.ts trajectories --jsonl
 | `src/runtime.ts` | Per-task Hermes → DeepSeek workflow (always coupled) |
 | `src/executor.ts` | Multi-stage pipeline API + SSE |
 | `src/api.ts` | HTTP control plane + UI view model |
-| `src/ui/` | Control-plane dashboard (teal live theme) |
+| `web/` | Control-plane dashboard — Vite + React + TS SPA (built to `dist/ui`) |
 | `Containerfile` / `podman-compose.yml` | Container deploy |
 | `scripts/stack-up.sh` / `stack-down.sh` | `npm run up` / `down` |
 | `integrations/magentic/` | Magentic adapter notes |

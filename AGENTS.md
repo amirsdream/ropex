@@ -39,7 +39,7 @@ See [docs/operations.md](./docs/operations.md).
 | Stack / deploy | `stack.ts`, `Containerfile`, `podman-compose.yml`, `scripts/stack-*.sh` |
 | Ingress / audit | `webhook.ts`, `ratelimit.ts`, `journal.ts`, `deliver.ts`, `connectors.ts`, `trajectory.ts`, `metrics.ts`, `health.ts`, `audit.ts` |
 | Lifecycle | `lifecycle.ts` (cordon/evict), `hygiene.ts`, `chaos.ts` |
-| Surfaces | `api.ts`, `ui/` (control-plane + deep-dive drawer), `cli.ts`, `demo.ts` |
+| Surfaces | `api.ts` (serves the SPA), `web/` (Vite + React + TS dashboard → `dist/ui`), `cli.ts`, `demo.ts` |
 
 ## Documentation
 
