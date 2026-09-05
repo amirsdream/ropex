@@ -105,7 +105,7 @@ export { rememberAffinity, lookupAffinity, pruneAffinity, affinityKey } from "./
 export type { AffinityBinding } from "./types.js";
 export { watchOnce, watchLoop, watchDeclaredRepos, watchReposLoop, parseInterval, readManifestTree } from "./watch.js";
 export { resolveClonedRepoManifestPath } from "./gitrepo.js";
-export { bootDsh, profilePack, DSH_PROFILE_PACKS, liveDshScaffold, resolveDshBackend, dshPackageInstalled, resolveDshBin, loadLiveProfileMeta, runHeadlessDsh, resolveLlmApiKey, DEFAULT_HARNESS_MODEL } from "./dsh.js";
+export { bootDsh, profilePack, DSH_PROFILE_PACKS, liveDshScaffold, resolveDshBackend, dshPackageInstalled, resolveDshBin, resolveDshHome, ensureOpenAiDshSettings, nodeSupportsLiveDsh, LIVE_DSH_MIN_NODE, loadLiveProfileMeta, runHeadlessDsh, resolveLlmApiKey, DEFAULT_HARNESS_MODEL } from "./dsh.js";
 export type { LiveDshScaffold, DshAdapter, DshBackend, LlmApiKey, LlmApiKeySource } from "./dsh.js";
 export { recordDelivery, deliveriesFor, compactJournal, replayDelivery, JOURNAL_DEFAULT_KEEP } from "./journal.js";
 export { registerSkill, shareSkill, promoteSkill, skillVersions, skillsForAgent, latestSkill, skillsCatalog } from "./skills.js";

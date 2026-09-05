@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { applyManifestText, loadState, saveState } from "../src/controller.ts";
 import { cloneGitRepo } from "../src/clone.ts";
-import { dshPackageInstalled, liveDshScaffold, resolveDshBackend } from "../src/dsh.ts";
+import { dshPackageInstalled, liveDshScaffold, resolveDshBackend, resolveDshBin } from "../src/dsh.ts";
 import { expandWorkers } from "../src/runtime.ts";
 import { enqueueTask } from "../src/queue.ts";
 import { drainQueue } from "../src/scheduler.ts";
@@ -35,9 +35,18 @@ spec:
 
 describe("finish gaps", () => {
   it("resolveDshBackend defaults to embedded", () => {
-    expect(resolveDshBackend()).toBe("embedded");
-    expect(dshPackageInstalled()).toBe(false);
-    expect(liveDshScaffold().liveReady).toBe(false);
+    const prev = process.env.ROPEX_DSH_BACKEND;
+    delete process.env.ROPEX_DSH_BACKEND;
+    try {
+      expect(resolveDshBackend()).toBe("embedded");
+      // Detection must track the CLI entry (ESM-only package has no bare main).
+      expect(dshPackageInstalled()).toBe(Boolean(resolveDshBin()));
+      const scaffold = liveDshScaffold();
+      expect(scaffold.liveReady).toBe(scaffold.packageInstalled && scaffold.apiKeyPresent);
+    } finally {
+      if (prev !== undefined) process.env.ROPEX_DSH_BACKEND = prev;
+      else delete process.env.ROPEX_DSH_BACKEND;
+    }
   });
 
   it("remote clone plans git-remote when --remote enabled (vitest skips exec)", () => {
@@ -62,22 +71,34 @@ spec:
   });
 
   it("auto-exports memory after task when exportMemory is true", async () => {
-    const root = mkdtempSync(join(tmpdir(), "ropex-export-"));
-    temps.push(root);
-    applyManifestText(root, agentExportYaml, "agent");
-    const state = loadState(root);
-    const worker = expandWorkers(state.desired[0], { root })[0];
-    state.workers = [worker];
-    enqueueTask(state, { id: "t-auto", agent: "docbot", prompt: "remember this" }, "cli");
-    saveState(root, state);
+    const prevDsh = process.env.ROPEX_DSH_BACKEND;
+    const prevHermes = process.env.ROPEX_HERMES_BACKEND;
+    // Keep this path on embedded so the test stays network-free.
+    process.env.ROPEX_DSH_BACKEND = "embedded";
+    process.env.ROPEX_HERMES_BACKEND = "embedded";
+    try {
+      const root = mkdtempSync(join(tmpdir(), "ropex-export-"));
+      temps.push(root);
+      applyManifestText(root, agentExportYaml, "agent");
+      const state = loadState(root);
+      const worker = expandWorkers(state.desired[0], { root })[0];
+      state.workers = [worker];
+      enqueueTask(state, { id: "t-auto", agent: "docbot", prompt: "remember this" }, "cli");
+      saveState(root, state);
 
-    await drainQueue(state, { root, limit: 1 });
-    saveState(root, state);
+      await drainQueue(state, { root, limit: 1 });
+      saveState(root, state);
 
-    const after = loadState(root);
-    expect(after.memory.some((f) => f.manifestPath?.includes(join(root, "memory")))).toBe(true);
-    const exported = after.memory.find((f) => f.manifestPath);
-    expect(exported).toBeTruthy();
-    expect(readFileSync(exported!.manifestPath!, "utf8")).toMatch(/remember this/);
+      const after = loadState(root);
+      expect(after.memory.some((f) => f.manifestPath?.includes(join(root, "memory")))).toBe(true);
+      const exported = after.memory.find((f) => f.manifestPath);
+      expect(exported).toBeTruthy();
+      expect(readFileSync(exported!.manifestPath!, "utf8")).toMatch(/remember this/);
+    } finally {
+      if (prevDsh !== undefined) process.env.ROPEX_DSH_BACKEND = prevDsh;
+      else delete process.env.ROPEX_DSH_BACKEND;
+      if (prevHermes !== undefined) process.env.ROPEX_HERMES_BACKEND = prevHermes;
+      else delete process.env.ROPEX_HERMES_BACKEND;
+    }
   });
 });

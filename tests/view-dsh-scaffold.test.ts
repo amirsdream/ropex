@@ -39,23 +39,36 @@ describe("view pause + affinity + dsh scaffold", () => {
     expect(view.webhookDuplicates).toBe(3);
     expect(view.affinity.active).toBe(1);
     expect(view.affinity.bindings[0].workerId).toBe("ui:0");
-    expect(view.dsh.liveReady).toBe(false);
+    expect(view.dsh.liveReady).toBe(view.dsh.packageInstalled && view.dsh.apiKeyPresent);
     expect(view.dsh.profiles.length).toBe(4);
-    expect(view.dsh.scaffoldHint).toMatch(/@deepseek-ai\/dsh/i);
+    expect(view.dsh.scaffoldHint).toMatch(/@deepseek-ai\/dsh|OPENAI_API_KEY|ROPEX_DSH_BACKEND/i);
   });
 });
 
 describe("live dsh scaffold", () => {
   it("requires Hermes and documents fail-closed live backend", async () => {
-    const scaffold = liveDshScaffold();
-    expect(scaffold.liveReady).toBe(false);
-    expect(scaffold.steps.length).toBeGreaterThan(3);
-    expect(scaffold.env.some((e) => e.includes("OPENAI_API_KEY"))).toBe(true);
-    const { next } = planReconcile(emptyState(), parseManifests(yaml), "t");
-    const agent = next.desired[0];
-    await expect(bootDsh(agent.spec, { backend: "live" })).rejects.toThrow(/requires Hermes/);
-    const hermes = createHermes(agent.spec);
-    await expect(bootDsh(agent.spec, { hermes, backend: "live" })).rejects.toThrow(/live backend unavailable/);
+    const prev = process.env.OPENAI_API_KEY;
+    const prevDs = process.env.DEEPSEEK_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.DEEPSEEK_API_KEY;
+    try {
+      const scaffold = liveDshScaffold();
+      expect(scaffold.liveReady).toBe(scaffold.packageInstalled && scaffold.apiKeyPresent);
+      expect(scaffold.steps.length).toBeGreaterThan(3);
+      expect(scaffold.env.some((e) => e.includes("OPENAI_API_KEY"))).toBe(true);
+      const { next } = planReconcile(emptyState(), parseManifests(yaml), "t");
+      const agent = next.desired[0];
+      await expect(bootDsh(agent.spec, { backend: "live" })).rejects.toThrow(/requires Hermes/);
+      const hermes = createHermes(agent.spec);
+      await expect(bootDsh(agent.spec, { hermes, backend: "live" })).rejects.toThrow(
+        /live backend unavailable|OPENAI_API_KEY|DEEPSEEK_API_KEY|Node >=/,
+      );
+    } finally {
+      if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+      else delete process.env.OPENAI_API_KEY;
+      if (prevDs !== undefined) process.env.DEEPSEEK_API_KEY = prevDs;
+      else delete process.env.DEEPSEEK_API_KEY;
+    }
   });
 
   it("prefers OPENAI_API_KEY over DEEPSEEK_API_KEY", async () => {

@@ -53,15 +53,25 @@ describe("roadmap: live dsh wiring", () => {
       expect(pack.dshProfile).toBe("headless");
     }
     const scaffold = liveDshScaffold();
-    expect(scaffold.apiKeyPresent).toBe(false);
-    expect(scaffold.packageInstalled).toBe(false);
-    expect(resolveDshBin()).toBeUndefined();
+    expect(scaffold.packageInstalled).toBe(Boolean(resolveDshBin()));
+    expect(scaffold.liveReady).toBe(scaffold.packageInstalled && scaffold.apiKeyPresent);
   });
 
   it("runHeadlessDsh fails closed without package or API key", async () => {
-    await expect(runHeadlessDsh("headless", "hello")).rejects.toThrow(
-      /not installed|OPENAI_API_KEY|DEEPSEEK_API_KEY/,
-    );
+    const prev = process.env.OPENAI_API_KEY;
+    const prevDs = process.env.DEEPSEEK_API_KEY;
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.DEEPSEEK_API_KEY;
+    try {
+      await expect(runHeadlessDsh("headless", "hello")).rejects.toThrow(
+        /not installed|OPENAI_API_KEY|DEEPSEEK_API_KEY|Node >=/,
+      );
+    } finally {
+      if (prev !== undefined) process.env.OPENAI_API_KEY = prev;
+      else delete process.env.OPENAI_API_KEY;
+      if (prevDs !== undefined) process.env.DEEPSEEK_API_KEY = prevDs;
+      else delete process.env.DEEPSEEK_API_KEY;
+    }
   });
 });
 

@@ -1126,8 +1126,7 @@ async function main(argv: string[]): Promise<number> {
       const serve = rest.includes("--serve");
       const noTick = rest.includes("--no-tick");
       const manifest =
-        positional(rest.filter((a) => a !== "--serve" && a !== "--no-tick"))[0] ??
-        DEFAULT_STACK_MANIFEST;
+        positional(rest, ["--serve", "--no-tick"])[0] ?? DEFAULT_STACK_MANIFEST;
       const result = await stackUp(root, state, { manifest, tick: !noTick, root });
       saveState(root, state);
       console.log(`stack ${result.stack.status}: ${result.stack.message}`);

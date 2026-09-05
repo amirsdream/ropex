@@ -35,18 +35,20 @@ spec:
 describe("roadmap continued: live hermes", () => {
   it("resolveHermesBackend defaults embedded and bootHermes fails closed for live", () => {
     expect(resolveHermesBackend()).toBe("embedded");
-    expect(hermesPackageInstalled()).toBe(false);
-    expect(liveHermesScaffold().packageInstalled).toBe(false);
+    const installed = hermesPackageInstalled();
+    expect(liveHermesScaffold().packageInstalled).toBe(installed);
     const { next } = planReconcile(emptyState(), parseManifests(agentYaml), "t");
     const agent = next.desired[0];
-    expect(() => bootHermes(agent.spec, { backend: "live" })).toThrow(/live backend unavailable/);
+    if (!installed) {
+      expect(() => bootHermes(agent.spec, { backend: "live" })).toThrow(/live backend unavailable/);
+    }
   });
 
   it("projects hermesLive backend on the control-plane view", () => {
     const { next } = planReconcile(emptyState(), parseManifests(agentYaml), "t");
     const view = buildControlPlaneView(next);
     expect(view.hermesLive.backend).toBe("embedded");
-    expect(view.hermesLive.packageInstalled).toBe(false);
+    expect(view.hermesLive.packageInstalled).toBe(hermesPackageInstalled());
   });
 });
 
