@@ -97,15 +97,16 @@ export async function stackUp(
     applyManifestText(root, readManifests(abs), abs);
     applied = true;
     const fresh = loadState(root);
-    const preserved = { ...stack };
+    // Keep the same stack object across reload so later status writes hit state.stack.
+    const stackRef = state.stack!;
     Object.assign(state, fresh);
-    state.stack = preserved;
+    state.stack = stackRef;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    stack.status = "down";
-    stack.message = `Apply failed: ${msg}`;
+    state.stack!.status = "down";
+    state.stack!.message = `Apply failed: ${msg}`;
     recordAudit(state, { kind: "info", message: `stack up failed: ${msg}` });
-    return { ok: false, stack, applied: false, tick: null };
+    return { ok: false, stack: state.stack!, applied: false, tick: null };
   }
 
   resumeQueue(state);
@@ -116,16 +117,16 @@ export async function stackUp(
     tick = await controlPlaneTick(root, state, { concurrency: 2, persist: false });
   }
 
-  stack.status = "up";
-  stack.updatedAt = nowIso();
-  stack.message = "Stack running — queue active, workers ready.";
+  state.stack!.status = "up";
+  state.stack!.updatedAt = nowIso();
+  state.stack!.message = "Stack running — queue active, workers ready.";
   recordAudit(state, {
     kind: "info",
     message: `stack up manifest=${manifest}`,
     meta: { applied, drained: tick?.drained.length ?? 0 },
   });
 
-  return { ok: true, stack, applied, tick };
+  return { ok: true, stack: state.stack!, applied, tick };
 }
 
 /**
