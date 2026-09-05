@@ -30,6 +30,10 @@ export OPENAI_API_KEY=sk-...          # preferred
 export ROPEX_DSH_BACKEND=live
 ```
 
+**Node version:** live `@deepseek-ai/dsh` needs **Node >= 22.19** (zstd APIs in `node:zlib`). `scripts/stack-up.sh` prefers nvm `v22.22.2` when present. On older Node, live mode fails closed — use `ROPEX_DSH_BACKEND=embedded` or upgrade.
+
+**OpenAI model routing:** when `OPENAI_API_KEY` is set, Ropex writes `~/.dsh/settings.yaml` (or `$DSH_HOME/settings.yaml`) so dsh's default model uses the OpenAI provider (`gpt-4o-mini`) instead of DeepSeek.
+
 ## Steps to wire live
 
 1. Install optional peer: `npm install @deepseek-ai/dsh` (never a hard CI dependency).

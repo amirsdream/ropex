@@ -10,6 +10,20 @@ elif command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1
   COMPOSE=(docker compose -f "$COMPOSE_FILE")
 else
   echo "→ no compose runtime — starting local stack (npm)"
+  # Live @deepseek-ai/dsh needs Node >=22.19 (zstd zlib APIs). Prefer nvm if present.
+  if [[ -z "${ROPEX_NODE:-}" ]]; then
+    for cand in \
+      "$HOME/.nvm/versions/node/v22.22.2/bin" \
+      "$HOME/.nvm/versions/node/v22.19.0/bin"; do
+      if [[ -x "$cand/node" ]]; then
+        export PATH="$cand:$PATH"
+        break
+      fi
+    done
+  else
+    export PATH="$ROPEX_NODE:$PATH"
+  fi
+  echo "→ node $(node -v)"
   npm run build --silent 2>/dev/null || true
   exec npx tsx src/cli.ts up fleets/examples/github-control-plane.yaml --serve --port "${ROPEX_PORT:-7780}"
 fi

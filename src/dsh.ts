@@ -5,7 +5,10 @@
  */
 
 import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { HermesPlan } from "./contracts.js";
 import { createHarness, loopModeFor, toolsFor, type HarnessLoop } from "./harness.js";
 import type { AgentSpec, HarnessProfile, TrajectoryStep } from "./types.js";
@@ -95,14 +98,14 @@ export function profilePack(profile: HarnessProfile): DshProfilePack {
   return DSH_PROFILE_PACKS[profile];
 }
 
-/** True when optional peer `@deepseek-ai/dsh` resolves (network-free check). */
+/**
+ * True when optional peer `@deepseek-ai/dsh` is on disk (network-free).
+ * The package is ESM-only with no `main`/`exports`, so bare
+ * `require.resolve("@deepseek-ai/dsh")` fails even when installed — detect via
+ * the CLI entry (or package.json) instead.
+ */
 export function dshPackageInstalled(): boolean {
-  try {
-    require.resolve("@deepseek-ai/dsh");
-    return true;
-  } catch {
-    return false;
-  }
+  return resolveDshBin() !== undefined;
 }
 
 /** Resolve backend from explicit opt, then ROPEX_DSH_BACKEND, else embedded. */
@@ -184,8 +187,71 @@ export function resolveDshBin(): string | undefined {
   try {
     return require.resolve("@deepseek-ai/dsh/lib/bin.js");
   } catch {
-    return undefined;
+    try {
+      // ESM-only package may lack exports; package.json still resolves when present.
+      const pkg = require.resolve("@deepseek-ai/dsh/package.json");
+      const bin = join(pkg, "..", "lib", "bin.js");
+      return existsSync(bin) ? bin : undefined;
+    } catch {
+      return undefined;
+    }
   }
+}
+
+/** Resolve DSH home (`$DSH_HOME` or `~/.dsh`). */
+export function resolveDshHome(env: NodeJS.ProcessEnv = process.env): string {
+  const fromEnv = env.DSH_HOME?.trim();
+  if (fromEnv) return fromEnv;
+  return join(homedir(), ".dsh");
+}
+
+/**
+ * Ensure `settings.yaml` routes the default model through OpenAI when using
+ * `OPENAI_API_KEY`. Idempotent — does not overwrite existing llm-pi-ai /
+ * agent-default-model sections.
+ */
+export function ensureOpenAiDshSettings(
+  env: NodeJS.ProcessEnv = process.env,
+): { path: string; wrote: boolean } {
+  const home = resolveDshHome(env);
+  const settingsPath = join(home, "settings.yaml");
+  mkdirSync(home, { recursive: true });
+  let existing = "";
+  try {
+    existing = readFileSync(settingsPath, "utf8");
+  } catch {
+    existing = "";
+  }
+  const hasPiAi = /(?:^|\n)llm-pi-ai\s*:/.test(existing);
+  const hasDefault = /(?:^|\n)agent-default-model\s*:/.test(existing);
+  if (hasPiAi && hasDefault) return { path: settingsPath, wrote: false };
+
+  const openaiBlock = `llm-pi-ai:
+  providers:
+    openai:
+      apiKeyEnv: OPENAI_API_KEY
+`;
+  const modelBlock = `agent-default-model:
+  provider: openai
+  model: gpt-4o-mini
+`;
+  const parts = [existing.trimEnd()];
+  if (!hasPiAi) parts.push(openaiBlock.trimEnd());
+  if (!hasDefault) parts.push(modelBlock.trimEnd());
+  writeFileSync(settingsPath, `${parts.filter(Boolean).join("\n\n")}\n`, { mode: 0o600 });
+  return { path: settingsPath, wrote: true };
+}
+
+/** Minimum Node major.minor required by live `@deepseek-ai/dsh` (zstd zlib APIs). */
+export const LIVE_DSH_MIN_NODE = "22.19.0";
+
+/** True when Node meets live dsh's floor (needs `node:zlib` zstd helpers). */
+export function nodeSupportsLiveDsh(version = process.versions.node): boolean {
+  const [maj, min] = version.split(".").map((n) => Number(n));
+  if (!Number.isFinite(maj) || !Number.isFinite(min)) return false;
+  if (maj > 22) return true;
+  if (maj < 22) return false;
+  return min >= 19;
 }
 
 /** Optional live profile bundle metadata from @deepseek-ai/dsh-app-boot. */
@@ -219,11 +285,21 @@ export function runHeadlessDsh(
   if (!bin) {
     return Promise.reject(new Error("dsh CLI not installed (@deepseek-ai/dsh)"));
   }
+  if (!nodeSupportsLiveDsh()) {
+    return Promise.reject(
+      new Error(
+        `dsh live backend needs Node >= ${LIVE_DSH_MIN_NODE} (current ${process.versions.node}); upgrade Node or use ROPEX_DSH_BACKEND=embedded`,
+      ),
+    );
+  }
   const key = resolveLlmApiKey();
   if (!key.present) {
     return Promise.reject(
       new Error("dsh live backend requires OPENAI_API_KEY (preferred) or DEEPSEEK_API_KEY"),
     );
+  }
+  if (key.source === "OPENAI_API_KEY") {
+    ensureOpenAiDshSettings();
   }
   const timeoutMs = opts.timeoutMs ?? 120_000;
   return new Promise((resolve, reject) => {
@@ -359,6 +435,11 @@ export async function bootDsh(spec: AgentSpec, opts: BootDshOptions = {}): Promi
     if (!resolveLlmApiKey().present) {
       throw new Error(
         "dsh live backend requires OPENAI_API_KEY (preferred) or DEEPSEEK_API_KEY",
+      );
+    }
+    if (!nodeSupportsLiveDsh()) {
+      throw new Error(
+        `dsh live backend needs Node >= ${LIVE_DSH_MIN_NODE} (current ${process.versions.node})`,
       );
     }
     return bootLiveDsh(spec, opts);
