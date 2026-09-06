@@ -3,15 +3,20 @@ import { describe, expect, it } from "vitest";
 import { hermesPackageInstalled } from "../src/hermes.ts";
 import { dshPackageInstalled } from "../src/dsh.ts";
 
+function runLiveUp(args: string[], extraEnv: NodeJS.ProcessEnv = {}) {
+  return execFileSync("bash", ["scripts/live-up.sh", ...args], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    env: { ...process.env, ...extraEnv },
+  });
+}
+
 describe("scripts/live-up.sh", () => {
   it("fails closed on --check when live peers or API keys are missing", () => {
     expect(hermesPackageInstalled()).toBe(false);
     expect(dshPackageInstalled()).toBe(false);
     try {
-      execFileSync("bash", ["scripts/live-up.sh", "--check"], {
-        encoding: "utf8",
-        env: { ...process.env, OPENAI_API_KEY: "", DEEPSEEK_API_KEY: "" },
-      });
+      runLiveUp(["--check"], { OPENAI_API_KEY: "", DEEPSEEK_API_KEY: "" });
       throw new Error("expected live-up --check to exit non-zero");
     } catch (err) {
       const e = err as { status?: number; stdout?: string; stderr?: string; message?: string };
@@ -24,7 +29,7 @@ describe("scripts/live-up.sh", () => {
 
   it("rejects unknown flags", () => {
     try {
-      execFileSync("bash", ["scripts/live-up.sh", "--not-a-flag"], { encoding: "utf8" });
+      runLiveUp(["--not-a-flag"]);
       throw new Error("expected unknown flag to exit non-zero");
     } catch (err) {
       const e = err as { status?: number; stdout?: string; stderr?: string; message?: string };
