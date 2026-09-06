@@ -30,71 +30,35 @@ Ropex is the control plane that multiplies those runtimes across repos and optio
 
 ## Quick start
 
-If `npm install` hangs, use the bootstrap script (skips the huge live DeepSeek tree):
+**Full step-by-step (embedded + live mode):** [docs/quickstart.md](./docs/quickstart.md).
 
-```bash
-bash scripts/bootstrap.sh
-```
-
-Or manually:
-
-```bash
-# edit package.json — delete the whole "optionalDependencies" block
-rm -rf node_modules package-lock.json
-npm install --no-fund --no-audit
-```
-
-Normal path (after PR #16 merge / on `cursor/npm-install-fast-4b15`):
+Embedded (no network, no API keys):
 
 ```bash
 npm install
 npm test
-
-# End-to-end sandbox (no network, no API keys)
 npx tsx src/cli.ts demo --root /tmp/ropex-demo
-
-# Load example fleet + control-plane UI (build the React SPA → dist/ui first)
-npm run build:web                        # Vite build of web/ → dist/ui
-npx tsx src/cli.ts apply fleets/examples/github-control-plane.yaml
-npx tsx src/cli.ts ui                    # http://127.0.0.1:7780
-
-# One-click stack (Podman Compose or local fallback)
-npm run up                               # spin up dashboard on :7780
-npm run down                             # spin down
+npm run up                               # dashboard → http://127.0.0.1:7780
+npm run down
 ```
 
-`npm install` only pulls Ropex’s small deps (`yaml`, TypeScript, vitest). Live backends are **not** installed by default — `@deepseek-ai/dsh` is a huge tree and will make install look stuck. Simulated Hermes/DeepSeek work out of the box.
+If `npm install` hangs, cancel (`Ctrl+C`) and run `bash scripts/bootstrap.sh` (skips the huge live DeepSeek tree).
 
-For live backends later (optional):
+Live Hermes + DeepSeek (optional, local process — not the Compose image):
 
 ```bash
 npm install @deepseek-ai/dsh@^0.1.1-rc.2 hermes-agent@^0.20.5
-export OPENAI_API_KEY=sk-...   # preferred for live harness
-# export DEEPSEEK_API_KEY=...  # optional fallback
-# then: ROPEX_DSH_BACKEND=live ROPEX_HERMES_BACKEND=live
-```
-
-If a previous install hung, cancel it (`Ctrl+C`) and run:
-
-```bash
-bash scripts/bootstrap.sh
-# or:
-rm -rf node_modules package-lock.json
-npm install
+export OPENAI_API_KEY=sk-...             # preferred; DEEPSEEK_API_KEY is fallback
+npm run live -- --check                  # fail-closed: packages + key
+npm run live                             # http://127.0.0.1:7780  (forge-local.yaml)
 ```
 
 ```bash
-# Executor API (CLI or UI Pipelines section)
+# After the stack is up — executor API, git tasks, observability
 npx tsx src/cli.ts pipeline "Summarize the repo layout"
-
-# Forge-neutral tasks (any git server)
 npx tsx src/cli.ts apply fleets/examples/forge-local.yaml
-npx tsx src/cli.ts tasks sync
-npx tsx src/cli.ts drain --concurrency 2
-
-# Observability
+npx tsx src/cli.ts tasks submit --agent docbot --drain "Review README for clarity"
 npx tsx src/cli.ts trajectories --jsonl
-npx tsx src/cli.ts metrics --prometheus
 npx tsx src/cli.ts health
 ```
 
@@ -104,6 +68,7 @@ npx tsx src/cli.ts health
 
 | Guide | Topics |
 | --- | --- |
+| [**Quick start**](./docs/quickstart.md) | Step-by-step run + **live mode** (`npm run live`) |
 | [**Operations**](./docs/operations.md) | One-click `npm run up/down`, Podman Compose, stack API |
 | [**System architecture (visual)**](./docs/system-architecture.md) | Diagrams — layers, ingress, workflow, state, module map |
 | [**Architecture**](./docs/architecture.md) | Kubernetes mapping, image digests, queue, workflow, executor layer |
@@ -216,7 +181,7 @@ GitHub provides auth, review, CI, and blame. Ropex uses that instead of inventin
 fleets/           Desired state YAML
 Containerfile     Container image for control plane
 podman-compose.yml
-scripts/          stack-up.sh, stack-down.sh, bootstrap.sh
+scripts/          stack-up.sh, stack-down.sh, bootstrap.sh, live-up.sh
 src/
   stack.ts        One-click up/down
   controller.ts   GitOps reconciler
@@ -253,7 +218,7 @@ integrations/     Magentic adapter notes
 | **UI deep-dive** (pipelines, trajectories, agent surfaces) | yes |
 | **UI live pipeline SSE** | yes |
 | Remote git clone | yes (`--remote`) |
-| Live `@deepseek-ai/dsh` / Hermes process | seam documented, not default |
+| Live `@deepseek-ai/dsh` / Hermes process | yes (`npm run live`; not default) |
 
 Full capability matrix: [architecture.md](./docs/architecture.md). Roadmap log: [ideas.md](./docs/ideas.md).
 

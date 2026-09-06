@@ -17,6 +17,13 @@ services:
       - ./fleets:/app/fleets:ro
     environment:
       NODE_ENV: production
+      # Default image is embedded-only (no hermes-agent / @deepseek-ai/dsh).
+      # For live mode on the host, use `npm run live` — see docs/quickstart.md.
+      ROPEX_HERMES_BACKEND: ${ROPEX_HERMES_BACKEND:-embedded}
+      ROPEX_DSH_BACKEND: ${ROPEX_DSH_BACKEND:-embedded}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      ROPEX_PIPELINE_PLANNER: ${ROPEX_PIPELINE_PLANNER:-heuristic}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:7780/api/v1/health"]

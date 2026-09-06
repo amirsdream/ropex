@@ -9,7 +9,7 @@ This repo is a GitOps control plane for agent fleets.
 - The controller reconciles definitions; the queue spawns ephemeral workers. Do not hard-code replica lists.
 - Memory and skills outlive workers: write to agent/fleet/cluster scopes (`src/memory.ts`, `src/gitmemory.ts`, skill registry). Worker-local facts are promoted on destroy.
 - **Hermes + DeepSeek are always coupled:** `bootHermes` → `bootDsh({ hermes })` → `runTask`. No simulation shortcuts.
-- Default backends are **embedded** (in-process); live CLI adapters are optional (`ROPEX_*_BACKEND=live`).
+- Default backends are **embedded** (in-process); live CLI adapters are optional (`ROPEX_*_BACKEND=live`, `npm run live`).
 - Every run has one **start → transform → result** spine: `workflow.ts` phases (`intake`/`execute`/`result` via `workflowPhases()`); the executor `PipelineRun` mirrors it with typed `input`/`stages`/`result` (`pipelinePhase()` in `src/executor.ts`). Keep the spine intact when adding stages or ingress.
 - GitHub events, Task YAML, CLI, and **executor API** are work ingress (`src/github.ts`, `src/webhook.ts`, `src/tasks.ts`, `src/executor.ts`).
 - Delivery is comment / check / pull request / git writeback (`src/journal.ts`).
@@ -22,10 +22,11 @@ This repo is a GitOps control plane for agent fleets.
 
 ```bash
 npm install && npm run up    # → http://127.0.0.1:7780
+npm run live                 # live Hermes + dsh on the host (docs/quickstart.md)
 npm run down
 ```
 
-See [docs/operations.md](./docs/operations.md).
+See [docs/quickstart.md](./docs/quickstart.md) and [docs/operations.md](./docs/operations.md).
 
 ## Module map
 
@@ -36,7 +37,7 @@ See [docs/operations.md](./docs/operations.md).
 | Executor API | `pipeline.ts`, `executor.ts` — multi-stage pipelines, SSE, scoped drain |
 | Memory / skills | `memory.ts`, `skills.ts`, `gitmemory.ts`, `contracts.ts` |
 | Queue / scale | `queue.ts`, `scheduler.ts`, `scale.ts` (on-demand spawn/destroy), `fanout.ts`, `admission.ts`, `approval.ts`, `autoscale.ts`, `budget.ts`, `placement.ts`, `fairness.ts` |
-| Stack / deploy | `stack.ts`, `Containerfile`, `podman-compose.yml`, `scripts/stack-*.sh` |
+| Stack / deploy | `stack.ts`, `Containerfile`, `podman-compose.yml`, `scripts/stack-*.sh`, `scripts/live-up.sh` |
 | Ingress / audit | `webhook.ts`, `ratelimit.ts`, `journal.ts`, `deliver.ts`, `connectors.ts`, `trajectory.ts`, `metrics.ts`, `health.ts`, `audit.ts` |
 | Lifecycle | `lifecycle.ts` (cordon/evict), `hygiene.ts`, `chaos.ts` |
 | Surfaces | `api.ts` (serves the SPA), `web/` (Vite + React + TS dashboard → `dist/ui`), `cli.ts`, `demo.ts` |
@@ -44,6 +45,7 @@ See [docs/operations.md](./docs/operations.md).
 ## Documentation
 
 - [README.md](./README.md) — overview + system diagram
+- [docs/quickstart.md](./docs/quickstart.md) — step-by-step run + live mode
 - [docs/operations.md](./docs/operations.md) — one-click up/down, Podman Compose
 - [docs/system-architecture.md](./docs/system-architecture.md) — visual diagrams
 - [docs/architecture.md](./docs/architecture.md) — layered architecture, executor, Magentic

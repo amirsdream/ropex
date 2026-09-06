@@ -1,6 +1,6 @@
 # Operations — spin up, spin down, deploy
 
-How to run the Ropex control plane locally or in a container. For architecture see [system-architecture.md](./system-architecture.md).
+How to run the Ropex control plane locally or in a container. **First-time operators:** [quickstart.md](./quickstart.md) (embedded + live mode). For architecture see [system-architecture.md](./system-architecture.md).
 
 ## One-click (recommended)
 
@@ -48,7 +48,7 @@ podman compose -f podman-compose.yml down
 | `Containerfile` | Node 22 image; CMD runs `ropex up --serve` |
 | `podman-compose.yml` | Service on port 7780, volume `ropex-state` for `.ropex/` |
 
-Environment: `ROPEX_PORT` (default `7780`).
+Environment: `ROPEX_PORT` (default `7780`). Compose also forwards `ROPEX_HERMES_BACKEND`, `ROPEX_DSH_BACKEND`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, and `ROPEX_PIPELINE_PLANNER` (the default image still runs **embedded** backends).
 
 ## API
 
@@ -64,6 +64,21 @@ curl -s -X POST http://127.0.0.1:7780/api/v1/stack \
   -d '{"action":"down"}' | jq .
 ```
 
+## Live mode (host process)
+
+The Compose image is **embedded-only**. To plan with `hermes-agent` and execute with `@deepseek-ai/dsh`:
+
+```bash
+npm install @deepseek-ai/dsh@^0.1.1-rc.2 hermes-agent@^0.20.5
+export OPENAI_API_KEY=sk-...
+npm run live -- --check
+npm run live            # forge-local.yaml → http://127.0.0.1:7780
+```
+
+`scripts/live-up.sh` sets `ROPEX_HERMES_BACKEND=live` and `ROPEX_DSH_BACKEND=live` and skips Compose so host `node_modules` are used. Full steps: [quickstart.md](./quickstart.md).
+
+Compose still forwards those env vars if you bake live peers into a custom image (`ROPEX_HERMES_BACKEND`, `ROPEX_DSH_BACKEND`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`).
+
 ## Typical local workflow
 
 ```bash
@@ -78,6 +93,7 @@ npm run down
 
 ## Related
 
+- [Quick start](./quickstart.md) — embedded run + live mode
 - [Control-plane UI](./control-plane-ui.md) — dashboard tabs, teal live refresh
 - [HTTP API](./api.md) — full route list
 - [Architecture](./architecture.md) — what “up” reconciles
