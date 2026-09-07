@@ -1,7 +1,7 @@
 {
   "name": "Ropex control plane",
   "install": "npm install && npm run build",
-  "start": "npm run build:web",
+  "start": "bash scripts/cloud-agent-start.sh",
   "ports": [
     {
       "name": "Ropex UI",
@@ -11,8 +11,8 @@
   "terminals": [
     {
       "name": "ropex-ui",
-      "command": "npm run dev -- apply fleets/examples/github-control-plane.yaml && npm run dev -- ui",
-      "description": "Load example fleet and serve the control-plane UI on port 7780."
+      "command": "npx tsx src/cli.ts up fleets/examples/github-control-plane.yaml --serve --port 7780",
+      "description": "Apply the example fleet and serve the control-plane dashboard on http://127.0.0.1:7780. This process stays running."
     }
   ]
 }

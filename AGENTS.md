@@ -28,6 +28,17 @@ npm run down
 
 See [docs/quickstart.md](./docs/quickstart.md) and [docs/operations.md](./docs/operations.md).
 
+## Cursor Cloud specific instructions
+
+`.cursor/environment.json` is the Cloud Agent environment for this repo.
+
+- **`install`** (`npm install && npm run build`) runs during a Build. It must finish. Never put a server here.
+- **`start`** (`bash scripts/cloud-agent-start.sh`) must **exit in seconds**. Cursor holds the desktop on **Starting remote server** and will not open the `ropex-ui` terminal until `start` returns. Do not put `npm run build:web`, `ropex ui`, or `npm run up` in `start`.
+- **`terminals` → `ropex-ui`** is the dashboard: `npx tsx src/cli.ts up fleets/examples/github-control-plane.yaml --serve --port 7780` → http://127.0.0.1:7780
+- Embedded backends need no secrets. Live mode needs `OPENAI_API_KEY` in Cloud Agent secrets, then `npm run live` (not Compose).
+
+If a Cloud Agent is stuck on Starting remote server, the usual cause is a blocking `start` command from an older environment.json. Start a **new** agent after this file is on the branch you selected.
+
 ## Module map
 
 | Area | Files |
