@@ -13,6 +13,8 @@ import type { WorkerRuntimeKind } from "./types.js";
 
 export type CliRuntimeKind = Exclude<WorkerRuntimeKind, "dsh">;
 
+export type PromptChannel = "stdin" | "argv";
+
 export type CliArgvInput = {
   /** The composed brief — soul, memory, skills, plan, task. */
   prompt: string;
@@ -54,6 +56,11 @@ export type CliRuntimeDescriptor = {
   defaultModel?: string;
   label: string;
   docsUrl: string;
+  /**
+   * How the composed brief is delivered. `stdin` avoids ARG_MAX; `argv` is for
+   * CLIs whose programmatic mode requires `-p <prompt>` as a flag value.
+   */
+  promptChannel: PromptChannel;
   argv(input: CliArgvInput): string[];
   permissions(policy: PolicyInput): PermissionPlan;
   /**
@@ -177,12 +184,13 @@ export const CLI_RUNTIMES: Record<CliRuntimeKind, CliRuntimeDescriptor> = {
     credentialEnv: ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"],
     label: "Claude Code CLI",
     docsUrl: "https://docs.claude.com/en/docs/claude-code/cli-reference",
-    argv({ prompt, model, permissionArgs }) {
-      // `-p` is a boolean (--print); the prompt is positional and must precede
-      // the variadic permission flags or they would swallow it.
+    // `-p` is boolean (--print). The brief goes on stdin so large souls do not
+    // hit ARG_MAX; a positional prompt after `-p` would also be swallowed by
+    // the variadic `--disallowedTools` list if it were placed last.
+    promptChannel: "stdin",
+    argv({ model, permissionArgs }) {
       return [
         "-p",
-        prompt,
         "--output-format",
         "json",
         ...(model ? ["--model", model] : []),
@@ -231,10 +239,12 @@ export const CLI_RUNTIMES: Record<CliRuntimeKind, CliRuntimeDescriptor> = {
   codex: {
     kind: "codex",
     bin: "codex",
-    credentialEnv: ["OPENAI_API_KEY"],
+    credentialEnv: ["OPENAI_API_KEY", "CODEX_API_KEY"],
     label: "Codex CLI",
     docsUrl: "https://developers.openai.com/codex/cli",
-    argv({ prompt, model, cwd, permissionArgs }) {
+    // `codex exec` reads the prompt from stdin when the positional is omitted.
+    promptChannel: "stdin",
+    argv({ model, cwd, permissionArgs }) {
       return [
         "exec",
         "--json",
@@ -242,7 +252,6 @@ export const CLI_RUNTIMES: Record<CliRuntimeKind, CliRuntimeDescriptor> = {
         cwd,
         ...(model ? ["--model", model] : []),
         ...permissionArgs,
-        prompt,
       ];
     },
     permissions(policy) {
@@ -253,7 +262,13 @@ export const CLI_RUNTIMES: Record<CliRuntimeKind, CliRuntimeDescriptor> = {
       const sandbox = blocksWrite || blocksShell ? "read-only" : "workspace-write";
       const expressible = new Set(["fs", "str_replace_editor", "shell", "bash", "memory"]);
       const unmappable = toolDenies.filter((t) => !expressible.has(t));
-      return { args: ["--sandbox", sandbox], unmappable, advisory };
+      // `approval_policy=never` is required for headless exec — without it a
+      // sandbox escalation can block on an interactive prompt until timeout.
+      return {
+        args: ["--sandbox", sandbox, "-c", "approval_policy=never"],
+        unmappable,
+        advisory,
+      };
     },
     parse(stdout, stderr) {
       const events = jsonLines(stdout);
@@ -275,6 +290,8 @@ export const CLI_RUNTIMES: Record<CliRuntimeKind, CliRuntimeDescriptor> = {
     credentialEnv: ["GITHUB_TOKEN", "COPILOT_CLI_TOKEN", "GH_TOKEN"],
     label: "GitHub Copilot CLI",
     docsUrl: "https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli",
+    // Programmatic mode requires `-p <prompt>` as a flag value (not a boolean).
+    promptChannel: "argv",
     argv({ prompt, model, permissionArgs }) {
       return [
         "-p",
@@ -288,7 +305,13 @@ export const CLI_RUNTIMES: Record<CliRuntimeKind, CliRuntimeDescriptor> = {
     permissions(policy) {
       const { toolDenies, advisory } = classifyPolicy(policy);
       const { patterns, unmappable } = mapDenies(toolDenies, COPILOT_TOOL_MAP);
-      const args = patterns.flatMap((tool) => ["--deny-tool", tool]);
+      // `--allow-all-tools` is required for headless `-p` runs; without it
+      // Copilot prompts for every tool and the worker hangs until timeout.
+      // `--deny-tool` still wins over allow-all.
+      const args = [
+        "--allow-all-tools",
+        ...patterns.flatMap((tool) => ["--deny-tool", tool]),
+      ];
       return { args, unmappable, advisory };
     },
     parse(stdout, stderr) {

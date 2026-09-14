@@ -4,7 +4,7 @@
  * Implements HermesContract so UI and runtime share one interface.
  */
 
-import { spawnSync } from "node:child_process";
+import { runProcessSync } from "./proc.js";
 import { createRequire } from "node:module";
 import type { HermesContract, HermesPlan, MemoryPort } from "./contracts.js";
 import { createMemoryPort, memoryContextFor, SharedMemoryStore } from "./memory.js";
@@ -79,16 +79,16 @@ export function runLiveHermesTask(
     throw new Error("hermes live backend unavailable — install hermes-agent first.");
   }
   const timeoutMs = opts.timeoutMs ?? 120_000;
-  const result = spawnSync(process.execPath, [bin, prompt], {
+  const result = runProcessSync(process.execPath, [bin, prompt], {
     cwd: opts.cwd,
-    env: process.env,
-    encoding: "utf8",
-    timeout: timeoutMs,
+    timeoutMs,
   });
-  if (result.error) throw result.error;
-  if (result.status !== 0) {
+  if (result.timedOut) {
+    throw new Error(`hermes live timed out after ${timeoutMs}ms`);
+  }
+  if (result.code !== 0) {
     const msg = (result.stderr || result.stdout || "hermes exited non-zero").trim();
-    throw new Error(`hermes live failed (${result.status}): ${msg.slice(0, 500)}`);
+    throw new Error(`hermes live failed (${result.code}): ${msg.slice(0, 500)}`);
   }
   return (result.stdout || result.stderr || "").trim();
 }

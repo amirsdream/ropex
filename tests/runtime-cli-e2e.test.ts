@@ -93,11 +93,13 @@ describe("claude-code runtime end to end", () => {
     const echoed = JSON.parse(result.steps[0].observation) as {
       received: Record<string, string | string[] | null>;
       cwd: string;
+      argv: string[];
     };
-    // The composed brief reached the process, carrying soul, skills and task.
+    // The composed brief reached stdin (not argv — ARG_MAX), carrying soul, skills and task.
     expect(echoed.received.prompt).toContain("implement login tests");
     expect(echoed.received.prompt).toContain("## Task");
     expect(echoed.received.prompt).toContain("implement-issue");
+    expect(echoed.argv).not.toContain("implement login tests");
     // Real argv: model and headless permission mode came from the descriptor.
     expect(echoed.received.model).toBe("claude-opus-5");
     expect(echoed.received.outputFormat).toBe("json");
@@ -119,6 +121,7 @@ describe("claude-code runtime end to end", () => {
     expect(worker.status).toBe("idle");
     expect(trajectoriesFor(state, "builder").length).toBe(1);
     expect(result.workflow.find((s) => s.id === "execute")?.owner).toBe("worker");
+    expect(result.workflow.find((s) => s.id === "execute")?.purpose).toMatch(/claude-code/);
     expect(result.workflow.find((s) => s.id === "plan")?.owner).toBe("hermes");
     // Only execute moves — delivery still runs through the harness plugin.
     expect(result.workflow.find((s) => s.id === "deliver")?.owner).toBe("deepseek");

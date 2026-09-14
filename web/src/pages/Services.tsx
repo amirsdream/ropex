@@ -18,24 +18,32 @@ function ServiceCard({
   icon,
   backend,
   ready,
+  notReadyLabel = "embedded",
   rows,
 }: {
   name: string;
-  tone: "teal" | "copper";
+  tone: "teal" | "copper" | "violet";
   icon: React.ReactNode;
   backend: string;
   ready: boolean;
+  /** Shown when `ready` is false. CLI runtimes are missing, not embedded. */
+  notReadyLabel?: string;
   rows: [string, React.ReactNode][];
 }) {
+  const iconTone = {
+    teal: "bg-teal-500/15 text-teal-300",
+    copper: "bg-orange-500/15 text-orange-300",
+    violet: "bg-violet-500/15 text-violet-300",
+  }[tone];
   return (
     <Panel className="p-4">
       <div className="flex items-center gap-3">
-        <span className={cn("grid h-10 w-10 place-items-center rounded-xl", tone === "teal" ? "bg-teal-500/15 text-teal-300" : "bg-orange-500/15 text-orange-300")}>{icon}</span>
+        <span className={cn("grid h-10 w-10 place-items-center rounded-xl", iconTone)}>{icon}</span>
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-slate-100">{name}</h3>
             <Badge tone={backend === "live" ? "ok" : "muted"}>{backend}</Badge>
-            <Badge tone={ready ? "ok" : "warn"}>{ready ? "ready" : "embedded"}</Badge>
+            <Badge tone={ready ? "ok" : "warn"}>{ready ? "ready" : notReadyLabel}</Badge>
           </div>
         </div>
       </div>
@@ -184,8 +192,9 @@ export function Services({ view }: { view: View }) {
               name={r.label}
               tone="violet"
               icon={<Terminal size={20} />}
-              backend={r.kind}
+              backend={r.ready ? "live" : r.kind}
               ready={r.ready}
+              notReadyLabel="not ready"
               rows={[
                 ["binary", r.binPresent ? r.bin ?? "on PATH" : "not found"],
                 ["credentials", r.credentialSource ?? "none"],

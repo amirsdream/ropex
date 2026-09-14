@@ -138,9 +138,16 @@ export function composeWorkflow(
       plugins: [...image.harness.plugins],
       deliver: image.github?.deliver,
     },
-    stages: WORKFLOW_STAGES.map((s) => ({
-      ...s,
-      owner: s.id === "execute" ? executeOwner(agent) : s.owner,
-    })),
+    stages: WORKFLOW_STAGES.map((s) => {
+      if (s.id !== "execute") return { ...s };
+      const worker = executeOwner(agent) === "worker";
+      return {
+        ...s,
+        owner: worker ? "worker" : "deepseek",
+        purpose: worker
+          ? `Run ${agent.spec.runtime?.kind} in the worker worktree`
+          : s.purpose,
+      };
+    }),
   };
 }

@@ -1,9 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { startControlPlaneServer } from "../src/api.ts";
 import {
   CLI_RUNTIMES,
   classifyPolicy,
   isKnownRopexTool,
 } from "../src/cli-runtimes.ts";
+import { API_ROUTES } from "../src/contracts.ts";
+import { emptyState, saveState, loadState } from "../src/controller.ts";
 import { buildAgentImage } from "../src/image.ts";
 import { expandDesired, parseManifests } from "../src/spec.ts";
 import {
@@ -14,6 +20,7 @@ import {
   workerRuntimeScaffold,
   WORKER_RUNTIME_KINDS,
 } from "../src/worker-runtime.ts";
+import { composeWorkflow } from "../src/workflow.ts";
 
 const base = `
 apiVersion: ropex.dev/v1
@@ -33,37 +40,39 @@ spec:
 `;
 
 describe("cli runtime descriptors", () => {
-  it("builds claude-code argv with prompt, model, and permission flags", () => {
+  it("builds claude-code argv with model and permission flags, brief on stdin", () => {
+    expect(CLI_RUNTIMES["claude-code"].promptChannel).toBe("stdin");
     const argv = CLI_RUNTIMES["claude-code"].argv({
       prompt: "do the thing",
       model: "claude-opus-5",
       cwd: "/wt",
       permissionArgs: ["--permission-mode", "acceptEdits"],
     });
-    // `-p` is --print; the prompt is the positional right after it, and must
-    // come before the variadic permission flags or they would swallow it.
-    expect(argv.slice(0, 4)).toEqual(["-p", "do the thing", "--output-format", "json"]);
+    expect(argv.slice(0, 3)).toEqual(["-p", "--output-format", "json"]);
+    expect(argv).not.toContain("do the thing");
     expect(argv).toContain("claude-opus-5");
     expect(argv.slice(-2)).toEqual(["--permission-mode", "acceptEdits"]);
   });
 
-  it("puts the prompt last for codex and passes the worktree via --cd", () => {
+  it("builds codex exec argv with the worktree via --cd and no argv prompt", () => {
+    expect(CLI_RUNTIMES.codex.promptChannel).toBe("stdin");
     const argv = CLI_RUNTIMES.codex.argv({
       prompt: "do the thing",
       cwd: "/wt",
-      permissionArgs: ["--sandbox", "workspace-write"],
+      permissionArgs: ["--sandbox", "workspace-write", "-c", "approval_policy=never"],
     });
     expect(argv[0]).toBe("exec");
     expect(argv).toContain("--json");
     expect(argv[argv.indexOf("--cd") + 1]).toBe("/wt");
-    expect(argv[argv.length - 1]).toBe("do the thing");
+    expect(argv).not.toContain("do the thing");
   });
 
-  it("builds copilot argv in programmatic mode", () => {
+  it("builds copilot argv in programmatic mode with the prompt as -p value", () => {
+    expect(CLI_RUNTIMES.copilot.promptChannel).toBe("argv");
     const argv = CLI_RUNTIMES.copilot.argv({
       prompt: "do the thing",
       cwd: "/wt",
-      permissionArgs: ["--deny-tool", "shell"],
+      permissionArgs: ["--allow-all-tools", "--deny-tool", "shell"],
     });
     expect(argv.slice(0, 2)).toEqual(["-p", "do the thing"]);
     expect(argv).toContain("--log-level");
@@ -107,9 +116,9 @@ describe("policy translation", () => {
 
   it("tightens the codex sandbox when writes or shell are denied", () => {
     const open = CLI_RUNTIMES.codex.permissions({ deny: [], requireApproval: [] });
-    expect(open.args).toEqual(["--sandbox", "workspace-write"]);
+    expect(open.args).toEqual(["--sandbox", "workspace-write", "-c", "approval_policy=never"]);
     const locked = CLI_RUNTIMES.codex.permissions({ deny: ["shell"], requireApproval: [] });
-    expect(locked.args).toEqual(["--sandbox", "read-only"]);
+    expect(locked.args).toEqual(["--sandbox", "read-only", "-c", "approval_policy=never"]);
   });
 
   it("reports denies a runtime cannot express so boot can fail closed", () => {
@@ -122,7 +131,14 @@ describe("policy translation", () => {
     ).toEqual(["inspect"]);
     // copilot emits one --deny-tool per mapped tool.
     const copilot = CLI_RUNTIMES.copilot.permissions({ deny: ["shell", "fs"], requireApproval: [] });
-    expect(copilot.args).toEqual(["--deny-tool", "shell", "--deny-tool", "write"]);
+    expect(copilot.args[0]).toBe("--allow-all-tools");
+    expect(copilot.args).toEqual([
+      "--allow-all-tools",
+      "--deny-tool",
+      "shell",
+      "--deny-tool",
+      "write",
+    ]);
   });
 
   it("passes --disallowedTools variadically, never comma-joined", () => {
@@ -349,5 +365,97 @@ spec:
         skills: []
 `),
     ).toThrow(/unsupported runtime.kind "bogus"/);
+  });
+
+  it("copies runtime onto fleet-derived agents", () => {
+    const desired = expandDesired(
+      parseManifests(`
+apiVersion: ropex.dev/v1
+kind: Fleet
+metadata:
+  name: builders
+spec:
+  scale: static
+  replicas: 2
+  template:
+    spec:
+      runtime:
+        kind: claude-code
+        command: /usr/bin/claude
+        commandArgs: [claude]
+        requireEnv: [GH_TOKEN]
+      harness:
+        profile: code
+        plugins: [fs]
+      hermes:
+        memory: none
+        learning: false
+        skills: []
+`),
+    );
+    expect(desired).toHaveLength(2);
+    for (const agent of desired) {
+      expect(agent.spec.runtime).toEqual({
+        kind: "claude-code",
+        command: "/usr/bin/claude",
+        commandArgs: ["claude"],
+        requireEnv: ["GH_TOKEN"],
+      });
+      expect(agent.spec.runtime?.commandArgs).not.toBe(
+        desired.find((a) => a !== agent)?.spec.runtime?.commandArgs,
+      );
+    }
+  });
+});
+
+describe("workflow execute stage", () => {
+  it("keeps the Cordis purpose for dsh and names the CLI for other kinds", () => {
+    const dsh = expandDesired(parseManifests(base))[0];
+    expect(composeWorkflow(dsh).stages.find((s) => s.id === "execute")).toMatchObject({
+      owner: "deepseek",
+      purpose: "Run Cordis loop (tool-calls or code) with profile tools + permissions",
+    });
+    const claude = {
+      ...dsh,
+      spec: { ...dsh.spec, runtime: { kind: "claude-code" as const } },
+    };
+    expect(composeWorkflow(claude).stages.find((s) => s.id === "execute")).toMatchObject({
+      owner: "worker",
+      purpose: "Run claude-code in the worker worktree",
+    });
+  });
+});
+
+describe("runtimes API and UI", () => {
+  const temps: string[] = [];
+  afterEach(() => {
+    for (const t of temps.splice(0)) rmSync(t, { recursive: true, force: true });
+  });
+
+  it("serves GET /api/v1/runtimes", async () => {
+    const root = mkdtempSync(join(tmpdir(), "ropex-runtimes-"));
+    temps.push(root);
+    saveState(root, emptyState());
+    const server = await startControlPlaneServer({
+      root,
+      port: 0,
+      loadState,
+      saveState,
+    });
+    try {
+      const res = await fetch(`http://127.0.0.1:${server.port}${API_ROUTES.runtimes}`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { runtimes: Array<{ kind: string; ready: boolean }> };
+      expect(body.runtimes.map((r) => r.kind)).toEqual(WORKER_RUNTIME_KINDS);
+      expect(body.runtimes[0]).toMatchObject({ kind: "dsh", ready: true });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("Services cards accept the violet runtime tone and a not-ready label", () => {
+    const src = readFileSync(join(process.cwd(), "web/src/pages/Services.tsx"), "utf8");
+    expect(src).toMatch(/tone: "teal" \| "copper" \| "violet"/);
+    expect(src).toContain('notReadyLabel="not ready"');
   });
 });

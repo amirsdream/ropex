@@ -216,7 +216,7 @@ export async function runTask(
     task,
     worker,
     imageDigest: worker.imageDigest,
-    workflow: workflow.stages.map((s) => ({ id: s.id, owner: s.owner })),
+    workflow: workflow.stages.map((s) => ({ id: s.id, owner: s.owner, purpose: s.purpose })),
     plan: planned.thoughts,
     steps,
     delivery,

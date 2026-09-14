@@ -121,9 +121,9 @@ export {
 } from "./worker-runtime.js";
 export type { WorkerAdapter, WorkerRuntimeStatus } from "./worker-runtime.js";
 export { CLI_RUNTIMES, CLI_RUNTIME_KINDS, cliRuntime, classifyPolicy, isKnownRopexTool, KNOWN_ROPEX_TOOLS } from "./cli-runtimes.js";
-export type { CliRuntimeDescriptor, CliRuntimeKind, PermissionPlan, PolicyInput, CliArgvInput } from "./cli-runtimes.js";
+export type { CliRuntimeDescriptor, CliRuntimeKind, PermissionPlan, PolicyInput, CliArgvInput, PromptChannel } from "./cli-runtimes.js";
 export { composeBrief } from "./brief.js";
-export { runProcess, binOnPath } from "./proc.js";
+export { runProcess, runProcessSync, binOnPath } from "./proc.js";
 export type { RunProcessResult, RunProcessOptions } from "./proc.js";
 export { recordDelivery, deliveriesFor, compactJournal, replayDelivery, JOURNAL_DEFAULT_KEEP } from "./journal.js";
 export { registerSkill, shareSkill, promoteSkill, skillVersions, skillsForAgent, latestSkill, skillsCatalog } from "./skills.js";
