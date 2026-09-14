@@ -53,7 +53,7 @@ flowchart TB
 
   subgraph Data["Data plane"]
     W["Worker slot\nagent:replica + digest"]
-    RT["runTask\nHermes → DeepSeek → learn"]
+    RT["runTask\nHermes → execute → learn"]
     W --> RT
   end
 
@@ -269,7 +269,7 @@ sequenceDiagram
     EXEC->>Q: enqueue pipelineId:stageId
     EXEC->>Q: drainQueue(taskIdPrefix)
     Q->>W: claim
-    W->>RT: Hermes → DeepSeek
+    W->>RT: Hermes → execute
     RT-->>EXEC: stage output + stage.log events
     EXEC-->>UI: SSE agent_start / agent_log / agent_complete
   end
@@ -440,9 +440,9 @@ flowchart LR
   R --> M["metrics gauges"]
 ```
 
-## DeepSeek adapter seam
+## Worker runtime seam
 
-`bootDsh(spec, { hermes })` loads a **profile pack** (`minimal` | `code` | `standard` | `creator`) and runs Hermes plans through it. Default backend is **embedded** (in-process Cordis harness); `live` invokes `@deepseek-ai/dsh` and fails closed when unavailable. See [dsh.md](./dsh.md) and `liveDshScaffold()` for the wiring checklist. The control-plane UI DeepSeek section surfaces packs + scaffold hint.
+`bootWorker(spec, { hermes })` selects the execute-stage adapter. The default is still `bootDsh`: it loads a **profile pack** (`minimal` | `code` | `standard` | `creator`) and runs Hermes plans through the in-process Cordis harness (`ROPEX_DSH_BACKEND=live` swaps in `@deepseek-ai/dsh` and fails closed when unavailable). Agents may declare `spec.runtime.kind: claude-code | codex | copilot` to run a headless coding CLI in the worker worktree instead — Hermes still composes, plans, and learns. See [dsh.md](./dsh.md), [worker-runtimes.md](./worker-runtimes.md), and `workerRuntimeScaffold()` for the wiring checklist. The Services page renders a card per runtime.
 
 ## One-click stack lifecycle
 
@@ -475,7 +475,7 @@ Shipped end-to-end offline:
 | Desired state | `fleets/**`, `spec`, `controller`, `image`, `worktree` |
 | Ingress | `webhook`, `ratelimit`, `github`, **`executor`** |
 | Schedule | fair LRU `queue`, concurrent `scheduler`, priority, retry/DLQ, `fanout` |
-| Brain / kernel | Hermes compose/plan/learn (embedded), `bootDsh({ hermes })` |
+| Brain / kernel | Hermes compose/plan/learn (embedded), `bootWorker({ hermes })` (`dsh` default) |
 | Governance | `admission`, `approval`, `policy` dry-run |
 | Memory / skills | scoped `SharedMemoryStore`, versioned `skillRegistry` |
 | Observability | journal, trajectories, metrics, health/SLO, audit |

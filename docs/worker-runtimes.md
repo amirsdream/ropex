@@ -35,8 +35,11 @@ plugin, and policy, memory, skills and trajectories are untouched.
 The difference is what `execute` is handed. `dsh` receives the Hermes plan as a
 tool program. A CLI runtime drives its own agentic loop, so it receives a
 **brief** instead (`src/brief.ts`) — the same inputs rendered as a prompt:
-identity, prior knowledge, skills, plan, intended actions, task. The CLI runs in
-the worker's git worktree and its output becomes the trajectory observation.
+identity, prior knowledge, skills, plan, intended actions, task. Claude Code and
+Codex take that brief on **stdin** so a large soul cannot blow `ARG_MAX`. Copilot
+still needs `-p <prompt>` for programmatic mode, so its brief stays on argv. The
+CLI runs in the worker's git worktree and its output becomes the trajectory
+observation.
 
 Because one CLI run is an entire session rather than one tool call, it produces a
 single `TrajectoryStep` tagged `runtime:<kind>`. Hermes' learning loop recognises
@@ -107,26 +110,30 @@ Three rules:
    would be stricter than `dsh` and would break policies that ship today.
 
 Every CLI runtime also refuses to boot without credentials
-(`ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN`, `OPENAI_API_KEY`,
-`GITHUB_TOKEN` / `COPILOT_CLI_TOKEN` / `GH_TOKEN`) or a resolvable binary.
+(`ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN`, `OPENAI_API_KEY` /
+`CODEX_API_KEY`, `GITHUB_TOKEN` / `COPILOT_CLI_TOKEN` / `GH_TOKEN`) or a
+resolvable binary.
 
 ## Flag accuracy
 
 CLI flags move between releases, which is why they live in one table rather than
-in adapter code. Two details worth knowing, both verified against a live
-`claude` binary:
+in adapter code. Details verified against a live `claude` binary, plus published
+interfaces for the others:
 
 - `--disallowedTools <tools...>` is **variadic**. Each pattern is a separate
   argv entry; comma-joining them produces one tool name that matches nothing, so
   the gate would silently disappear. It is therefore emitted last.
-- `-p` is `--print` (a boolean). The prompt is a *positional* argument placed
-  immediately after it, ahead of the variadic flags that would otherwise
-  swallow it.
+- `-p` is `--print` (a boolean). The brief is written to stdin, not placed as a
+  positional after `-p` — that would hit `ARG_MAX` for large souls, and a
+  positional last would be swallowed by the variadic `--disallowedTools` list.
+- Codex `exec` is non-interactive but a sandbox escalation still prompts unless
+  `-c approval_policy=never` is set. Copilot `-p` prompts on every tool unless
+  `--allow-all-tools` is set; `--deny-tool` still wins over allow-all.
 
 The `claude-code` descriptor is verified against a live binary. The `codex` and
-`copilot` descriptors are written from their published interfaces but have not
-been exercised against an installed binary — check `ropex runtimes` and a single
-task before trusting them in a fleet.
+`copilot` descriptors follow the published non-interactive flags (`codex exec`,
+`copilot -p --allow-all-tools`) but have not been exercised against an installed
+binary — check `ropex runtimes` and a single task before trusting them in a fleet.
 
 A CLI that reports failure in its payload while exiting 0 (Claude Code's
 `is_error`) is treated as a failed run, not a successful one with odd output.

@@ -13,7 +13,7 @@ flowchart LR
   EXEC["executor.ts"]
   PLAN["pipeline.ts\nheuristic | hermes"]
   Q["queue + scheduler"]
-  RT["runTask\nHermes → DeepSeek"]
+  RT["runTask\nHermes → execute"]
 
   CLIENT --> API --> EXEC
   EXEC --> PLAN

@@ -1,6 +1,6 @@
 # Ropex documentation
 
-GitOps control plane for agent fleets — **Hermes plans, DeepSeek executes**, git holds desired state. License: [MIT](../LICENSE).
+GitOps control plane for agent fleets — **Hermes plans, the execute stage is pluggable**, git holds desired state. License: [MIT](../LICENSE).
 
 ## Start here
 
@@ -23,7 +23,7 @@ GitOps control plane for agent fleets — **Hermes plans, DeepSeek executes**, g
 
 ```text
 Git YAML (desired)  →  Controller  →  On-demand workers (immutable digests)
-GitHub / Task YAML  →  Queue       →  Drain  →  Hermes → DeepSeek → Deliver → Learn
+GitHub / Task YAML  →  Queue       →  Drain  →  Hermes → execute (dsh | CLI) → Deliver → Learn
 External UI         →  Executor API →  Pipeline stages (sequential, scoped drain)
 
 Every run is one spine:  Start (compose·plan)  →  Transform (execute)  →  Result (deliver·learn)
@@ -56,7 +56,7 @@ npx tsx src/cli.ts trajectories --jsonl
 | `src/stack.ts` | One-click stack up/down (`ropex up` / `/api/v1/stack`) |
 | `src/controller.ts` | Reconcile workers from git |
 | `src/scheduler.ts` | Fair queue drain with leases |
-| `src/runtime.ts` | Per-task Hermes → DeepSeek workflow (always coupled) |
+| `src/runtime.ts` | Per-task Hermes → worker runtime workflow (always coupled) |
 | `src/executor.ts` | Multi-stage pipeline API + SSE |
 | `src/api.ts` | HTTP control plane + UI view model |
 | `web/` | Control-plane dashboard — Vite + React + TS SPA (built to `dist/ui`) |
