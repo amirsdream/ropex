@@ -3,7 +3,6 @@ import {
   Activity,
   Boxes,
   BrainCircuit,
-  Gauge as GaugeIcon,
   LayoutDashboard,
   ListChecks,
   Radio,
@@ -12,20 +11,19 @@ import { cn } from "../lib/cn";
 import { Button, Dot } from "./ui";
 import type { View } from "../lib/api";
 
-export type TabId = "overview" | "monitor" | "services" | "fleet" | "queue" | "observe";
+export type TabId = "overview" | "services" | "queue" | "fleet" | "observe";
 
-const NAV: { id: TabId; label: string; icon: ReactNode }[] = [
-  { id: "overview", label: "Overview", icon: <LayoutDashboard size={17} /> },
-  { id: "monitor", label: "Monitor", icon: <GaugeIcon size={17} /> },
-  { id: "services", label: "Services", icon: <BrainCircuit size={17} /> },
-  { id: "fleet", label: "Fleet", icon: <Boxes size={17} /> },
-  { id: "queue", label: "Queue", icon: <ListChecks size={17} /> },
-  { id: "observe", label: "Observe", icon: <Activity size={17} /> },
+const NAV: { id: TabId; label: string; hint: string; icon: ReactNode }[] = [
+  { id: "overview", label: "Now", hint: "Latest plans and sessions", icon: <LayoutDashboard size={17} /> },
+  { id: "services", label: "Run", hint: "Ask, then follow the handoff", icon: <BrainCircuit size={17} /> },
+  { id: "queue", label: "Plans", hint: "Which fleet each plan used", icon: <ListChecks size={17} /> },
+  { id: "fleet", label: "Fleet", hint: "Agents and memory you keep", icon: <Boxes size={17} /> },
+  { id: "observe", label: "Results", hint: "What the plan sent back", icon: <Activity size={17} /> },
 ];
 
 export function Sidebar({ tab, onTab }: { tab: TabId; onTab: (t: TabId) => void }) {
   return (
-    <aside className="hidden w-60 shrink-0 flex-col border-r border-white/5 bg-ink-900/60 px-3 py-4 lg:flex">
+    <aside className="hidden w-64 shrink-0 flex-col border-r border-white/5 bg-ink-900/60 px-3 py-4 lg:flex">
       <div className="flex items-center gap-2.5 px-2">
         <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-teal-400 to-teal-600 text-ink-950 shadow-lg">
           <Radio size={18} />
@@ -41,19 +39,22 @@ export function Sidebar({ tab, onTab }: { tab: TabId; onTab: (t: TabId) => void 
             key={n.id}
             onClick={() => onTab(n.id)}
             className={cn(
-              "group flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition",
+              "group flex items-start gap-3 rounded-xl px-3 py-2 text-sm font-medium transition",
               tab === n.id
                 ? "bg-teal-500/10 text-teal-200 ring-1 ring-inset ring-teal-500/20"
                 : "text-slate-400 hover:bg-white/5 hover:text-slate-200",
             )}
           >
-            <span className={cn(tab === n.id ? "text-teal-300" : "text-slate-500 group-hover:text-slate-300")}>{n.icon}</span>
-            {n.label}
+            <span className={cn("mt-0.5", tab === n.id ? "text-teal-300" : "text-slate-500 group-hover:text-slate-300")}>{n.icon}</span>
+            <span className="min-w-0 text-left">
+              <span className="block">{n.label}</span>
+              <span className={cn("block text-[11px] font-normal", tab === n.id ? "text-teal-200/70" : "text-slate-600")}>{n.hint}</span>
+            </span>
           </button>
         ))}
       </nav>
       <div className="mt-auto px-2 text-[11px] leading-relaxed text-slate-600">
-        Hermes plans · DeepSeek executes · git-backed memory keeps the fleet coherent.
+        Hermes plans. DeepSeek runs the steps. The session is deleted. Memory stays.
       </div>
     </aside>
   );

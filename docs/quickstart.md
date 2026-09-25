@@ -92,7 +92,7 @@ Open:
 - API view: http://127.0.0.1:7780/api/v1/view
 - Health: http://127.0.0.1:7780/api/v1/health
 
-In the UI, **Start** / **Stop** in the top bar map to `POST /api/v1/stack`. The **Services** tab should show Hermes and DeepSeek backends as `embedded`.
+In the UI, **Start** / **Stop** in the top bar map to `POST /api/v1/stack`. The **Run** tab shows Hermes and DeepSeek as `embedded` until you turn the live backends on.
 
 ### 5. Submit one unit of work
 
@@ -109,7 +109,7 @@ npx tsx src/cli.ts tasks submit --agent docbot --drain "Summarize the repo layou
 npx tsx src/cli.ts pipeline "Summarize the repo layout"
 ```
 
-From the dashboard: **Fleet** → submit a native task, or **Services** → type a prompt and **Run** (streams over SSE).
+From the dashboard: open **Run**, type a prompt, and press **Run prompt** (streams over SSE). **Simple pipeline** reuses the pinned triage and reviewer pair.
 
 ### 6. Inspect
 
@@ -163,7 +163,7 @@ npm run live -- --check
 
 This checks Node ≥ 20, `node_modules`, both live packages, and an API key. Exit `0` means you can boot live; exit `1` prints the next missing step.
 
-Equivalent without the script: open the dashboard **Services** tab later, or:
+Equivalent without the script: open the dashboard **Run** tab later, or:
 
 ```bash
 curl -s http://127.0.0.1:7780/api/v1/view | jq '{dsh, hermesLive}'
@@ -178,7 +178,7 @@ You want `backend: "live"`, `packageInstalled: true`, and for DeepSeek `apiKeyPr
 ```bash
 npm run live
 # → http://127.0.0.1:7780
-# → http://127.0.0.1:7780/#services
+# → http://127.0.0.1:7780/#services  (the Run tab)
 ```
 
 That is `scripts/live-up.sh`: sets `ROPEX_HERMES_BACKEND=live` and `ROPEX_DSH_BACKEND=live`, applies `fleets/examples/forge-local.yaml`, serves the dashboard.
@@ -200,7 +200,7 @@ With the live server running (another terminal, same env vars):
 npx tsx src/cli.ts tasks submit --agent docbot --drain "List the top-level directories and say what each is for"
 ```
 
-Or from **Services**: paste the same prompt → **Run**. You should see a Hermes plan (live CLI stdout folded into thoughts) and a DeepSeek headless observation.
+Or from **Run**: paste the same prompt → **Run prompt**. You should see a Hermes plan and a DeepSeek observation on the follow strip.
 
 ```bash
 npx tsx src/cli.ts pipeline "Compare the embedded and live backend split in README"

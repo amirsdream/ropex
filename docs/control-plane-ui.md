@@ -12,7 +12,7 @@ ropex up fleets/examples/github-control-plane.yaml --serve
 
 See [operations.md](./operations.md) for Podman Compose and stack CLI. Live Hermes + DeepSeek on the host: `npm run live` ([quickstart.md](./quickstart.md)).
 
-![Overview — KPI cards, the real per-task workflow flow, and health](./img/dashboard-overview.png)
+![Now — where a plan runs: control plane, deleted sessions, look then check](./img/dashboard-runboard.png)
 
 ## Tech stack
 
@@ -22,13 +22,12 @@ The dashboard is a **Vite + React 19 + TypeScript** app (source in [`web/`](../w
 | --- | --- |
 | Build | Vite 8 |
 | UI | React 19 + Tailwind CSS v4 |
-| Charts | Recharts (time-series, radial gauges) |
 | Data | TanStack Query (polls `/api/v1/view`), native `EventSource` for SSE |
 | Icons | lucide-react |
 
 `npm run build` builds the SPA into `dist/ui`; the control-plane server (`resolveUiDir` in `src/api.ts`) serves it in dev (`ropex ui`) and prod. During UI development, `npm run web:dev` runs the Vite dev server with `/api` proxied to `:7780`.
 
-The UI is an **operations and observability** surface — not a chat agent. A left sidebar switches views; tabs are deep-linkable via the URL hash (`#monitor`, `#services`, …).
+The UI follows a plan. It is not a chat agent and it does not chart an idle cluster. A left sidebar switches views. Tabs stay deep-linkable: `#overview` is Now, `#services` is Run, `#queue` is Plans, `#fleet` is Fleet, `#observe` is Results. An old `#monitor` link opens Now.
 
 ## Top bar
 
@@ -42,45 +41,31 @@ The UI is an **operations and observability** surface — not a chat agent. A le
 
 ## Views
 
-| View | Hash | Contents |
+| View | Hash | What it answers |
 | --- | --- | --- |
-| **Overview** | `#overview` | KPI cards, where each plan ran, the per-task workflow, health |
-| **Monitor** | `#monitor` | Grafana-style live time-series + radial gauges (see below) |
-| **Services** | `#services` | Live Hermes / DeepSeek follow strip, streaming console, service cards |
-| **Fleet** | `#fleet` | Workers by agent, native task submit, hygiene heatmap, skills, canary/drift, memory |
-| **Queue** | `#queue` | Drain controls, plans, approvals, policy simulate |
-| **Observe** | `#observe` | Trajectories, deliveries, rate limits, audit trail |
+| **Now** | `#overview` | Where the latest plans are, and whether the session is still open |
+| **Run** | `#services` | Ask something, then follow Hermes handing each step to DeepSeek |
+| **Plans** | `#queue` | Did this prompt reuse a pinned fleet or mint one, and which agents ran |
+| **Fleet** | `#fleet` | The agents you can reuse, the pin the next matching prompt will pick, and the memory that stayed |
+| **Results** | `#observe` | What a finished plan produced: trajectories and deliveries |
 
-### Overview
+A **Needs attention** strip appears on Now only when a worker is unhealthy, the queue is paused, a single-agent task is dead, or an approval is waiting.
 
-- **KPI cards** with sparklines: workers live, queue pending, throughput (tasks/min), deliveries, pipelines, unhealthy.
-- **Where a plan runs** — placement from `GET /api/v1/view`. `placement.executor` is `container` or `inprocess`. In container mode each recent plan is a card named `ropex-session:<id>`: the steps that shared that container (`look → triage`, `check → reviewer`), whether the session is open, deleted, or not started, and the worker image. The control-plane column keeps Hermes memory (fact count, plan count, live vs embedded backends). The scale column is live workers against `Policy.maxReplicas` and each agent's `maxConcurrent`.
-- **Per-task workflow flow** — the real run each task takes, rendered from `view.workflow`: the ordered stages `compose → plan → execute → deliver → learn` grouped onto the **Start · Transform · Result** phase spine, each stage attributed to its owner (Hermes / DeepSeek) and annotated with how many recent trajectories ran it. The phase of any in-flight pipeline is highlighted.
-- **Health** — SLO / drift / canary tiles plus a live worker probe list.
+### Now
 
-![Overview — where a plan runs: control plane, deleted sessions, look then check](./img/dashboard-runboard.png)
+**Where a plan runs** comes from `placement` on `GET /api/v1/view`. `placement.executor` is `container` or `inprocess`. In container mode each recent plan is a card named `ropex-session:<id>`: the steps that shared that container (`look → triage`, `check → reviewer`), a `reuse` or `mint` badge for the fleet binding, and whether the session is open, deleted, or not started. The control-plane column keeps Hermes memory (fact count, plan count, live vs embedded backends). The scale column is live workers against `Policy.maxReplicas` and each agent's `maxConcurrent`.
 
 A session card is teal only while a step status is `running`. A pipeline whose status is `running` but whose steps are still `pending` is labeled **not started**. Finished container plans are **session deleted**. Memory was copied back before the image was removed. See [ephemeral sessions](./ephemeral-sessions.md).
 
-### Monitor (Grafana-style)
+### Plans
 
-![Monitor — radial gauges and live time-series charts](./img/dashboard-monitor.png)
+![Plans — one plan per row, reuse or mint, steps as look to triage and check to reviewer](./img/dashboard-plans.png)
 
-The client samples `/api/v1/view` into a rolling in-memory history and renders live charts:
+One row is one interaction. The badge is `reuse <fleet>` or `mint <fleet>`. Chips are `step → agent`. The session label is open, deleted, or not started. Failed single-agent tasks (not plans) get a retry row. Pause, drain, and policy simulate stay behind **Queue controls**.
 
-- **Radial gauges:** SLO, healthy workers, canary coverage, drift.
-- **Time-series:** queue depth (pending vs claimed), worker pool (running vs idle), throughput (tasks/min), delivery & pipeline volume, backlog age, unhealthy workers.
-- **Fairness & latency:** claim-wait and run-duration percentiles.
+### Run — follow Hermes and DeepSeek
 
-### Queue — Plans
-
-![Queue — one plan per row, steps as look to triage and check to reviewer](./img/dashboard-plans.png)
-
-**Plans** is the pipeline list. One row is one plan. Chips are `step → agent`. The phase badge is where that plan is in the spine. Steps of one plan run in order inside a single session.
-
-### Services — follow Hermes and DeepSeek
-
-![Services — Hermes learning while DeepSeek has finished deliver](./img/dashboard-follow.png)
+![Run — Hermes learning while DeepSeek has finished deliver](./img/dashboard-follow.png)
 
 The **Follow** strip sits above the stage cards. It is the live handoff:
 
@@ -93,15 +78,23 @@ The token along the top is `plan → execute → deliver → learn`. The right-h
 
 **Simple pipeline** is the one-click smoke test: triage writes one sentence (`look`), reviewer marks it PASS or FAIL (`check`). Both steps share one session when `ROPEX_EXECUTOR=container`.
 
-![Services — interactive console streaming a run, plus service surfaces](./img/dashboard-services.png)
+![Run — prompt, simple pipeline, and the follow strip](./img/dashboard-services.png)
 
-The **interactive console** still submits a prompt and streams the run stage-by-stage over SSE:
+The console submits a prompt and streams the run over SSE:
 
-1. Type a prompt → **Run** → `POST /api/v1/pipeline` `{ drain: false }`, then a scoped `{ action: "drain" }`.
-2. `EventSource(/api/v1/events?pipelineId=…&format=ui)` streams the plan and stage events.
+1. **Simple pipeline** or **Run prompt** → `POST /api/v1/pipeline` `{ drain: false }`, then a scoped `{ action: "drain" }`. Simple pipeline sends `simple: true`, which pins triage and reviewer.
+2. `EventSource(/api/v1/events?pipelineId=…&format=ui)` streams the plan and stage events. A plan event includes `fleet` and `fleet_mode`.
 3. The panel shows the **Hermes plan**, live **stage cards** (running → done), an **event stream**, and the terminal **result**.
 
-Below the console, **service cards** show Hermes and DeepSeek backend status (embedded vs live, package/API-key readiness) and per-agent **surfaces** (Hermes soul/skills/memory/share; DeepSeek profile/model/plugins/tools).
+Badges above the prompt show the Hermes backend, the DeepSeek backend, and the loaded agents. A Claude Code, Codex, or Copilot card appears only when that runtime is ready. Agent souls, pins, and memory live on **Fleet**.
+
+### Fleet
+
+Pins come from `fleetPins` on the view: the fleet name, the agents, and the prompt that will reuse them. Under that, each loaded agent shows its model, skills, and whether a worker is running. Memory facts are the ones copied back before the session was deleted. Skills can be promoted. Pool hygiene and canary coverage stay under **Maintenance**.
+
+### Results
+
+Trajectories are the steps Hermes handed to DeepSeek. Deliveries are comments, checks, and pull requests a plan sent. Rate-limit buckets appear only when one is active.
 
 ## Data flow
 
@@ -109,7 +102,6 @@ Below the console, **service cards** show Hermes and DeepSeek backend status (em
 flowchart TB
   subgraph Browser["Browser — web/ (React SPA)"]
     Q["TanStack Query\npolls /api/v1/view"]
-    HIST["rolling history\n→ Recharts time-series"]
     SSE["EventSource\nlive pipeline stream"]
     ACT["actions: stack · drain · tasks · skills · approvals"]
   end
@@ -124,11 +116,10 @@ flowchart TB
 
   subgraph State[".ropex/state.json"]
     W["workers · queue · memory"]
-    P["pipelines · trajectories"]
+    P["pipelines · fleetPins · trajectories"]
   end
 
   Q --> VIEW --> State
-  HIST --> Q
   SSE --> EV --> State
   ACT --> REST --> State
   ACT --> PIPE --> State
@@ -137,7 +128,7 @@ flowchart TB
 
 ## Live vs embedded backends
 
-The **Services** view shows backend readiness:
+The **Run** tab shows backend readiness:
 
 | Component | Default | Live requires |
 | --- | --- | --- |

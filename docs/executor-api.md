@@ -58,8 +58,12 @@ Content-Type: application/json
 
 | Field | Description |
 | --- | --- |
-| `prompt` | Required on submit. Used by heuristic/Hermes planner when `stages` omitted |
-| `stages` | Optional explicit stage list. Each `agent` must exist in fleet YAML |
+| `prompt` | Required on submit, except `simple: true` which uses the built-in sentence. Used by the heuristic or Hermes planner when `stages` is omitted |
+| `stages` | Optional explicit stage list. Each `agent` must exist in fleet YAML. An explicit list reuses those agents |
+| `fleet` | Optional definition name to reuse. An unknown name is rejected |
+| `simple` | Two stages: triage (`look`) then reviewer (`check`). Pins that pair unless `pin` is false |
+| `pin` | Remember the agent set in `fleetPins`. Simple pipelines pin by default. `false` is a one-off |
+| `reflect` | Also write `.ropex/pinned/<key>.yaml`. The control plane reuses the state record, not that file |
 | `drain` | Default `true` — run stages sequentially before HTTP response completes |
 | `drain: false` | Plan only; drain later via `{ action: "drain", pipelineId }` |
 | `concurrency` | Passed to scoped drain (default 1 — stages stay sequential) |
@@ -211,9 +215,10 @@ ropex ui   # Pipelines form + live SSE drawer
 
 The built-in dashboard uses the same API:
 
-- **Run** → `POST /api/v1/pipeline` `{ prompt, drain: true }` → opens detail drawer
+- **Run** → `POST /api/v1/pipeline` `{ prompt, drain: false }` then a scoped drain. The follow strip streams the handoff
+- **Simple pipeline** → the same call with `simple: true`, which pins triage and reviewer
+- **Plans** → each row includes `fleet.name` and `fleet.mode` (`reuse` or `mint`) from `GET /api/v1/view`
 - **Live logs** → `EventSource(/api/v1/events?pipelineId=…&format=ui)`
-- **View** → `GET /api/v1/pipeline?id=…`
 
 See [control-plane-ui.md](./control-plane-ui.md).
 

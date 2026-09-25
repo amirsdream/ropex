@@ -1,8 +1,55 @@
 # Ropex architecture — orchestration for agent fleets
 
-Ropex is a GitOps orchestrator for AI agents. Desired state in git holds **agent definitions and concurrency caps**, not warm replica farms. The control plane **admits → spawns → runs → destroys** workers under policy. Memory and skills live on a durable bus so learning survives ephemeral runners.
+Ropex is a GitOps orchestrator for AI agents. An interaction does not wait for someone to hand-write a fleet. It **resolves a fleet, runs it, and keeps only what the next run will need**. Git is the reflection of that shape — agents, souls, caps — not a gate in front of the first prompt.
 
 External orchestrators (e.g. Magentic) call the **executor API** for multi-stage pipelines without reimplementing queue semantics.
+
+## Three lifetimes
+
+One word, "fleet", was doing three jobs. Split them.
+
+| Lifetime | What it is | How long it lives | What you reuse |
+| --- | --- | --- | --- |
+| **Definition** | Named agents, souls, harness, and caps. Content-addressed (`imageDigest`). | Until you change or delete the YAML | The shape. The next identical task stamps from this, not from a dead container |
+| **In-flight** | The workers an interaction actually claimed | The run. `idleTTLMs: 0` destroys them when the claim ends | Nothing. The session image is deleted after learn |
+| **Persistent** | A definition you pinned because the task repeats, plus an optional warm pool | The definition stays. Workers stay only when you ask (`scale: static` or `idleTTLMs > 0`) | Memory, skills, and the definition. A new session still runs the steps |
+
+```mermaid
+flowchart LR
+  IN["Interaction\nprompt · webhook · task · API"] --> BIND{"Fleet already\ndefined?"}
+  BIND -->|yes| REUSE["Reuse definition"]
+  BIND -->|no| MINT["Mint in-flight fleet"]
+  REUSE --> RUN["Admit → spawn → Hermes plan\n→ session execute → learn"]
+  MINT --> RUN
+  RUN --> MEM["Memory and skills\nstay on the control plane"]
+  RUN --> DIE["Session image deleted\nidle workers destroyed"]
+  MINT -->|pin for a repeatable task| GIT["Reflect definition into git"]
+  REUSE --> GIT
+  GIT --> BIND
+```
+
+**Any interaction generates an in-flight fleet.** A prompt in the dashboard, a GitHub event, a Task YAML row, `ropex pipeline`, or `POST /api/v1/pipeline` all admit work. Admission binds that work to a definition:
+
+- **Reuse** when the interaction names a fleet, or when it matches a repeatable task that was pinned before. The agents, caps, and Hermes memory of that definition are the ones that run.
+- **Mint** when nothing matches. Hermes composes a fleet for this run from the default roles (today: the agents already loaded, such as triage and reviewer). That fleet is in-flight only. It is not a second copy of the cluster.
+
+**Execution is the same either way.** One plan is one session (`ropex-session:<id>`). Steps inside the plan share that container so they can read each other's files. Hermes plans and learns on the control plane. DeepSeek harness (or a declared CLI) executes inside the session. The session image is deleted after learn. Memory is copied out first.
+
+**Persistence is the definition, not the container.** A repeatable task — "review this kind of PR", "triage this repo", the simple pipeline — should hit the same definition next time and inherit the skills and facts Hermes already stored. It should not need the same container, the same worker id, or a process that sat idle overnight. Warm workers are an opt-in for when spawn cost matters. The default stays `onDemand` with `idleTTLMs: 0`.
+
+**Scale is how many in-flight runs share one definition.** `maxConcurrent` is the per-agent ceiling. `Policy.maxReplicas` is the cluster ceiling. Ten people can run the same pinned fleet at once, up to those caps. Scale does not mean splitting one plan into one container per step, and it does not mean minting an unbounded fleet per keystroke.
+
+**GitOps is the reflection of definitions, not of containers.** Git holds the agents, souls, caps, and memory YAML you review. A repeatable interaction is **pinned in cluster state** (`fleetPins` on `.ropex/state.json`): the next matching prompt reuses those agents and the Hermes memory they already wrote. `reflect: true` also writes a readable copy under `.ropex/pinned/<key>.yaml`. That file is not a `Fleet` manifest. Reconcile does not apply it, because applying it would duplicate agents. The control plane reuses the state record. Git is not required before the first interaction.
+
+### What runs today
+
+The control plane already does the durable half of this:
+
+- Git (or a local `fleets/**/*.yaml` apply) is the source of fleet definitions.
+- `onDemand` spawns on claim and destroys when idle. `static` keeps a warm pool. `maxConcurrent` and `maxReplicas` cap live workers.
+- Every loaded interaction runs against that fleet. A plan is one session, deleted after learn. Hermes memory survives on the control plane.
+
+`bindFleet` in `src/fleet-bind.ts` runs at `submitPipeline`. A named fleet or an existing pin is reused. Otherwise the interaction mints a working set from the agents already loaded (triage and reviewer when both exist) and records an in-flight fleet. The simple pipeline pins that set, so the next simple run reuses it. `pin: true` remembers any other prompt. `reflect: true` writes a readable copy under `.ropex/pinned/`. The in-flight record closes when the plan finishes. Workers still die through the idle sweep, and the session image is still deleted after learn. A minted fleet does not create new Agent objects. It selects from the definitions git already applied.
 
 ## Capacity model
 
@@ -251,7 +298,7 @@ flowchart TB
   W0 -.->|no| F2
 ```
 
-Control-plane UI: `ropex ui` serves the built React SPA (`dist/ui`, source in `web/`) and `/api/v1/view` — live Grafana-style monitoring, a streaming Hermes ↔ DeepSeek console, workers, pipelines, and trajectories. See [control-plane-ui.md](./control-plane-ui.md).
+Control-plane UI: `ropex ui` serves the React SPA (`dist/ui`, source in `web/`) and `/api/v1/view`. The sidebar answers five questions: **Now** (latest sessions), **Run** (Hermes handing steps to DeepSeek), **Plans** (reuse or mint), **Fleet** (pins, agents, memory), and **Results** (what a plan produced). See [control-plane-ui.md](./control-plane-ui.md).
 
 ## Executor API (multi-stage pipelines)
 
@@ -448,7 +495,7 @@ flowchart LR
 
 ## Worker runtime seam
 
-`bootWorker(spec, { hermes })` selects the execute-stage adapter. The default is still `bootDsh`: it loads a **profile pack** (`minimal` | `code` | `standard` | `creator`) and runs Hermes plans through the in-process Cordis harness (`ROPEX_DSH_BACKEND=live` swaps in `@deepseek-ai/dsh` and fails closed when unavailable). Agents may declare `spec.runtime.kind: claude-code | codex | copilot` to run a headless coding CLI in the worker worktree instead — Hermes still composes, plans, and learns. See [dsh.md](./dsh.md), [worker-runtimes.md](./worker-runtimes.md), and `workerRuntimeScaffold()` for the wiring checklist. The Services page renders a card per runtime.
+`bootWorker(spec, { hermes })` selects the execute-stage adapter. The default is still `bootDsh`: it loads a **profile pack** (`minimal` | `code` | `standard` | `creator`) and runs Hermes plans through the in-process Cordis harness (`ROPEX_DSH_BACKEND=live` swaps in `@deepseek-ai/dsh` and fails closed when unavailable). Agents may declare `spec.runtime.kind: claude-code | codex | copilot` to run a headless coding CLI in the worker worktree instead — Hermes still composes, plans, and learns. See [dsh.md](./dsh.md), [worker-runtimes.md](./worker-runtimes.md), and `workerRuntimeScaffold()` for the wiring checklist. The Run tab shows Hermes and DeepSeek as badges. A declared CLI appears there only when that runtime is ready.
 
 ## One-click stack lifecycle
 
