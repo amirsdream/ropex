@@ -88,7 +88,26 @@ export type View = {
   dsh: { backend: string; liveReady: boolean; packageInstalled: boolean; apiKeyPresent: boolean; apiKeySource?: string; profiles: Array<{ profile: string; loop: string; plugins: string[]; description: string }> };
   skillCatalog: Array<{ name: string; version: number; originAgent: string; sharedWith: string[]; summary: string; coverage: number }>;
   trajectories: { total: number; recent: Array<{ id: string; at: string; agent: string; workerId: string; taskId: string; steps: number; stages: string[]; output: string }> };
-  pipelines: { total: number; recent: Array<{ id: string; status: string; phase?: string; prompt: string; stages: number; doneStages: number; updatedAt: string }> };
+  pipelines: {
+    total: number;
+    recent: Array<{
+      id: string;
+      status: string;
+      phase?: string;
+      prompt: string;
+      stages: number;
+      doneStages: number;
+      updatedAt: string;
+      steps?: Array<{ id: string; agent: string; status: string }>;
+    }>;
+  };
+  placement?: {
+    executor: "container" | "inprocess";
+    workerImage: string;
+    runtime: string;
+    maxReplicas: number | null;
+    agents: Array<{ name: string; live: number; maxConcurrent: number; scale: "onDemand" | "static" }>;
+  };
   rateLimits: { limit: number; windowMs: number; buckets: number; nearLimit: number; rows: Array<{ key: string; count: number; remaining: number; saturated: boolean }> };
   audit: Array<{ id: string; at: string; kind: string; message: string; agent?: string; taskId?: string }>;
   approvals: Array<{ id: string; status: string; tool: string; agent: string; taskId: string; reason: string }>;
@@ -115,8 +134,11 @@ export const api = {
   view: () => req<View>("/api/v1/view"),
   submitTask: (agent: string, prompt: string, mode: string, drain = true) =>
     req("/api/v1/tasks", { method: "POST", body: JSON.stringify({ action: "submit", agent, prompt, delivery: { mode }, drain }) }),
-  submitPipeline: (prompt: string, drain = false) =>
-    req<{ pipeline: { id: string; status: string } }>("/api/v1/pipeline", { method: "POST", body: JSON.stringify({ prompt, drain }) }),
+  submitPipeline: (prompt: string, drain = false, extra: { simple?: boolean } = {}) =>
+    req<{ pipeline: { id: string; status: string } }>("/api/v1/pipeline", {
+      method: "POST",
+      body: JSON.stringify({ prompt, drain, ...extra }),
+    }),
   drainPipeline: (pipelineId: string) =>
     req("/api/v1/pipeline", { method: "POST", body: JSON.stringify({ action: "drain", pipelineId }) }),
   runDrain: (concurrency: number) => req("/api/v1/drain", { method: "POST", body: JSON.stringify({ concurrency }) }),

@@ -3,7 +3,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-COMPOSE_FILE="podman-compose.yml"
+COMPOSE_FILE="docker-compose.yml"
+if [[ ! -f "$COMPOSE_FILE" ]]; then
+  COMPOSE_FILE="podman-compose.yml"
+fi
 if command -v podman >/dev/null 2>&1 && podman compose version >/dev/null 2>&1; then
   COMPOSE=(podman compose -f "$COMPOSE_FILE")
 elif command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then

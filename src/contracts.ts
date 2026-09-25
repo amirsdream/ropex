@@ -493,6 +493,20 @@ export type ControlPlaneView = {
       stages: number;
       doneStages: number;
       updatedAt: string;
+      steps: Array<{ id: string; agent: string; status: string }>;
+    }>;
+  };
+  /** Where a plan runs, and how many workers the fleet is allowed to create. */
+  placement: {
+    executor: "container" | "inprocess";
+    workerImage: string;
+    runtime: string;
+    maxReplicas: number | null;
+    agents: Array<{
+      name: string;
+      live: number;
+      maxConcurrent: number;
+      scale: "onDemand" | "static";
     }>;
   };
 };

@@ -57,7 +57,9 @@ describe("stack control", () => {
     expect(result.ok).toBe(true);
     expect(result.stack.status).toBe("up");
     expect(isQueuePaused(state)).toBe(false);
-    expect(loadState(root).desired.length).toBeGreaterThan(0);
+    const saved = loadState(root);
+    expect(saved.desired.length).toBeGreaterThan(0);
+    expect(saved.stack?.status).toBe("up");
   });
 
   it("stack down pauses queue", () => {

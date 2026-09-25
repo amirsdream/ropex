@@ -6,7 +6,8 @@ GitOps control plane for agent fleets — **Hermes plans, DeepSeek executes**, g
 
 | Doc | What you'll learn |
 | --- | --- |
-| [**Operations**](./operations.md) | **One-click `npm run up/down`**, Podman Compose, stack API |
+| [**Operations**](./operations.md) | **One-click `npm run up/down`**, Podman Compose, container sessions, stack API |
+| [**Ephemeral sessions**](./ephemeral-sessions.md) | One image per plan, Hermes vs DeepSeek, simple pipeline, follow strip |
 | [**System architecture (visual)**](./system-architecture.md) | Diagrams — layers, ingress, workflow, state, module map |
 | [Architecture](./architecture.md) | Control plane vs data plane, immutable workers, the start → transform → result spine, queue, executor |
 | [Control-plane UI](./control-plane-ui.md) | React SPA — live monitoring, Hermes/DeepSeek console, pipelines, live SSE |
@@ -60,7 +61,9 @@ npx tsx src/cli.ts trajectories --jsonl
 | `src/executor.ts` | Multi-stage pipeline API + SSE |
 | `src/api.ts` | HTTP control plane + UI view model |
 | `web/` | Control-plane dashboard — Vite + React + TS SPA (built to `dist/ui`) |
-| `Containerfile` / `podman-compose.yml` | Container deploy |
+| `Containerfile` / `Containerfile.worker` | Control plane and the session base image |
+| `docker-compose.yml` / `podman-compose.yml` | Compose: build the base, serve the control plane |
+| `src/session.ts` | Build, run, and delete one session per plan |
 | `scripts/stack-up.sh` / `stack-down.sh` | `npm run up` / `down` |
 | `integrations/magentic/` | Magentic adapter notes |
 | `.ropex/state.json` | Local cluster state (etcd stand-in) |

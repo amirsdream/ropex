@@ -21,7 +21,7 @@ Ropex plans through `createHermes` (`src/hermes.ts`) — soul, MemoryPort, skill
 | **embedded** (default) | — | In-process `createHermes()` |
 | **live** (optional) | `ROPEX_HERMES_BACKEND=live` | Spawns `hermes-agent` CLI for `plan()` |
 
-Live hermes-agent is an **optional seam**. CI and `npm test` use embedded only.
+Live hermes-agent is an **optional seam**. CI and `npm test` use embedded only. On the dashboard, Hermes is the plan and learn lane of the [follow strip](./control-plane-ui.md). Memory it writes stays on the control plane when the [session image](./ephemeral-sessions.md) is deleted.
 
 ## Install
 

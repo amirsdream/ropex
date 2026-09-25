@@ -41,14 +41,54 @@ Open http://127.0.0.1:7780 and use **Start** / **Stop** in the top bar. These ca
 ```bash
 podman compose -f podman-compose.yml up --build -d
 podman compose -f podman-compose.yml down
+# Docker uses the same shape:
+docker compose -f docker-compose.yml up --build -d
 ```
 
 | File | Role |
 | --- | --- |
-| `Containerfile` | Node 22 image; CMD runs `ropex up --serve` |
-| `podman-compose.yml` | Service on port 7780, volume `ropex-state` for `.ropex/` |
+| `Containerfile` | Control-plane image. `ROPEX_EXECUTOR=container`. CMD is `ropex up --serve` |
+| `Containerfile.worker` | Base image `ropex-worker:latest`. Sessions are thin layers on top of it |
+| `docker-compose.yml` | `worker` builds the base and exits; `control-plane` serves :7780 |
+| `podman-compose.yml` | Same stack, for `podman compose` |
 
-Environment: `ROPEX_PORT` (default `7780`).
+`npm run up` tries Podman Compose, then Docker Compose, then a local `tsx` process.
+
+The control plane mounts the container socket and builds `ropex-session:<id>` per plan. That image is deleted after learn. The base image stays. Full walkthrough: [ephemeral sessions](./ephemeral-sessions.md).
+
+### Container sessions without Compose
+
+Compose is optional. On a machine that already has Podman or Docker:
+
+```bash
+podman machine start    # macOS Podman only; skip when the machine is already running
+podman build -t ropex-worker:latest -f Containerfile.worker .
+
+# .env — restart after editing. Enabling the flag does not build the image.
+# ROPEX_EXECUTOR=container
+
+npx tsx src/cli.ts up fleets/examples/github-control-plane.yaml --serve --port 7780
+```
+
+`ROPEX_CONTAINER_BIN` forces `docker` or `podman`. Unset, Ropex uses whichever binary is on `PATH`, Docker first.
+
+### Environment
+
+| Variable | Effect |
+| --- | --- |
+| `ROPEX_PORT` / `--port` | Dashboard port (default 7780) |
+| `ROPEX_EXECUTOR` | `container` for one image per plan. Unset or anything else stays in-process |
+| `ROPEX_WORKER_IMAGE` | Base image (default `ropex-worker:latest`) |
+| `ROPEX_CONTAINER_BIN` | `docker` or `podman` |
+| `ROPEX_HERMES_BACKEND` | `embedded` (default) or `live` |
+| `ROPEX_DSH_BACKEND` | `embedded` (default) or `live` |
+| `OPENAI_API_KEY` | Preferred model key. Forwarded into the session. Never baked into the image |
+| `DEEPSEEK_API_KEY` | Fallback key |
+| `OPENAI_MODEL`, `OPENAI_BASE_URL` | Override the chat model and endpoint |
+
+`hermes-agent` and `@deepseek-ai/dsh` are `optionalDependencies`. `npm install` may pull them. `npm install --omit=optional` and the control-plane image (`npm ci --omit=optional`) skip them. Embedded Hermes and the embedded harness still run. Live CLI mode is documented in [hermes.md](./hermes.md) and [dsh.md](./dsh.md).
+
+`.env` is loaded at startup and is not committed. Restart the process after changing it.
 
 ## API
 

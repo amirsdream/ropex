@@ -7,6 +7,7 @@
 import { createRequire } from "node:module";
 import type { HermesPlan } from "./contracts.js";
 import { createHarness, loopModeFor, toolsFor, type HarnessLoop } from "./harness.js";
+import { chatEndpoint, completeChat } from "./llm.js";
 import { runProcess } from "./proc.js";
 import type { AgentSpec, HarnessProfile, TrajectoryStep } from "./types.js";
 import type { HermesContract, MemoryPort, WorkerExecContext } from "./contracts.js";
@@ -97,12 +98,9 @@ export function profilePack(profile: HarnessProfile): DshProfilePack {
 
 /** True when optional peer `@deepseek-ai/dsh` resolves (network-free check). */
 export function dshPackageInstalled(): boolean {
-  try {
-    require.resolve("@deepseek-ai/dsh");
-    return true;
-  } catch {
-    return false;
-  }
+  // The published package is a CLI (bin only). It has no main export, so
+  // require.resolve("@deepseek-ai/dsh") fails even when the package is installed.
+  return resolveDshBin() !== undefined;
 }
 
 /** Resolve backend from explicit opt, then ROPEX_DSH_BACKEND, else embedded. */
@@ -207,6 +205,36 @@ export function loadLiveProfileMeta(profile: HarnessProfile): { bundleId?: strin
   }
 }
 
+/**
+ * When a key is loaded, answer the task with the model.
+ * ROPEX_LLM=embedded keeps the in-process tool simulator.
+ * Returns undefined when no key is available so the caller uses the harness loop.
+ */
+async function answerWithLlm(
+  plan: HermesPlan,
+): Promise<{ observations: string[]; steps: TrajectoryStep[] } | undefined> {
+  if (process.env.ROPEX_LLM === "embedded") return undefined;
+  const key = resolveLlmApiKey();
+  if (!key.present || !key.source || !key.env) return undefined;
+  const apiKey = process.env[key.env]?.trim();
+  if (!apiKey) return undefined;
+
+  const taskLine = plan.thoughts.find((t) => t.startsWith("task:"));
+  const prompt = (taskLine ? taskLine.replace(/^task:\s*/, "") : planPrompt(plan)).trim();
+  const endpoint = chatEndpoint(key.source);
+  const observation = await completeChat({ apiKey, ...endpoint, prompt });
+  return {
+    observations: [observation],
+    steps: [
+      {
+        thought: taskLine ?? plan.thoughts[0] ?? "llm",
+        calls: [{ plugin: "llm", name: key.source, input: { model: endpoint.model } }],
+        observation,
+      },
+    ],
+  };
+}
+
 function planPrompt(plan: HermesPlan): string {
   const thoughts = plan.thoughts.filter(Boolean).join("\n");
   const calls = plan.calls
@@ -272,6 +300,9 @@ async function bootEmbeddedDsh(
     pack: aligned,
     kernel,
     async execute(plan) {
+      const live = await answerWithLlm(plan);
+      if (live) return live;
+
       const loop = kernel.context().get<HarnessLoop>("loop");
       const observations = await loop.run(plan.calls);
       const steps: TrajectoryStep[] = plan.calls.map((call, i) => ({

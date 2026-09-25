@@ -15,6 +15,12 @@ External orchestrators (e.g. Magentic) call the **executor API** for multi-stage
 
 Worker-scoped memory is promoted to agent scope on destroy (`src/scale.ts`). Prefer Hermes `share.write: agent` (or fleet) so facts never depended on a replica id.
 
+## One session per plan
+
+Steps of one plan share a container (`ropex-session:<id>`, from `ropex-worker:latest`) so later steps can read earlier files. Hermes memory is copied back to the control plane, then the session image is deleted. Scale is many plans at once, capped by `maxConcurrent` and `maxReplicas`, not one container per step.
+
+`ROPEX_EXECUTOR=container` opts in. The default is in-process, which is what tests use. Detail, the follow strip, and the simple pipeline: [ephemeral sessions](./ephemeral-sessions.md).
+
 ## Big picture
 
 ```mermaid

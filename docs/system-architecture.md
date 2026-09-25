@@ -15,6 +15,7 @@ Ropex is a **GitOps control plane for agent fleets**:
 - The **queue** admits work, spawns ephemeral workers on demand, and destroys them when idle.
 - Each task runs a fixed **Hermes → DeepSeek** workflow: plan/remember/learn vs execute/deliver.
 - **Memory and skills** survive worker death on a scoped shared bus.
+- With `ROPEX_EXECUTOR=container`, the steps of one plan share `ropex-session:<id>`. That image is deleted after learn. See [ephemeral sessions](./ephemeral-sessions.md).
 
 ```mermaid
 flowchart LR

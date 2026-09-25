@@ -1,0 +1,23 @@
+# Base image for a pipeline session. Built once. Each pipeline adds a thin
+# layer (the task and Hermes memory snapshot) and that layer is deleted after learn.
+FROM docker.io/library/node:22-bookworm
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends git python3 ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY tsconfig.json ./
+COPY src ./src
+COPY souls ./souls
+COPY fleets ./fleets
+RUN npx tsc
+
+RUN mkdir -p /session
+ENV ROPEX_ROOT=/app
+ENV ROPEX_IN_SESSION=1
+ENV ROPEX_EXECUTOR=inprocess
+
+ENTRYPOINT ["node", "/app/dist/cli.js", "session-exec", "/session/request.json"]

@@ -3,6 +3,7 @@ import type { View } from "../lib/api";
 import type { Sample } from "../hooks/useView";
 import { StatCard } from "../components/StatCard";
 import { Badge, Empty, Panel, SectionHead } from "../components/ui";
+import { RunBoard } from "../components/RunBoard";
 import { WorkflowFlow } from "../components/WorkflowFlow";
 import { num } from "../lib/format";
 import { cn } from "../lib/cn";
@@ -24,10 +25,12 @@ export function Overview({ view, history }: { view: View; history: Sample[] }) {
         <StatCard label="Unhealthy" value={num(m.workersUnhealthy)} spark={col(history, "unhealthy")} color="rose" icon={<TriangleAlert size={15} />} hint={view.health.ok ? "all clear" : "attention"} />
       </div>
 
+      <RunBoard view={view} />
+
       <Panel>
         <SectionHead
-          title="Per-task workflow"
-          sub="The real run each task takes — compose → plan → execute → deliver → learn."
+          title="Inside one step"
+          sub="Hermes plans on the control plane. The session runs the step. Memory is copied back before the session is deleted."
           icon={<GitBranch size={16} />}
         />
         <WorkflowFlow view={view} />

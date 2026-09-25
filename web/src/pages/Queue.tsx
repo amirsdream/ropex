@@ -70,15 +70,23 @@ export function Queue({ view }: { view: View }) {
       </Panel>
 
       <Panel>
-        <SectionHead title="Pipelines" sub="executor runs — start → transform → result" icon={<GitBranch size={16} />} right={<Badge tone="violet">{view.pipelines.total}</Badge>} />
-        <div className="max-h-64 space-y-1.5 overflow-auto px-5 pb-5">
-          {view.pipelines.recent.length === 0 ? <Empty>No pipelines yet — run one from the Services console.</Empty> : view.pipelines.recent.map((p) => (
-            <div key={p.id} className="flex items-center justify-between gap-3 rounded-lg bg-white/5 px-3 py-2 text-sm">
-              <span className="truncate text-slate-300">{p.prompt}</span>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500">{p.doneStages}/{p.stages}</span>
+        <SectionHead title="Plans" sub="One row is one plan. Its steps run in order inside a single session." icon={<GitBranch size={16} />} right={<Badge tone="violet">{view.pipelines.total}</Badge>} />
+        <div className="max-h-80 space-y-2 overflow-auto px-5 pb-5">
+          {view.pipelines.recent.length === 0 ? <Empty>No plans yet — run one from the Services console.</Empty> : view.pipelines.recent.map((p) => (
+            <div key={p.id} className="rounded-lg bg-white/5 px-3 py-2 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span className="truncate text-slate-300">{p.prompt}</span>
                 <Badge tone={p.phase === "result" ? "ok" : p.phase === "execute" ? "teal" : "info"}>{p.phase ?? p.status}</Badge>
               </div>
+              {(p.steps ?? []).length > 0 ? (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {p.steps!.map((s) => (
+                    <span key={s.id} className="rounded-md bg-ink-950/60 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">
+                      {s.id}→{s.agent}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

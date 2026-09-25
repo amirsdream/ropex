@@ -10,32 +10,78 @@ export type StageView = {
   output?: string;
 };
 
+export type FollowBeat = {
+  owner: "hermes" | "deepseek";
+  phase: "plan" | "execute" | "deliver" | "learn";
+  stageId: string;
+  agent?: string;
+  text: string;
+};
+
 export type StreamState = {
   status: "idle" | "planning" | "running" | "done" | "error";
   pipelineId?: string;
   planText?: string;
   stages: StageView[];
   events: { type: string; at: number; text: string }[];
+  beats: FollowBeat[];
+  cursor?: FollowBeat;
   result?: string;
 };
 
-const initial: StreamState = { status: "idle", stages: [], events: [] };
+const initial: StreamState = { status: "idle", stages: [], events: [], beats: [] };
+
+function visibleBeat(text: string): string {
+  return text
+    .replace(/sk-[A-Za-z0-9_-]{8,}/g, "sk-…")
+    .replace(/OPENAI_API_KEY\s*(\{[^}]*\})?/g, "model call $1")
+    .replace(/DEEPSEEK_API_KEY\s*(\{[^}]*\})?/g, "model call $1");
+}
+
+function classify(logType: string): Pick<FollowBeat, "owner" | "phase"> | undefined {
+  if (logType === "plan") return { owner: "hermes", phase: "plan" };
+  if (logType === "learn") return { owner: "hermes", phase: "learn" };
+  if (logType === "deliver") return { owner: "deepseek", phase: "deliver" };
+  if (logType === "thought" || logType === "tool" || logType === "observation") return { owner: "deepseek", phase: "execute" };
+  return undefined;
+}
 
 export function useStream() {
   const [state, setState] = useState<StreamState>(initial);
   const esRef = useRef<EventSource | null>(null);
+  const queueRef = useRef<FollowBeat[]>([]);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const stop = useCallback(() => {
     esRef.current?.close();
     esRef.current = null;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
+    queueRef.current = [];
   }, []);
 
-  const run = useCallback(async (prompt: string) => {
+  const play = useCallback((beat: FollowBeat) => {
+    queueRef.current.push(beat);
+    if (timerRef.current) return;
+    const step = () => {
+      const nextBeat = queueRef.current.shift();
+      if (!nextBeat) {
+        timerRef.current = null;
+        return;
+      }
+      setState((s) => ({ ...s, cursor: nextBeat, beats: [...s.beats, nextBeat].slice(-30) }));
+      timerRef.current = setTimeout(step, 420);
+    };
+    step();
+  }, []);
+
+  const run = useCallback(async (prompt: string, opts?: { simple?: boolean }) => {
     stop();
-    setState({ status: "planning", stages: [], events: [{ type: "status", at: Date.now(), text: `Submitting: ${prompt}` }] });
+    const label = opts?.simple ? "simple pipeline" : prompt;
+    setState({ status: "planning", stages: [], events: [{ type: "status", at: Date.now(), text: `Submitting: ${label}` }], beats: [] });
     let pipelineId: string;
     try {
-      const res = await api.submitPipeline(prompt, false);
+      const res = await api.submitPipeline(prompt, false, { simple: opts?.simple });
       pipelineId = res.pipeline.id;
     } catch (err) {
       setState((s) => ({ ...s, status: "error", events: [...s.events, { type: "error", at: Date.now(), text: String(err) }] }));
@@ -53,6 +99,17 @@ export function useStream() {
         return;
       }
       const d = msg.data ?? {};
+      let beat: FollowBeat | undefined;
+      if (msg.type === "agent_start") {
+        const id = String(d.stage_id ?? d.role ?? "stage");
+        const agent = String(d.agent ?? "");
+        beat = { owner: "hermes", phase: "plan", stageId: id, agent, text: visibleBeat(`${agent || id} takes this step`) };
+      } else if (msg.type === "agent_log") {
+        const lane = classify(String(d.log_type ?? ""));
+        if (lane) {
+          beat = { ...lane, stageId: String(d.stage_id ?? "stage"), text: visibleBeat(String(d.message ?? "")) };
+        }
+      }
       setState((s) => {
         const next: StreamState = { ...s, stages: [...s.stages], events: [...s.events] };
         const pushEvent = (text: string) => next.events.push({ type: msg.type, at: Date.now(), text });
@@ -68,7 +125,8 @@ export function useStream() {
             break;
           case "agent_start": {
             const id = String(d.stage_id ?? d.role ?? "stage");
-            upsert(id, { role: String(d.role ?? id), agent: String(d.agent ?? ""), status: "running" });
+            const agent = String(d.agent ?? "");
+            upsert(id, { role: String(d.role ?? id), agent, status: "running" });
             pushEvent(`▶ ${id} started`);
             break;
           }
@@ -77,6 +135,7 @@ export function useStream() {
             const i = next.stages.findIndex((x) => x.id === id);
             const line = String(d.message ?? "");
             if (i !== -1) next.stages[i] = { ...next.stages[i], logs: [...next.stages[i].logs, line] };
+            if (beat && !beat.agent) beat = { ...beat, agent: next.stages.find((x) => x.id === id)?.agent };
             break;
           }
           case "agent_complete": {
@@ -103,6 +162,7 @@ export function useStream() {
         }
         return next;
       });
+      if (beat) play(beat);
     };
     es.onerror = () => {
       es.close();
@@ -115,7 +175,7 @@ export function useStream() {
     } catch {
       /* SSE surfaces failures */
     }
-  }, [stop]);
+  }, [play, stop]);
 
   const reset = useCallback(() => {
     stop();

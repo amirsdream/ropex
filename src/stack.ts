@@ -102,10 +102,11 @@ export async function stackUp(
     state.stack = preserved;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    stack.status = "down";
-    stack.message = `Apply failed: ${msg}`;
+    const failed = state.stack!;
+    failed.status = "down";
+    failed.message = `Apply failed: ${msg}`;
     recordAudit(state, { kind: "info", message: `stack up failed: ${msg}` });
-    return { ok: false, stack, applied: false, tick: null };
+    return { ok: false, stack: failed, applied: false, tick: null };
   }
 
   resumeQueue(state);
@@ -113,19 +114,27 @@ export async function stackUp(
 
   let tick: Awaited<ReturnType<typeof controlPlaneTick>> | null = null;
   if (opts.tick !== false) {
-    tick = await controlPlaneTick(root, state, { concurrency: 2, persist: false });
+    // The manifest was just applied. A GitRepo sync here re-reads its path
+    // (often an empty directory) and would replace that desired state.
+    tick = await controlPlaneTick(root, state, {
+      concurrency: 2,
+      persist: false,
+      skipSync: true,
+    });
   }
 
-  stack.status = "up";
-  stack.updatedAt = nowIso();
-  stack.message = "Stack running — queue active, workers ready.";
+  // `preserved` replaced `state.stack` after apply; keep writing that object.
+  const live = state.stack!;
+  live.status = "up";
+  live.updatedAt = nowIso();
+  live.message = "Stack running — queue active, workers ready.";
   recordAudit(state, {
     kind: "info",
     message: `stack up manifest=${manifest}`,
     meta: { applied, drained: tick?.drained.length ?? 0 },
   });
 
-  return { ok: true, stack, applied, tick };
+  return { ok: true, stack: live, applied, tick };
 }
 
 /**

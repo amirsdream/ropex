@@ -2,6 +2,7 @@ import { useState } from "react";
 import { BrainCircuit, Cpu, Play, RotateCcw, Terminal } from "lucide-react";
 import type { View } from "../lib/api";
 import { useStream, type StageView } from "../hooks/useStream";
+import { FollowLanes } from "../components/FollowLanes";
 import { Badge, Button, Empty, KV, Panel, SectionHead } from "../components/ui";
 import { cn } from "../lib/cn";
 
@@ -48,16 +49,18 @@ function ServiceCard({
   );
 }
 
-function Console() {
+const SIMPLE_PROMPT = "Say what this control plane does in one sentence, then review that sentence.";
+
+function Console({ container }: { container: boolean }) {
   const { state, run, reset } = useStream();
-  const [prompt, setPrompt] = useState("Compare React vs Vue for a dashboard");
+  const [prompt, setPrompt] = useState(SIMPLE_PROMPT);
   const busy = state.status === "planning" || state.status === "running";
 
   return (
     <Panel>
       <SectionHead
         title="Interactive console"
-        sub="Submit a prompt — watch Hermes plan and DeepSeek execute, live."
+        sub="Simple pipeline runs triage, then reviewer, on the fleet that is already loaded."
         icon={<Terminal size={16} />}
         right={
           <Button size="sm" variant="subtle" onClick={reset} title="Clear">
@@ -76,14 +79,23 @@ function Console() {
             placeholder="Ask the fleet to do something…"
             className="flex-1 rounded-lg border border-white/10 bg-ink-900/70 px-3.5 py-2.5 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-teal-500/50 focus:ring-2 focus:ring-teal-500/20"
           />
-          <Button variant="primary" onClick={() => prompt.trim() && run(prompt.trim())} disabled={busy || !prompt.trim()}>
-            <Play size={15} /> {busy ? "Running…" : "Run"}
+          <Button variant="primary" onClick={() => run(SIMPLE_PROMPT, { simple: true })} disabled={busy}>
+            <Play size={15} /> {busy ? "Running…" : "Simple pipeline"}
+          </Button>
+          <Button variant="ghost" onClick={() => prompt.trim() && run(prompt.trim())} disabled={busy || !prompt.trim()}>
+            Run prompt
           </Button>
         </div>
+        <p className="mt-2 text-[11px] text-slate-500">
+          Simple pipeline is two stages: triage writes one sentence, reviewer marks it PASS or FAIL. Watch Hermes hand each step to DeepSeek, then take memory back.
+        </p>
+        <FollowLanes state={state} />
 
         {state.status === "idle" ? (
           <div className="mt-4 rounded-xl border border-dashed border-white/10 px-5 py-8 text-center text-sm text-slate-500">
-            Runs stream stage-by-stage over Server-Sent Events. Hermes composes the plan; DeepSeek runs the Cordis loop and delivers.
+            {container
+              ? "This plan opens one session container. Triage and reviewer share it, then the session image is deleted. Hermes memory stays on the control plane."
+              : "This plan runs inside the control plane. Turn on ROPEX_EXECUTOR=container to put the same steps in one session container."}
           </div>
         ) : (
           <div className="mt-4 grid gap-4 lg:grid-cols-5">
@@ -148,7 +160,7 @@ function Console() {
 export function Services({ view }: { view: View }) {
   return (
     <div className="space-y-5">
-      <Console />
+      <Console container={view.placement?.executor === "container"} />
 
       <div className="grid gap-4 md:grid-cols-2">
         <ServiceCard
