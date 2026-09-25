@@ -10,7 +10,7 @@ ropex up fleets/examples/github-control-plane.yaml --serve
 # → http://127.0.0.1:7780/api/v1/view
 ```
 
-See [operations.md](./operations.md) for Podman Compose and stack CLI.
+See [operations.md](./operations.md) for Podman Compose and stack CLI. Live Hermes + DeepSeek on the host: `npm run live` ([quickstart.md](./quickstart.md)).
 
 ![Overview — KPI cards, the real per-task workflow flow, and health](./img/dashboard-overview.png)
 
@@ -145,7 +145,7 @@ The **Services** view shows backend readiness:
 | DeepSeek harness | `embedded` (`bootDsh({ hermes })`) | `ROPEX_DSH_BACKEND=live`, `@deepseek-ai/dsh`, **`OPENAI_API_KEY`** (preferred) or `DEEPSEEK_API_KEY` |
 | Claude Code / Codex / Copilot | not installed | CLI on `PATH` plus that runtime's credentials — see [worker-runtimes.md](./worker-runtimes.md) |
 
-`bootWorker` always requires a Hermes brain — plan and execute are coupled in every environment, including tests. `dsh` is the default execute stage; other kinds are declared on `spec.runtime`. See [hermes.md](./hermes.md), [dsh.md](./dsh.md), and [worker-runtimes.md](./worker-runtimes.md).
+`bootWorker` always requires a Hermes brain — plan and execute are coupled in every environment, including tests. `dsh` is the default execute stage; other kinds are declared on `spec.runtime`. Operator steps: [quickstart.md](./quickstart.md). See [hermes.md](./hermes.md), [dsh.md](./dsh.md), and [worker-runtimes.md](./worker-runtimes.md).
 
 ## Operator actions from UI
 

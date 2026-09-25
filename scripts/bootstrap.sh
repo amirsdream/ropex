@@ -26,5 +26,6 @@ npm install --no-fund --no-audit --loglevel=error
 
 echo "→ ok. Next:"
 echo "  npm test"
-echo "  npm run dev -- apply fleets/examples/github-control-plane.yaml"
-echo "  npm run dev -- ui"
+echo "  npm run up"
+echo "  npm run live -- --check   # after installing live peers + API key"
+echo "  See docs/quickstart.md"

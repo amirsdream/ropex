@@ -6,6 +6,7 @@ GitOps control plane for agent fleets — **Hermes plans, DeepSeek executes by d
 
 | Doc | What you'll learn |
 | --- | --- |
+| [**Quick start**](./quickstart.md) | **Step-by-step run** (embedded) and **live mode** (`npm run live`) |
 | [**Operations**](./operations.md) | **One-click `npm run up/down`**, Podman Compose, container sessions, stack API |
 | [**Ephemeral sessions**](./ephemeral-sessions.md) | One image per plan, Hermes vs DeepSeek, simple pipeline, follow strip |
 | [**WSL setup (Windows)**](./wsl.md) | **One-script WSL 2 environment** — `wsl-bootstrap.ps1`, `wsl-setup.sh`, `wsl-doctor.sh` |
@@ -34,13 +35,14 @@ Every run is one spine:  Start (compose·plan)  →  Transform (execute)  →  R
 
 **Default scale:** `onDemand` — spawn on claim, destroy when idle (`idleTTLMs: 0`).  
 **Default backends:** `embedded` Hermes + embedded Cordis harness (network-free tests).  
-**Optional live:** `ROPEX_HERMES_BACKEND=live`, `ROPEX_DSH_BACKEND=live` + API keys.
+**Optional live:** `npm run live` (or `ROPEX_HERMES_BACKEND=live` + `ROPEX_DSH_BACKEND=live` + API keys). Guide: [quickstart.md](./quickstart.md).
 
 ## Quick commands
 
 ```bash
 npm install
 npm run up                              # Podman/Docker or local → :7780
+npm run live                            # host process, live Hermes + dsh
 npm run down
 
 npx tsx src/cli.ts apply fleets/examples/github-control-plane.yaml
@@ -65,7 +67,7 @@ npx tsx src/cli.ts trajectories --jsonl
 | `Containerfile` / `Containerfile.worker` | Control plane and the session base image |
 | `docker-compose.yml` / `podman-compose.yml` | Compose: build the base, serve the control plane |
 | `src/session.ts` | Build, run, and delete one session per plan |
-| `scripts/stack-up.sh` / `stack-down.sh` | `npm run up` / `down` |
+| `scripts/stack-up.sh` / `stack-down.sh` / `live-up.sh` | `npm run up` / `down` / `live` |
 | `scripts/wsl-*.sh` / `scripts/wsl/` | WSL 2 provisioning, health check, `wsl.conf` / `.wslconfig` templates |
 | `integrations/magentic/` | Magentic adapter notes |
 | `.ropex/state.json` | Local cluster state (etcd stand-in) |

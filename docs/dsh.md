@@ -6,6 +6,8 @@
 
 Ropex executes Hermes plans through `bootDsh` (`src/dsh.ts`). The default backend is **embedded** (in-process Cordis harness) so every test and `ropex demo` runs the real Hermes→DeepSeek split without external packages.
 
+**Operators:** step-by-step install and `npm run live` are in [quickstart.md](./quickstart.md). This page is the contract.
+
 ## Contract
 
 | Piece | Role |
@@ -34,14 +36,17 @@ export OPENAI_API_KEY=sk-...          # preferred
 export ROPEX_DSH_BACKEND=live
 ```
 
-## Steps to wire live
+Or: `npm run live` after both live peers and a key are set.
 
-1. Install optional peer: `npm install @deepseek-ai/dsh` (never a hard CI dependency).
-2. Implement `bootLiveDsh(spec)` returning `{ backend: "live", pack, kernel, execute }`.
-3. Map `DSH_PROFILE_PACKS[profile].plugins` onto Cordis pack loaders.
-4. Mount Policy deny/requireApproval before tool execution.
-5. Prove one path: `ropex run --root sandbox` with `ROPEX_DSH_BACKEND=live`.
-6. Keep `embedded` as the default for demos and vitest.
+## Steps to run live
+
+1. Install optional peer: `npm install @deepseek-ai/dsh@^0.1.1-rc.2` (never a hard CI dependency).
+2. Set `OPENAI_API_KEY` (preferred) or `DEEPSEEK_API_KEY`.
+3. Set `ROPEX_DSH_BACKEND=live` (and `ROPEX_HERMES_BACKEND=live` to couple the live brain).
+4. `bootLiveDsh` runs `dsh --profile headless` for Hermes-planned tool programs.
+5. Policy deny / requireApproval still sit in front of tools.
+6. Prove one path: `npx tsx src/cli.ts tasks submit --agent docbot --drain "…"` with live env (on-demand fleets have no standing `ropex run` worker).
+7. Keep `embedded` as the default for demos and vitest.
 
 ## Env
 
@@ -59,5 +64,6 @@ Configure non-DeepSeek models in dsh provider settings (`llm-pi-ai`) so headless
 
 - Control-plane UI **DeepSeek harness** section (from `/api/v1/view`.dsh) shows `apiKeySource`
 - `liveDshScaffold()` / `resolveLlmApiKey()` for CLI/docs/programmatic checks
+- [quickstart.md](./quickstart.md) Part 2
 
 See also [architecture.md](./architecture.md), [control-plane-ui.md](./control-plane-ui.md), [hermes.md](./hermes.md), [operations.md](./operations.md), and [executor-api.md](./executor-api.md).

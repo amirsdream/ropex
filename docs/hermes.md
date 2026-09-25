@@ -2,6 +2,8 @@
 
 Ropex plans through `createHermes` (`src/hermes.ts`) — soul, MemoryPort, skills, and a closed learn loop. The **embedded** brain implements `HermesContract` so UI, tests, and runtime share one interface.
 
+**Operators:** step-by-step install and `npm run live` are in [quickstart.md](./quickstart.md). This page is the contract.
+
 `bootWorker` (and `bootDsh`, the default) **requires** a Hermes instance — plan and execute are always coupled. The execute stage is `dsh` unless `spec.runtime.kind` selects a CLI.
 
 ## Contract
@@ -30,28 +32,33 @@ npm install          # embedded Hermes — no extra packages
 ```
 
 ```bash
-npm install hermes-agent   # only for live mode
+npm install hermes-agent@^0.20.5   # only for live mode
 export ROPEX_HERMES_BACKEND=live
+# coupled execute still needs live dsh + an API key — see quickstart.md
 ```
 
-## Steps to wire live
+Or: `npm run live` after both live peers and `OPENAI_API_KEY` are set.
 
-1. Optional peer: `npm install hermes-agent`.
-2. Set `ROPEX_HERMES_BACKEND=live`.
+## Steps to run live
+
+1. Optional peer: `npm install hermes-agent@^0.20.5`.
+2. Set `ROPEX_HERMES_BACKEND=live` (or `npm run live`).
 3. `bootHermes()` invokes hermes-agent CLI for `plan()`; harness still executes via dsh.
-4. Bridge MemoryPort to `SharedMemoryStore` (same scopes as embedded).
-5. Prove plan→learn parity with embedded brain in sandbox.
+4. MemoryPort still writes `SharedMemoryStore` (same scopes as embedded).
+5. If the live CLI fails mid-plan, Hermes records the error and falls back to the embedded planner.
 
 ## Env
 
 ```
 ROPEX_HERMES_BACKEND=embedded|live
-HERMES_AGENT_BIN=(live only)
 ```
+
+The CLI binary is resolved from `hermes-agent/bin/hermes.js` in `node_modules` (`resolveHermesBin()`).
 
 ## Surfaces
 
 - Control-plane UI Hermes section (`view.hermesLive`)
 - `liveHermesScaffold()` for docs/CLI checks
+- [quickstart.md](./quickstart.md) Part 2
 
 See [architecture.md](./architecture.md), [control-plane-ui.md](./control-plane-ui.md), [dsh.md](./dsh.md), and [operations.md](./operations.md).

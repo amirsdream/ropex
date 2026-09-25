@@ -25,6 +25,12 @@ services:
       NODE_ENV: production
       ROPEX_EXECUTOR: container
       ROPEX_WORKER_IMAGE: ropex-worker:latest
+      # The control-plane image omits live CLI packages. Host live mode is `npm run live`.
+      ROPEX_HERMES_BACKEND: ${ROPEX_HERMES_BACKEND:-embedded}
+      ROPEX_DSH_BACKEND: ${ROPEX_DSH_BACKEND:-embedded}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      ROPEX_PIPELINE_PLANNER: ${ROPEX_PIPELINE_PLANNER:-heuristic}
     volumes:
       - ropex-state:/app/.ropex
       - /var/run/docker.sock:/var/run/docker.sock

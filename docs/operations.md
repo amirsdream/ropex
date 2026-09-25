@@ -1,6 +1,6 @@
 # Operations — spin up, spin down, deploy
 
-How to run the Ropex control plane locally or in a container. For architecture see [system-architecture.md](./system-architecture.md). On Windows, provision the environment first with [wsl.md](./wsl.md).
+How to run the Ropex control plane locally or in a container. **First-time operators:** [quickstart.md](./quickstart.md). On Windows, provision the environment first with [wsl.md](./wsl.md). For architecture see [system-architecture.md](./system-architecture.md).
 
 ## One-click (recommended)
 
@@ -54,7 +54,7 @@ docker compose -f docker-compose.yml up --build -d
 
 `npm run up` tries Podman Compose, then Docker Compose, then a local `tsx` process.
 
-The control plane mounts the container socket and builds `ropex-session:<id>` per plan. That image is deleted after learn. The base image stays. Full walkthrough: [ephemeral sessions](./ephemeral-sessions.md).
+The control plane mounts the container socket and builds `ropex-session:<id>` per plan. That image is deleted after learn. The base image stays. Full walkthrough: [ephemeral sessions](./ephemeral-sessions.md). Compose forwards `ROPEX_HERMES_BACKEND`, `ROPEX_DSH_BACKEND`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, and `ROPEX_PIPELINE_PLANNER`. The control-plane image still omits the live CLI packages.
 
 ### Container sessions without Compose
 
@@ -104,6 +104,21 @@ curl -s -X POST http://127.0.0.1:7780/api/v1/stack \
   -d '{"action":"down"}' | jq .
 ```
 
+## Live mode (host process)
+
+The Compose image is **embedded-only**. To plan with `hermes-agent` and execute with `@deepseek-ai/dsh`:
+
+```bash
+npm install @deepseek-ai/dsh@^0.1.1-rc.2 hermes-agent@^0.20.5
+export OPENAI_API_KEY=sk-...
+npm run live -- --check
+npm run live            # forge-local.yaml → http://127.0.0.1:7780
+```
+
+`scripts/live-up.sh` sets `ROPEX_HERMES_BACKEND=live` and `ROPEX_DSH_BACKEND=live` and skips Compose so host `node_modules` are used. It does not turn off `ROPEX_EXECUTOR=container` if that is already in `.env`: plans still get a session, and Hermes memory still stays on the control plane. Full steps: [quickstart.md](./quickstart.md).
+
+Compose still forwards those env vars if you bake live peers into a custom image (`ROPEX_HERMES_BACKEND`, `ROPEX_DSH_BACKEND`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`).
+
 ## Typical local workflow
 
 ```bash
@@ -118,6 +133,8 @@ npm run down
 
 ## Related
 
+- [Quick start](./quickstart.md) — embedded run + live mode
+- [Ephemeral sessions](./ephemeral-sessions.md) — one image per plan
 - [WSL setup](./wsl.md) — Windows dev environment, `npm run wsl:setup`
 - [Control-plane UI](./control-plane-ui.md) — dashboard tabs, teal live refresh
 - [HTTP API](./api.md) — full route list

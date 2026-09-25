@@ -116,7 +116,7 @@ Magentic display roles (e.g. "Research Analyst") must map to these names, or Mag
 | `ROPEX_HERMES_BACKEND=live` | Live hermes-agent per task (worktree cwd) |
 | `ROPEX_DSH_BACKEND=live` | Live `@deepseek-ai/dsh` (needs `OPENAI_API_KEY` preferred, or `DEEPSEEK_API_KEY`) |
 
-Default backends are **embedded** (in-process Hermes + Cordis harness) — fine for integration testing without API keys.
+Default backends are **embedded** (in-process Hermes + Cordis harness) — fine for integration testing without API keys. Host live mode: `npm run live` ([quickstart.md](../../docs/quickstart.md)).
 
 ## Alternative: Ropex UI only
 
