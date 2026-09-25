@@ -1,0 +1,29 @@
+# %UserProfile%\.wslconfig — Windows-side, applies to every WSL 2 distro.
+# Copy with: scripts\wsl-bootstrap.ps1 -InstallWslConfig
+# Apply with: wsl --shutdown
+#
+# Tune memory/processors to your machine; the values below suit a 16 GB laptop
+# running the Ropex control plane, the Vite dev server and a container runtime.
+
+[wsl2]
+memory = 8GB
+processors = 4
+swap = 2GB
+
+# 127.0.0.1:7780 (control plane) and 127.0.0.1:5173 (Vite) reachable from the
+# Windows browser without binding 0.0.0.0.
+localhostForwarding = true
+
+# Mirrored networking (Windows 11 22H2+) also forwards localhost and lets the
+# GitHub webhook ingress be reached from the LAN. Uncomment if available:
+# networkingMode = mirrored
+# dnsTunneling = true
+# firewall = true
+# autoProxy = true
+
+nestedVirtualization = true
+
+[experimental]
+# Return freed RAM to Windows instead of holding the peak.
+autoMemoryReclaim = gradual
+sparseVhd = true

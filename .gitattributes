@@ -1,0 +1,13 @@
+# Keep the tree LF-normalised so a clone made on Windows still produces
+# runnable shell scripts inside WSL. See docs/wsl.md.
+* text=auto eol=lf
+
+*.sh          text eol=lf
+*.ps1         text eol=lf
+Containerfile text eol=lf
+
+# Binaries — never normalise.
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.pdf  binary

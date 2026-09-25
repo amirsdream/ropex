@@ -16,6 +16,8 @@
     "web:dev": "npm --prefix web run dev",
     "up": "bash scripts/stack-up.sh",
     "down": "bash scripts/stack-down.sh",
+    "wsl:setup": "bash scripts/wsl-setup.sh",
+    "wsl:doctor": "bash scripts/wsl-doctor.sh",
     "test": "vitest run",
     "test:watch": "vitest"
   },

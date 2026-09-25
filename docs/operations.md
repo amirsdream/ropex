@@ -1,6 +1,6 @@
 # Operations — spin up, spin down, deploy
 
-How to run the Ropex control plane locally or in a container. For architecture see [system-architecture.md](./system-architecture.md).
+How to run the Ropex control plane locally or in a container. For architecture see [system-architecture.md](./system-architecture.md). On Windows, provision the environment first with [wsl.md](./wsl.md).
 
 ## One-click (recommended)
 
@@ -118,6 +118,7 @@ npm run down
 
 ## Related
 
+- [WSL setup](./wsl.md) — Windows dev environment, `npm run wsl:setup`
 - [Control-plane UI](./control-plane-ui.md) — dashboard tabs, teal live refresh
 - [HTTP API](./api.md) — full route list
 - [Architecture](./architecture.md) — what “up” reconciles

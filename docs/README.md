@@ -8,6 +8,7 @@ GitOps control plane for agent fleets — **Hermes plans, DeepSeek executes**, g
 | --- | --- |
 | [**Operations**](./operations.md) | **One-click `npm run up/down`**, Podman Compose, container sessions, stack API |
 | [**Ephemeral sessions**](./ephemeral-sessions.md) | One image per plan, Hermes vs DeepSeek, simple pipeline, follow strip |
+| [**WSL setup (Windows)**](./wsl.md) | **One-script WSL 2 environment** — `wsl-bootstrap.ps1`, `wsl-setup.sh`, `wsl-doctor.sh` |
 | [**System architecture (visual)**](./system-architecture.md) | Diagrams — layers, ingress, workflow, state, module map |
 | [Architecture](./architecture.md) | Control plane vs data plane, immutable workers, the start → transform → result spine, queue, executor |
 | [Control-plane UI](./control-plane-ui.md) | React SPA — live monitoring, Hermes/DeepSeek console, pipelines, live SSE |
@@ -65,5 +66,6 @@ npx tsx src/cli.ts trajectories --jsonl
 | `docker-compose.yml` / `podman-compose.yml` | Compose: build the base, serve the control plane |
 | `src/session.ts` | Build, run, and delete one session per plan |
 | `scripts/stack-up.sh` / `stack-down.sh` | `npm run up` / `down` |
+| `scripts/wsl-*.sh` / `scripts/wsl/` | WSL 2 provisioning, health check, `wsl.conf` / `.wslconfig` templates |
 | `integrations/magentic/` | Magentic adapter notes |
 | `.ropex/state.json` | Local cluster state (etcd stand-in) |

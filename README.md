@@ -30,6 +30,16 @@ Ropex is the control plane that multiplies those runtimes across repos and optio
 
 ## Quick start
 
+**On Windows?** Provision WSL 2 first — one script installs the distro, Node, a
+container runtime, dependencies, and runs the tests:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\wsl-bootstrap.ps1 -InstallWslConfig
+```
+
+Already inside a distro: `npm run wsl:setup`, then `npm run wsl:doctor`.
+Details in [docs/wsl.md](./docs/wsl.md).
+
 If `npm install` hangs, use the bootstrap script (skips the huge live DeepSeek tree):
 
 ```bash

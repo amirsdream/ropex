@@ -38,6 +38,7 @@ See [docs/operations.md](./docs/operations.md).
 | Memory / skills | `memory.ts`, `skills.ts`, `gitmemory.ts`, `contracts.ts` |
 | Queue / scale | `queue.ts`, `scheduler.ts`, `scale.ts` (on-demand spawn/destroy), `fanout.ts`, `admission.ts`, `approval.ts`, `autoscale.ts`, `budget.ts`, `placement.ts`, `fairness.ts` |
 | Stack / deploy | `stack.ts`, `Containerfile`, `podman-compose.yml`, `scripts/stack-*.sh` |
+| Dev environment | `scripts/wsl-setup.sh`, `scripts/wsl-doctor.sh`, `scripts/wsl-bootstrap.ps1`, `scripts/wsl/`, `.gitattributes` |
 | Ingress / audit | `webhook.ts`, `ratelimit.ts`, `journal.ts`, `deliver.ts`, `connectors.ts`, `trajectory.ts`, `metrics.ts`, `health.ts`, `audit.ts` |
 | Lifecycle | `lifecycle.ts` (cordon/evict), `hygiene.ts`, `chaos.ts` |
 | Surfaces | `api.ts` (serves the SPA), `web/` (Vite + React + TS dashboard → `dist/ui`), `cli.ts`, `demo.ts` |
@@ -46,6 +47,7 @@ See [docs/operations.md](./docs/operations.md).
 
 - [README.md](./README.md) — overview + system diagram
 - [docs/operations.md](./docs/operations.md) — one-click up/down, Podman Compose
+- [docs/wsl.md](./docs/wsl.md) — WSL 2 development environment on Windows
 - [docs/system-architecture.md](./docs/system-architecture.md) — visual diagrams
 - [docs/architecture.md](./docs/architecture.md) — layered architecture, executor, Magentic
 - [docs/control-plane-ui.md](./docs/control-plane-ui.md) — UI deep-dive, stack buttons, live SSE
