@@ -207,7 +207,11 @@ async function bootCliRuntime(
         ...(runtime?.commandArgs ?? []),
         ...descriptor.argv({ prompt, model, cwd, permissionArgs: policy.args }),
       ];
-      const res = await runProcess(resolvedBin, args, { cwd, timeoutMs });
+      const res = await runProcess(resolvedBin, args, {
+        cwd,
+        timeoutMs,
+        stdin: descriptor.promptChannel === "stdin" ? prompt : undefined,
+      });
       if (res.timedOut) {
         throw new Error(`${descriptor.label} timed out after ${timeoutMs}ms`);
       }

@@ -687,8 +687,8 @@ export type RunResult = {
   worker: Worker;
   /** Image digest the workflow ran against. */
   imageDigest: string;
-  /** Stage owners for this run (Hermes brain + DeepSeek harness). */
-  workflow: Array<{ id: string; owner: string }>;
+  /** Stage owners for this run (Hermes brain + worker runtime). */
+  workflow: Array<{ id: string; owner: string; purpose?: string }>;
   plan: string[];
   steps: TrajectoryStep[];
   delivery?: { kind: GithubSpec["deliver"]; body: string };

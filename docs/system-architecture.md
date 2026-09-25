@@ -13,7 +13,7 @@ Ropex is a **GitOps control plane for agent fleets**:
 - **Git** holds agent definitions, policy caps, tasks, and memory — not warm replica inventory.
 - The **controller** reconciles immutable agent images (content-addressed digests).
 - The **queue** admits work, spawns ephemeral workers on demand, and destroys them when idle.
-- Each task runs a fixed **Hermes → DeepSeek** workflow: plan/remember/learn vs execute/deliver.
+- Each task runs a fixed **Hermes → execute → learn** workflow: Hermes plans and learns; the execute stage is `dsh` by default or a declared CLI runtime.
 - **Memory and skills** survive worker death on a scoped shared bus.
 - With `ROPEX_EXECUTOR=container`, the steps of one plan share `ropex-session:<id>`. That image is deleted after learn. See [ephemeral sessions](./ephemeral-sessions.md).
 
@@ -23,7 +23,7 @@ flowchart LR
   CTRL --> STATE[".ropex/state.json"]
   INGRESS["Work ingress"] --> QUEUE["Queue"]
   QUEUE --> WORKER["Ephemeral worker"]
-  WORKER --> WF["Hermes + DeepSeek"]
+  WORKER --> WF["Hermes + worker runtime"]
   WF --> DELIVER["Comment / check / PR"]
   WF --> LEARN["Memory + skills"]
 ```

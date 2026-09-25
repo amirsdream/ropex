@@ -143,8 +143,9 @@ The **Services** view shows backend readiness:
 | --- | --- | --- |
 | Hermes brain | `embedded` (`createHermes()`) | `ROPEX_HERMES_BACKEND=live`, `hermes-agent` |
 | DeepSeek harness | `embedded` (`bootDsh({ hermes })`) | `ROPEX_DSH_BACKEND=live`, `@deepseek-ai/dsh`, **`OPENAI_API_KEY`** (preferred) or `DEEPSEEK_API_KEY` |
+| Claude Code / Codex / Copilot | not installed | CLI on `PATH` plus that runtime's credentials — see [worker-runtimes.md](./worker-runtimes.md) |
 
-`bootDsh` always requires a Hermes brain — plan and execute are coupled in every environment, including tests. See [hermes.md](./hermes.md) and [dsh.md](./dsh.md).
+`bootWorker` always requires a Hermes brain — plan and execute are coupled in every environment, including tests. `dsh` is the default execute stage; other kinds are declared on `spec.runtime`. See [hermes.md](./hermes.md), [dsh.md](./dsh.md), and [worker-runtimes.md](./worker-runtimes.md).
 
 ## Operator actions from UI
 

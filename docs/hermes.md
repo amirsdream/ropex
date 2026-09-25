@@ -2,7 +2,7 @@
 
 Ropex plans through `createHermes` (`src/hermes.ts`) — soul, MemoryPort, skills, and a closed learn loop. The **embedded** brain implements `HermesContract` so UI, tests, and runtime share one interface.
 
-`bootDsh` **requires** a Hermes instance — plan and execute are always coupled.
+`bootWorker` (and `bootDsh`, the default) **requires** a Hermes instance — plan and execute are always coupled. The execute stage is `dsh` unless `spec.runtime.kind` selects a CLI.
 
 ## Contract
 
@@ -12,7 +12,7 @@ Ropex plans through `createHermes` (`src/hermes.ts`) — soul, MemoryPort, skill
 | `bootHermes(spec)` | Same; fails closed for `live` when package missing |
 | `HermesContract` | `plan` / `remember` / `learn` + MemoryPort |
 | `liveHermesScaffold()` | Checklist for optional `hermes-agent` CLI |
-| DeepSeek execute | Hermes plans; `bootDsh({ hermes })` runs tools (see [dsh.md](./dsh.md)) |
+| Execute | Hermes plans; `bootWorker({ hermes })` runs `dsh` or a CLI runtime (see [dsh.md](./dsh.md), [worker-runtimes.md](./worker-runtimes.md)) |
 
 ## Backends
 

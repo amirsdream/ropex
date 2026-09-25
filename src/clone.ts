@@ -6,8 +6,8 @@
 
 import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
 import { recordAudit } from "./audit.js";
+import { runProcessSync } from "./proc.js";
 import type { ClusterState, GitRepo, GitRepoSyncStatus } from "./types.js";
 import { resolveGitRepoPath } from "./gitrepo.js";
 
@@ -77,8 +77,11 @@ function runGitClone(
   const args = ["clone", "--depth", "1"];
   if (branch) args.push("-b", branch);
   args.push(url, dest);
-  const result = spawnSync("git", args, { encoding: "utf8", timeout: 300_000 });
-  if (result.status !== 0) {
+  const result = runProcessSync("git", args, { timeoutMs: 300_000 });
+  if (result.timedOut) {
+    return { ok: false, reason: "git clone timed out" };
+  }
+  if (result.code !== 0) {
     const msg = (result.stderr || result.stdout || "git clone failed").trim();
     return { ok: false, reason: msg.slice(0, 500) };
   }
