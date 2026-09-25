@@ -100,7 +100,14 @@ export function useStream() {
       }
       const d = msg.data ?? {};
       let beat: FollowBeat | undefined;
-      if (msg.type === "agent_start") {
+      if (msg.type === "plan" && d.fleet) {
+        beat = {
+          owner: "hermes",
+          phase: "plan",
+          stageId: "fleet",
+          text: `${d.fleet_mode === "reuse" ? "reuse" : "mint"} fleet ${String(d.fleet)}`,
+        };
+      } else if (msg.type === "agent_start") {
         const id = String(d.stage_id ?? d.role ?? "stage");
         const agent = String(d.agent ?? "");
         beat = { owner: "hermes", phase: "plan", stageId: id, agent, text: visibleBeat(`${agent || id} takes this step`) };

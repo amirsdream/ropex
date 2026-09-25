@@ -46,57 +46,74 @@ export function Queue({ view }: { view: View }) {
   const refresh = useRefresh();
   const dead = view.queue.filter((q) => q.status === "dead");
 
+  const container = view.placement?.executor === "container";
+  const pendingApprovals = view.approvals.filter((a) => a.status === "pending");
+
   return (
     <div className="space-y-5">
-      <Panel>
-        <SectionHead title="Queue" sub="bounded-concurrency drain with leases, retry & DLQ" icon={<ListChecks size={16} />} right={
-          dead.length ? <Button size="sm" variant="danger" onClick={async () => { await api.queue("retry", { all: true }); refresh(); }}>retry all</Button> : undefined
-        } />
-        <DrainControls view={view} refresh={refresh} />
-        <div className="max-h-72 space-y-1.5 overflow-auto px-5 pb-5">
-          {view.queue.length === 0 ? <Empty>Queue empty — webhook or submit to enqueue.</Empty> : view.queue.slice().reverse().map((q) => (
-            <div key={q.id} className="flex items-center justify-between gap-3 rounded-lg bg-white/5 px-3 py-2 text-sm">
-              <div className="min-w-0">
-                <span className="text-slate-300">{q.agent}</span>
-                <span className="ml-2 truncate text-slate-500">{q.prompt}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                {q.status === "dead" ? <Button size="sm" variant="ghost" onClick={async () => { await api.queue("retry", { id: q.id }); refresh(); }}>retry</Button> : null}
-                <Badge tone={q.status === "done" ? "ok" : q.status === "dead" || q.status === "failed" ? "err" : q.status === "claimed" ? "teal" : "info"}>{q.status}{q.attempts ? `·a${q.attempts}` : ""}</Badge>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Panel>
+      <p className="max-w-3xl text-sm leading-relaxed text-slate-400">
+        One row is one interaction. Reuse means the same agents as last time. Mint means this prompt picked a working set and remembered it.
+      </p>
 
       <Panel>
-        <SectionHead title="Plans" sub="One row is one plan. Its steps run in order inside a single session." icon={<GitBranch size={16} />} right={<Badge tone="violet">{view.pipelines.total}</Badge>} />
-        <div className="max-h-80 space-y-2 overflow-auto px-5 pb-5">
-          {view.pipelines.recent.length === 0 ? <Empty>No plans yet — run one from the Services console.</Empty> : view.pipelines.recent.map((p) => (
-            <div key={p.id} className="rounded-lg bg-white/5 px-3 py-2 text-sm">
-              <div className="flex items-center justify-between gap-3">
-                <span className="truncate text-slate-300">{p.prompt}</span>
-                <Badge tone={p.phase === "result" ? "ok" : p.phase === "execute" ? "teal" : "info"}>{p.phase ?? p.status}</Badge>
-              </div>
-              {(p.steps ?? []).length > 0 ? (
-                <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  {p.steps!.map((s) => (
-                    <span key={s.id} className="rounded-md bg-ink-950/60 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">
-                      {s.id}→{s.agent}
-                    </span>
-                  ))}
+        <SectionHead title="Plans" sub="Steps of one plan share a session. The session is deleted when the plan finishes." icon={<GitBranch size={16} />} right={<Badge tone="violet">{view.pipelines.total}</Badge>} />
+        <div className="max-h-[32rem] space-y-2 overflow-auto px-5 pb-5">
+          {view.pipelines.recent.length === 0 ? <Empty>No plans yet. Run one from the Run tab.</Empty> : view.pipelines.recent.map((p) => {
+            const steps = p.steps ?? [];
+            const active = steps.some((s) => s.status === "running");
+            const finished = p.status === "done" || p.status === "failed";
+            const session = !container ? p.status : active ? "session open" : finished ? "session deleted" : "not started";
+            return (
+              <div key={p.id} className="rounded-lg bg-white/5 px-3 py-2 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="truncate text-slate-300">{p.prompt}</span>
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    {p.fleet ? <Badge tone={p.fleet.mode === "reuse" ? "ok" : "info"}>{p.fleet.mode} {p.fleet.name}</Badge> : null}
+                    <Badge tone={active ? "teal" : finished ? "muted" : "info"}>{session}</Badge>
+                  </span>
                 </div>
-              ) : null}
-            </div>
-          ))}
+                {steps.length > 0 ? (
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {steps.map((s) => (
+                      <span key={s.id} className="rounded-md bg-ink-950/60 px-1.5 py-0.5 font-mono text-[10px] text-slate-400">
+                        {s.id}→{s.agent}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       </Panel>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      {dead.length > 0 ? (
         <Panel>
-          <SectionHead title="Approvals" sub="policy-gated tools awaiting a decision" icon={<ShieldCheck size={16} />} />
+          <SectionHead
+            title="Failed tasks"
+            sub="These single-agent tasks stopped. A plan does not use this queue."
+            icon={<ListChecks size={16} />}
+            right={<Button size="sm" variant="danger" onClick={async () => { await api.queue("retry", { all: true }); refresh(); }}>retry all</Button>}
+          />
+          <div className="space-y-1.5 px-5 pb-5">
+            {dead.map((q) => (
+              <div key={q.id} className="flex items-center justify-between gap-3 rounded-lg bg-white/5 px-3 py-2 text-sm">
+                <div className="min-w-0">
+                  <span className="text-slate-300">{q.agent}</span>
+                  <span className="ml-2 truncate text-slate-500">{q.prompt}</span>
+                </div>
+                <Button size="sm" variant="ghost" onClick={async () => { await api.queue("retry", { id: q.id }); refresh(); }}>retry</Button>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      ) : null}
+
+      {pendingApprovals.length > 0 ? (
+        <Panel>
+          <SectionHead title="Approvals" sub="A tool is waiting for a decision before the plan can continue." icon={<ShieldCheck size={16} />} />
           <div className="space-y-2 px-5 pb-5">
-            {view.approvals.filter((a) => a.status === "pending").length === 0 ? <Empty>Nothing waiting on approval.</Empty> : view.approvals.filter((a) => a.status === "pending").map((a) => (
+            {pendingApprovals.map((a) => (
               <div key={a.id} className="rounded-lg bg-white/5 px-3 py-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-slate-200">{a.tool} <span className="text-slate-500">· {a.agent}</span></span>
@@ -110,12 +127,35 @@ export function Queue({ view }: { view: View }) {
             ))}
           </div>
         </Panel>
+      ) : null}
 
+      <details className="rounded-2xl border border-white/5 bg-ink-850/40 px-1 py-1" open={view.drain.paused}>
+        <summary className="cursor-pointer px-4 py-2 text-sm text-slate-400">Queue controls — pause, drain, or simulate a policy</summary>
         <Panel>
-          <SectionHead title="Policy simulate" sub="fleet-wide admission dry-run" icon={<SlidersHorizontal size={16} />} />
+          <SectionHead title="Queue" sub="Tasks submitted to one agent, separate from a plan." icon={<ListChecks size={16} />} right={
+            dead.length ? <Button size="sm" variant="danger" onClick={async () => { await api.queue("retry", { all: true }); refresh(); }}>retry all</Button> : undefined
+          } />
+          <DrainControls view={view} refresh={refresh} />
+          <div className="max-h-72 space-y-1.5 overflow-auto px-5 pb-5">
+            {view.queue.length === 0 ? <Empty>No single-agent tasks.</Empty> : view.queue.slice().reverse().map((q) => (
+              <div key={q.id} className="flex items-center justify-between gap-3 rounded-lg bg-white/5 px-3 py-2 text-sm">
+                <div className="min-w-0">
+                  <span className="text-slate-300">{q.agent}</span>
+                  <span className="ml-2 truncate text-slate-500">{q.prompt}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {q.status === "dead" ? <Button size="sm" variant="ghost" onClick={async () => { await api.queue("retry", { id: q.id }); refresh(); }}>retry</Button> : null}
+                  <Badge tone={q.status === "done" ? "ok" : q.status === "dead" || q.status === "failed" ? "err" : q.status === "claimed" ? "teal" : "info"}>{q.status}{q.attempts ? `·a${q.attempts}` : ""}</Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+        <Panel>
+          <SectionHead title="Policy simulate" sub="Check whether a prompt would be denied before you run it." icon={<SlidersHorizontal size={16} />} />
           <PolicySim />
         </Panel>
-      </div>
+      </details>
     </div>
   );
 }

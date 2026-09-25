@@ -2,10 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Sidebar, Topbar, type TabId } from "./components/Shell";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { useView, useHistory } from "./hooks/useView";
+import { useView } from "./hooks/useView";
 import { api } from "./lib/api";
 import { Overview } from "./pages/Overview";
-import { Monitor } from "./pages/Monitor";
 import { Services } from "./pages/Services";
 import { Fleet } from "./pages/Fleet";
 import { Queue } from "./pages/Queue";
@@ -14,7 +13,7 @@ import { cn } from "./lib/cn";
 
 type Toast = { id: number; text: string; tone: "ok" | "err" };
 
-const TABS: TabId[] = ["overview", "monitor", "services", "fleet", "queue", "observe"];
+const TABS: TabId[] = ["overview", "services", "queue", "fleet", "observe"];
 
 function tabFromHash(): TabId {
   const h = window.location.hash.replace(/^#\/?/, "") as TabId;
@@ -36,7 +35,6 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
   const q = useView();
-  const history = useHistory();
   const view = q.data;
   const qc = useQueryClient();
 
@@ -67,8 +65,10 @@ export default function App() {
 
         {/* Mobile tab bar */}
         <div className="flex gap-1 overflow-x-auto border-b border-white/5 px-3 py-2 lg:hidden">
-          {(["overview", "monitor", "services", "fleet", "queue", "observe"] as TabId[]).map((t) => (
-            <button key={t} onClick={() => setTab(t)} className={cn("shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium capitalize", tab === t ? "bg-teal-500/15 text-teal-200" : "text-slate-400")}>{t}</button>
+          {TABS.map((t) => (
+            <button key={t} onClick={() => setTab(t)} className={cn("shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium", tab === t ? "bg-teal-500/15 text-teal-200" : "text-slate-400")}>
+              {t === "overview" ? "Now" : t === "services" ? "Run" : t === "queue" ? "Plans" : t === "fleet" ? "Fleet" : "Results"}
+            </button>
           ))}
         </div>
 
@@ -86,8 +86,7 @@ export default function App() {
             </div>
           ) : (
             <ErrorBoundary key={tab}>
-              {tab === "overview" && <Overview view={view} history={history} />}
-              {tab === "monitor" && <Monitor view={view} history={history} />}
+              {tab === "overview" && <Overview view={view} />}
               {tab === "services" && <Services view={view} />}
               {tab === "fleet" && <Fleet view={view} />}
               {tab === "queue" && <Queue view={view} />}

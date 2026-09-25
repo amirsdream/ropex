@@ -1,6 +1,5 @@
-import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Boxes, Brush, GitCompareArrows, Send, Sparkles } from "lucide-react";
+import { Boxes, Brush, GitCompareArrows, Sparkles } from "lucide-react";
 import type { View } from "../lib/api";
 import { api } from "../lib/api";
 import { Badge, Button, Empty, Panel, SectionHead } from "../components/ui";
@@ -12,134 +11,88 @@ function useRefresh() {
   return () => qc.invalidateQueries({ queryKey: ["view"] });
 }
 
-function TaskSubmit({ agents, onDone }: { agents: string[]; onDone: () => void }) {
-  const [agent, setAgent] = useState(agents[0] ?? "");
-  const [prompt, setPrompt] = useState("");
-  const [mode, setMode] = useState("ui");
-  const [busy, setBusy] = useState(false);
-  async function submit() {
-    if (!agent || !prompt.trim()) return;
-    setBusy(true);
-    try {
-      await api.submitTask(agent, prompt.trim(), mode, true);
-      setPrompt("");
-      onDone();
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <div className="flex flex-col gap-2 px-5 pb-4 sm:flex-row">
-      <select value={agent} onChange={(e) => setAgent(e.target.value)} className="rounded-lg border border-white/10 bg-ink-900/70 px-3 py-2 text-sm text-slate-200 outline-none">
-        {agents.map((a) => (
-          <option key={a} value={a}>{a}</option>
-        ))}
-      </select>
-      <input value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Native task prompt…" className="flex-1 rounded-lg border border-white/10 bg-ink-900/70 px-3 py-2 text-sm text-slate-100 outline-none placeholder:text-slate-600 focus:border-teal-500/50" />
-      <select value={mode} onChange={(e) => setMode(e.target.value)} className="rounded-lg border border-white/10 bg-ink-900/70 px-3 py-2 text-sm text-slate-200 outline-none">
-        {["ui", "git", "github", "webhook"].map((m) => (
-          <option key={m} value={m}>{m}</option>
-        ))}
-      </select>
-      <Button variant="primary" onClick={submit} disabled={busy || !prompt.trim()}>
-        <Send size={14} /> Submit
-      </Button>
-    </div>
-  );
-}
-
 export function Fleet({ view }: { view: View }) {
   const refresh = useRefresh();
-  const agents = view.hermes.map((h) => h.agent);
-  const groups = new Map<string, typeof view.workers>();
+  const pins = view.fleetPins ?? [];
+  const liveByAgent = new Map<string, typeof view.workers>();
   for (const w of view.workers) {
-    if (!groups.has(w.agent)) groups.set(w.agent, []);
-    groups.get(w.agent)!.push(w);
+    if (!liveByAgent.has(w.agent)) liveByAgent.set(w.agent, []);
+    liveByAgent.get(w.agent)!.push(w);
   }
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Panel>
-          <SectionHead title="Workers" sub="on-demand spawns — grouped by agent" icon={<Boxes size={16} />} right={<Badge tone="teal">{view.counts.workersLive} live</Badge>} />
-          <div className="space-y-2 px-5 pb-5">
-            {view.fleets.map((f) => (
-              <div key={f.name} className="rounded-xl bg-ink-900/50 p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-slate-100">{f.name}</span>
-                  <div className="flex items-center gap-1.5">
-                    <Badge tone={f.scale === "onDemand" ? "teal" : "violet"}>{f.scale}</Badge>
-                    <Badge tone="muted">{f.live}/{f.maxConcurrent ?? f.replicas}</Badge>
-                  </div>
-                </div>
-                <div className="mt-1 text-[11px] text-slate-500">profile {f.profile} · {f.memoryFacts} facts</div>
-              </div>
-            ))}
-            {[...groups.entries()].map(([agent, ws]) => (
-              <div key={agent} className="rounded-xl border border-white/5 bg-white/5 p-3">
-                <div className="mb-1.5 text-xs font-semibold text-slate-300">{agent} · {ws.length}</div>
-                <div className="space-y-1">
-                  {ws.map((w) => (
-                    <div key={w.id + w.status} className="flex items-center justify-between text-sm">
-                      <span className="font-mono text-slate-400">{w.id}</span>
-                      <Badge tone={w.status === "running" ? "teal" : w.status === "retired" ? "muted" : w.status === "failed" ? "err" : "info"}>{w.status}</Badge>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
-
-        <Panel>
-          <SectionHead title="Tasks" sub="native inbox — submit directly to an agent" icon={<Send size={16} />} />
-          <TaskSubmit agents={agents} onDone={refresh} />
-          <div className="max-h-56 space-y-1.5 overflow-auto px-5 pb-5">
-            {view.queue.length === 0 ? (
-              <Empty>Queue empty.</Empty>
-            ) : (
-              view.queue.slice().reverse().slice(0, 12).map((q) => (
-                <div key={q.id} className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2 text-sm">
-                  <span className="truncate text-slate-300">{q.prompt}</span>
-                  <Badge tone={q.status === "done" ? "ok" : q.status === "dead" ? "err" : "info"}>{q.status}</Badge>
-                </div>
-              ))
-            )}
-          </div>
-        </Panel>
-      </div>
+      <p className="max-w-3xl text-sm leading-relaxed text-slate-400">
+        These agents are the fleet a plan can reuse. A pin is the set the next matching prompt will pick again. Workers only exist while a step is running.
+      </p>
 
       <Panel>
-        <SectionHead title="Hygiene & pool" sub="heatmap of idle / running / failed / cordoned" icon={<Brush size={16} />} right={
-          <div className="flex gap-1.5">
-            {["reclaim", "gc", "age", "all"].map((a) => (
-              <Button key={a} size="sm" variant="ghost" onClick={async () => { await api.hygiene(a); refresh(); }}>{a}</Button>
-            ))}
-          </div>
-        } />
-        <div className="grid gap-2 px-5 pb-5 sm:grid-cols-2 xl:grid-cols-3">
-          {view.hygiene.pool.length === 0 ? <Empty>No pool activity.</Empty> : view.hygiene.pool.map((p) => (
-            <div key={p.agent} className="rounded-xl bg-ink-900/50 p-3">
-              <div className="mb-2 flex items-center justify-between text-sm">
-                <span className="font-semibold text-slate-200">{p.agent}</span>
-                <span className="text-xs text-slate-500">{p.total} total</span>
+        <SectionHead title="Pinned fleets" sub="Remembered agent sets. The next same ask reuses them." icon={<Boxes size={16} />} right={<Badge tone="teal">{pins.length}</Badge>} />
+        <div className="space-y-2 px-5 pb-5">
+          {pins.length === 0 ? (
+            <Empty>No pin yet. The first simple plan mints triage and reviewer, then remembers that pair.</Empty>
+          ) : pins.map((p) => (
+            <div key={p.key} className="rounded-xl bg-ink-900/50 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-slate-100">{p.fleet}</span>
+                <span className="text-[11px] text-slate-500">{timeAgo(p.at)}</span>
               </div>
-              <div className="flex h-6 overflow-hidden rounded-md">
-                {([["idle", p.idle, "bg-violet-500/60"], ["running", p.running, "bg-teal-500/70"], ["failed", p.failed, "bg-rose-500/70"], ["cordoned", p.cordoned, "bg-amber-500/60"]] as const).map(([k, n, c]) => (
-                  n > 0 ? <div key={k} className={cn("heat-cell grid place-items-center text-[10px] text-ink-950", c)} style={{ flex: n }} title={`${k}: ${n}`}>{n}</div> : null
-                ))}
-                {p.total === 0 ? <div className="grid flex-1 place-items-center bg-white/5 text-[10px] text-slate-600">idle</div> : null}
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {p.agents.map((a) => <Badge key={a} tone="teal">{a}</Badge>)}
               </div>
+              <p className="mt-2 truncate text-[12px] text-slate-500">{p.prompt}</p>
             </div>
           ))}
         </div>
       </Panel>
 
+      <Panel>
+        <SectionHead title="Agents" sub="Who can take a step, and which model runs it." icon={<Boxes size={16} />} />
+        <div className="space-y-2 px-5 pb-5">
+          {view.hermes.length === 0 ? <Empty>No agents applied. Start the stack to load the fleet file.</Empty> : view.hermes.map((h) => {
+            const harness = view.harness.find((x) => x.agent === h.agent);
+            const live = liveByAgent.get(h.agent) ?? [];
+            return (
+              <div key={h.agent} className="rounded-xl bg-ink-900/50 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-slate-100">{h.agent}</span>
+                  <div className="flex items-center gap-1.5">
+                    <Badge tone="muted">{harness?.model ?? "model"}</Badge>
+                    <Badge tone={live.length ? "teal" : "muted"}>{live.length ? `${live.length} running` : "idle"}</Badge>
+                  </div>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {h.skills.map((s) => <Badge key={s} tone="muted">{s}</Badge>)}
+                  {h.learning ? <Badge tone="violet">learns</Badge> : null}
+                  {harness ? <Badge tone="copper">{harness.runtime}</Badge> : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Panel>
+
       <div className="grid gap-5 lg:grid-cols-2">
         <Panel>
-          <SectionHead title="Skills" sub="registry versions — promote to share" icon={<Sparkles size={16} />} />
+          <SectionHead title="Memory" sub="Facts copied back before the session was deleted." right={<Button size="sm" variant="ghost" onClick={async () => { await api.memory("sync"); refresh(); }}>sync</Button>} />
+          <div className="max-h-64 space-y-1.5 overflow-auto px-5 pb-5">
+            {view.memory.length === 0 ? <Empty>No facts yet. They show up after a plan learns.</Empty> : view.memory.slice(0, 20).map((f) => (
+              <div key={f.id} className="rounded-lg bg-white/5 px-3 py-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <Badge tone={f.scope === "cluster" ? "violet" : f.scope === "fleet" ? "sky" : "teal"}>{f.scope}</Badge>
+                  <span className="text-slate-300">{f.agent}</span>
+                  <span className="ml-auto text-[11px] text-slate-600">{timeAgo(f.at)}</span>
+                </div>
+                <p className="mt-1 text-[12px] leading-relaxed text-slate-400">{f.text}</p>
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel>
+          <SectionHead title="Skills" sub="Learned from a finished plan. Promote shares one with the fleet." icon={<Sparkles size={16} />} />
           <div className="space-y-2 px-5 pb-5">
-            {view.skillCatalog.length === 0 ? <Empty>No learned skills yet.</Empty> : view.skillCatalog.map((s) => (
+            {view.skillCatalog.length === 0 ? <Empty>Nothing learned yet.</Empty> : view.skillCatalog.map((s) => (
               <div key={s.name} className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2">
                 <div>
                   <div className="text-sm font-medium text-slate-200">{s.name} <span className="text-slate-500">v{s.version}</span></div>
@@ -150,44 +103,55 @@ export function Fleet({ view }: { view: View }) {
             ))}
           </div>
         </Panel>
-
-        <Panel>
-          <SectionHead title="Canary & drift" sub="digest coverage vs desired" icon={<GitCompareArrows size={16} />} right={<Badge tone={view.canary.ok ? "ok" : "warn"}>{Math.round(view.canary.pctMatched)}%</Badge>} />
-          <div className="space-y-2 px-5 pb-5">
-            <div className="rounded-lg bg-white/5 px-3 py-2 text-sm">
-              <div className="flex justify-between"><span className="text-slate-500">drift</span><Badge tone={view.drift.ok ? "ok" : "warn"}>{view.drift.ok ? "in sync" : `${view.drift.findings.length} findings`}</Badge></div>
-              <div className="mt-1 flex justify-between text-xs text-slate-500"><span>live {view.drift.liveWorkers}</span><span>desired {view.drift.desiredWorkers}</span></div>
-            </div>
-            {view.canary.agents.map((a) => (
-              <div key={a.agent} className="rounded-lg bg-white/5 px-3 py-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-slate-300">{a.agent}</span>
-                  <span className="text-xs text-slate-500">{a.matched}/{a.total}</span>
-                </div>
-                <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-ink-900">
-                  <div className="h-full rounded-full bg-teal-500" style={{ width: `${a.pctMatched}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
       </div>
 
-      <Panel>
-        <SectionHead title="Memory rope" sub="scoped facts across worker / agent / fleet / cluster" right={<Button size="sm" variant="ghost" onClick={async () => { await api.memory("sync"); refresh(); }}>sync</Button>} />
-        <div className="max-h-64 space-y-1.5 overflow-auto px-5 pb-5">
-          {view.memory.length === 0 ? <Empty>No facts on the bus.</Empty> : view.memory.slice(0, 30).map((f) => (
-            <div key={f.id} className="rounded-lg bg-white/5 px-3 py-2 text-sm">
-              <div className="flex items-center gap-2">
-                <Badge tone={f.scope === "cluster" ? "violet" : f.scope === "fleet" ? "sky" : "teal"}>{f.scope}</Badge>
-                <span className="text-slate-300">{f.agent}</span>
-                <span className="ml-auto text-[11px] text-slate-600">{timeAgo(f.at)}</span>
+      <details className="rounded-2xl border border-white/5 bg-ink-850/40 px-5 py-3">
+        <summary className="cursor-pointer text-sm text-slate-400">Maintenance — pool hygiene and canary coverage</summary>
+        <div className="mt-4 grid gap-5 lg:grid-cols-2">
+          <Panel>
+            <SectionHead title="Hygiene" sub="Idle, running, failed, and cordoned workers." icon={<Brush size={16} />} right={
+              <div className="flex gap-1.5">
+                {["reclaim", "gc", "age", "all"].map((a) => (
+                  <Button key={a} size="sm" variant="ghost" onClick={async () => { await api.hygiene(a); refresh(); }}>{a}</Button>
+                ))}
               </div>
-              <p className="mt-1 truncate text-[12px] text-slate-400">{f.text}</p>
+            } />
+            <div className="grid gap-2 px-5 pb-5 sm:grid-cols-2">
+              {view.hygiene.pool.length === 0 ? <Empty>No pool activity. On-demand workers are destroyed when idle.</Empty> : view.hygiene.pool.map((p) => (
+                <div key={p.agent} className="rounded-xl bg-ink-900/50 p-3">
+                  <div className="mb-2 flex items-center justify-between text-sm">
+                    <span className="font-semibold text-slate-200">{p.agent}</span>
+                    <span className="text-xs text-slate-500">{p.total} total</span>
+                  </div>
+                  <div className="flex h-6 overflow-hidden rounded-md">
+                    {([["idle", p.idle, "bg-violet-500/60"], ["running", p.running, "bg-teal-500/70"], ["failed", p.failed, "bg-rose-500/70"], ["cordoned", p.cordoned, "bg-amber-500/60"]] as const).map(([k, n, c]) => (
+                      n > 0 ? <div key={k} className={cn("heat-cell grid place-items-center text-[10px] text-ink-950", c)} style={{ flex: n }} title={`${k}: ${n}`}>{n}</div> : null
+                    ))}
+                    {p.total === 0 ? <div className="grid flex-1 place-items-center bg-white/5 text-[10px] text-slate-600">idle</div> : null}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          </Panel>
+
+          <Panel>
+            <SectionHead title="Canary" sub="How many live workers match the desired image." icon={<GitCompareArrows size={16} />} right={<Badge tone={view.canary.ok ? "ok" : "warn"}>{Math.round(view.canary.pctMatched)}%</Badge>} />
+            <div className="space-y-2 px-5 pb-5">
+              {view.canary.agents.length === 0 ? <Empty>No live workers to compare.</Empty> : view.canary.agents.map((a) => (
+                <div key={a.agent} className="rounded-lg bg-white/5 px-3 py-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-300">{a.agent}</span>
+                    <span className="text-xs text-slate-500">{a.matched}/{a.total}</span>
+                  </div>
+                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-ink-900">
+                    <div className="h-full rounded-full bg-teal-500" style={{ width: `${a.pctMatched}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Panel>
         </div>
-      </Panel>
+      </details>
     </div>
   );
 }

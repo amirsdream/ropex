@@ -1,6 +1,6 @@
 # Ropex documentation
 
-GitOps control plane for agent fleets — **Hermes plans, DeepSeek executes by default**, and a declared CLI can replace that execute stage. Git holds desired state. License: [MIT](../LICENSE).
+GitOps control plane for agent fleets — an interaction reuses a fleet definition or mints an in-flight one, **Hermes plans, DeepSeek executes by default**, and a declared CLI can replace that execute stage. Git reflects the definitions worth repeating. License: [MIT](../LICENSE).
 
 ## Start here
 
@@ -12,7 +12,7 @@ GitOps control plane for agent fleets — **Hermes plans, DeepSeek executes by d
 | [**WSL setup (Windows)**](./wsl.md) | **One-script WSL 2 environment** — `wsl-bootstrap.ps1`, `wsl-setup.sh`, `wsl-doctor.sh` |
 | [**System architecture (visual)**](./system-architecture.md) | Diagrams — layers, ingress, workflow, state, module map |
 | [Architecture](./architecture.md) | Control plane vs data plane, immutable workers, the start → transform → result spine, queue, executor |
-| [Control-plane UI](./control-plane-ui.md) | React SPA — live monitoring, Hermes/DeepSeek console, pipelines, live SSE |
+| [Control-plane UI](./control-plane-ui.md) | Now, Run, Plans, Fleet, Results — Hermes/DeepSeek follow strip and live SSE |
 | [HTTP API (v1)](./api.md) | All `/api/v1/*` routes including `/stack` |
 | [Executor API](./executor-api.md) | Multi-stage pipelines, SSE, Magentic integration |
 | [Forge-neutral tasks](./forge-neutral.md) | Task YAML inbox without GitHub |

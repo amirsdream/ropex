@@ -12,6 +12,7 @@ import { SharedMemoryStore, memoryContextFor } from "./memory.js";
 import { enqueueTask } from "./queue.js";
 import { drainQueue, type DrainOptions } from "./scheduler.js";
 import { planPipeline, simplePipelinePlan, SIMPLE_PIPELINE_PROMPT, type PipelineStagePlan } from "./pipeline.js";
+import { bindFleet, closeInFlight, openInFlight } from "./fleet-bind.js";
 import {
   runPipelineSession,
   snapshotSession,
@@ -55,6 +56,12 @@ export type SubmitPipelineOptions = {
   /** Run the built-in two-step smoke pipeline against the loaded fleet. */
   simple?: boolean;
   agents?: string[];
+  /** Reuse this fleet name (`derivedFrom.fleet`, label `fleet`, or an agent name). */
+  fleet?: string;
+  /** Remember the agent set for the next matching interaction. Simple runs pin themselves. */
+  pin?: boolean;
+  /** Write a readable copy under `.ropex/pinned`. */
+  reflect?: boolean;
   drain?: boolean;
   concurrency?: number;
   root?: string;
@@ -389,6 +396,7 @@ function emitTerminalIfDone(state: ClusterState, pipeline: PipelineRun): void {
     state,
   );
   emitExecutorEvent({ pipelineId: pipeline.id, at: nowIso(), kind: "pipeline.end", message: "closed" }, state);
+  closeInFlight(state, pipeline.id);
 }
 
 function applySessionResult(state: ClusterState, pipeline: PipelineRun, result: SessionResult): void {
@@ -621,12 +629,22 @@ export async function submitPipeline(
   const prompt = opts.simple ? SIMPLE_PIPELINE_PROMPT : opts.prompt?.trim();
   if (!prompt) throw new Error("prompt required");
 
-  const stages = opts.simple
-    ? simplePipelinePlan(state)
-    : planPipeline(prompt, state, {
-        agents: opts.agents,
-        stages: opts.stages,
-      });
+  const stageAgents = [...new Set((opts.stages ?? []).map((s) => s.agent))];
+  const binding = bindFleet(state, {
+    prompt,
+    simple: opts.simple,
+    fleet: opts.fleet,
+    agents: opts.agents?.length ? opts.agents : stageAgents.length ? stageAgents : undefined,
+    pin: opts.pin ?? Boolean(opts.simple),
+    reflect: opts.reflect,
+    root: opts.root,
+  });
+
+  const stages = opts.stages?.length
+    ? opts.stages
+    : opts.simple
+      ? simplePipelinePlan(state, binding.agents)
+      : planPipeline(prompt, state, { agents: binding.agents });
 
   if (!stages.length) throw new Error("stages must not be empty");
   const ids = stages.map((s) => s.id);
@@ -646,8 +664,16 @@ export async function submitPipeline(
     status: "pending",
     input: {
       prompt,
-      agents: opts.agents?.length ? [...opts.agents] : undefined,
+      agents: binding.agents,
+      fleet: binding.fleet,
       at: nowIso(),
+    },
+    fleet: {
+      name: binding.fleet,
+      mode: binding.mode,
+      agents: binding.agents,
+      pinned: binding.pinned,
+      key: binding.key,
     },
     stages: stages.map((s) => ({
       ...s,
@@ -660,6 +686,7 @@ export async function submitPipeline(
   };
 
   ensurePipelines(state).push(run);
+  openInFlight(state, pipelineId, binding);
 
   emitExecutorEvent(
     {
@@ -678,6 +705,8 @@ export async function submitPipeline(
       meta: {
         stages: run.stages.length,
         agents: JSON.stringify(planAgentsMeta(run.stages)),
+        fleet: binding.fleet,
+        fleet_mode: binding.mode,
       },
       message: run.stages.map((s) => `${s.id}→${s.agent}`).join(", "),
     },
@@ -720,6 +749,8 @@ export function mapExecutorEventToUi(event: ExecutorEvent): { type: string; data
           description: event.message,
           message: event.message,
           stages: event.meta?.stages,
+          fleet: event.meta?.fleet,
+          fleet_mode: event.meta?.fleet_mode,
           agents,
           total_agents: agents.length || event.meta?.stages,
           total_layers: 1,

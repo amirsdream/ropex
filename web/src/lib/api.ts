@@ -99,8 +99,16 @@ export type View = {
       doneStages: number;
       updatedAt: string;
       steps?: Array<{ id: string; agent: string; status: string }>;
+      fleet?: { name: string; mode: "reuse" | "mint"; pinned: boolean };
     }>;
   };
+  fleetPins?: Array<{
+    key: string;
+    fleet: string;
+    agents: string[];
+    prompt: string;
+    at: string;
+  }>;
   placement?: {
     executor: "container" | "inprocess";
     workerImage: string;

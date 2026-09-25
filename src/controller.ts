@@ -69,6 +69,8 @@ export function loadState(root: string): ClusterState {
     ensureConnectors(state);
     ensureNativeTasks(state);
     if (!state.pipelines) state.pipelines = [];
+    if (!state.fleetPins) state.fleetPins = [];
+    if (!state.inflightFleets) state.inflightFleets = [];
     return state;
   } catch {
     return emptyState();
