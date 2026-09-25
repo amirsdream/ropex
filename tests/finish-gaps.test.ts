@@ -36,7 +36,7 @@ spec:
 describe("finish gaps", () => {
   it("resolveDshBackend defaults to embedded", () => {
     expect(resolveDshBackend()).toBe("embedded");
-    expect(dshPackageInstalled()).toBe(false);
+    expect(liveDshScaffold().packageInstalled).toBe(dshPackageInstalled());
     expect(liveDshScaffold().liveReady).toBe(false);
   });
 

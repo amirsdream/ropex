@@ -44,18 +44,23 @@ The UI is an **operations and observability** surface — not a chat agent. A le
 
 | View | Hash | Contents |
 | --- | --- | --- |
-| **Overview** | `#overview` | KPI cards with live sparklines, the real per-task workflow flow, health |
+| **Overview** | `#overview` | KPI cards, where each plan ran, the per-task workflow, health |
 | **Monitor** | `#monitor` | Grafana-style live time-series + radial gauges (see below) |
-| **Services** | `#services` | Hermes + DeepSeek status and an interactive streaming console |
+| **Services** | `#services` | Live Hermes / DeepSeek follow strip, streaming console, service cards |
 | **Fleet** | `#fleet` | Workers by agent, native task submit, hygiene heatmap, skills, canary/drift, memory |
-| **Queue** | `#queue` | Drain controls, pipelines, approvals, policy simulate |
+| **Queue** | `#queue` | Drain controls, plans, approvals, policy simulate |
 | **Observe** | `#observe` | Trajectories, deliveries, rate limits, audit trail |
 
 ### Overview
 
 - **KPI cards** with sparklines: workers live, queue pending, throughput (tasks/min), deliveries, pipelines, unhealthy.
-- **Per-task workflow flow** — the real run each task takes, rendered from `GET /api/v1/view`.workflow: the ordered stages `compose → plan → execute → deliver → learn` grouped onto the **Start · Transform · Result** phase spine, each stage attributed to its owner (Hermes / DeepSeek) and annotated with how many recent trajectories ran it. The phase of any in-flight pipeline is highlighted.
+- **Where a plan runs** — placement from `GET /api/v1/view`. `placement.executor` is `container` or `inprocess`. In container mode each recent plan is a card named `ropex-session:<id>`: the steps that shared that container (`look → triage`, `check → reviewer`), whether the session is open, deleted, or not started, and the worker image. The control-plane column keeps Hermes memory (fact count, plan count, live vs embedded backends). The scale column is live workers against `Policy.maxReplicas` and each agent's `maxConcurrent`.
+- **Per-task workflow flow** — the real run each task takes, rendered from `view.workflow`: the ordered stages `compose → plan → execute → deliver → learn` grouped onto the **Start · Transform · Result** phase spine, each stage attributed to its owner (Hermes / DeepSeek) and annotated with how many recent trajectories ran it. The phase of any in-flight pipeline is highlighted.
 - **Health** — SLO / drift / canary tiles plus a live worker probe list.
+
+![Overview — where a plan runs: control plane, deleted sessions, look then check](./img/dashboard-runboard.png)
+
+A session card is teal only while a step status is `running`. A pipeline whose status is `running` but whose steps are still `pending` is labeled **not started**. Finished container plans are **session deleted**. Memory was copied back before the image was removed. See [ephemeral sessions](./ephemeral-sessions.md).
 
 ### Monitor (Grafana-style)
 
@@ -67,11 +72,30 @@ The client samples `/api/v1/view` into a rolling in-memory history and renders l
 - **Time-series:** queue depth (pending vs claimed), worker pool (running vs idle), throughput (tasks/min), delivery & pipeline volume, backlog age, unhealthy workers.
 - **Fairness & latency:** claim-wait and run-duration percentiles.
 
-### Services — Hermes ↔ DeepSeek console
+### Queue — Plans
+
+![Queue — one plan per row, steps as look to triage and check to reviewer](./img/dashboard-plans.png)
+
+**Plans** is the pipeline list. One row is one plan. Chips are `step → agent`. The phase badge is where that plan is in the spine. Steps of one plan run in order inside a single session.
+
+### Services — follow Hermes and DeepSeek
+
+![Services — Hermes learning while DeepSeek has finished deliver](./img/dashboard-follow.png)
+
+The **Follow** strip sits above the stage cards. It is the live handoff:
+
+| Lane | Lights up when | Beats |
+| --- | --- | --- |
+| Hermes | `plan`, `learn` | compose line, plan thoughts, "remembered on the control plane" |
+| DeepSeek harness | `execute`, `deliver` | thought, tool, observation, delivery |
+
+The token along the top is `plan → execute → deliver → learn`. The right-hand label is the step and phase that are current (`check · learn`). Each lane keeps the last four beats. Container runs emit the log in one burst when the session exits; the page reveals one beat at a time so you can follow it. In-process runs appear as the control plane emits them.
+
+**Simple pipeline** is the one-click smoke test: triage writes one sentence (`look`), reviewer marks it PASS or FAIL (`check`). Both steps share one session when `ROPEX_EXECUTOR=container`.
 
 ![Services — interactive console streaming a run, plus service surfaces](./img/dashboard-services.png)
 
-The **interactive console** submits a prompt and streams the run stage-by-stage over SSE:
+The **interactive console** still submits a prompt and streams the run stage-by-stage over SSE:
 
 1. Type a prompt → **Run** → `POST /api/v1/pipeline` `{ drain: false }`, then a scoped `{ action: "drain" }`.
 2. `EventSource(/api/v1/events?pipelineId=…&format=ui)` streams the plan and stage events.
@@ -146,8 +170,11 @@ The **Services** view shows backend readiness:
 | `ROPEX_PIPELINE_PLANNER` | `heuristic` (default) or `hermes` for pipeline planning |
 | `ROPEX_HERMES_BACKEND` | `embedded` \| `live` |
 | `ROPEX_DSH_BACKEND` | `embedded` \| `live` |
-| `OPENAI_API_KEY` | Preferred live LLM key |
+| `OPENAI_API_KEY` | Preferred live LLM key. Forwarded into a session; not copied into the image |
 | `DEEPSEEK_API_KEY` | Optional live LLM key fallback |
+| `ROPEX_EXECUTOR` | `container` runs each plan as `ropex-session:<id>`. Unset stays in-process |
+| `ROPEX_WORKER_IMAGE` | Base image for that session (default `ropex-worker:latest`) |
+| `ROPEX_CONTAINER_BIN` | `docker` or `podman`. Unset picks Docker, then Podman |
 
 ## What the UI is not
 

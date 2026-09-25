@@ -14,7 +14,7 @@ Each worker is **DeepSeek Harness** (Cordis plugin kernel) plus **Hermes** (soul
 
 Top to bottom: git desired state → work ingress (GitHub webhooks with **HMAC + rate limit**, CLI, executor API) → control plane (controller · queue · executor · tick) → ephemeral workers claimed by a **bounded drain** → the **start → transform → result** spine → delivery.
 
-**Scale is a concurrency commit:** raise `maxConcurrent` (on-demand) or `replicas` (static). `Policy.maxReplicas` caps blast radius. Workers spawn on request and destroy when idle — memory stays on the agent/fleet bus. Operators pause, drain, run pipelines, and inspect trajectories from CLI or [`ropex ui`](./docs/control-plane-ui.md).
+**Scale is a concurrency commit:** raise `maxConcurrent` (on-demand) or `replicas` (static). `Policy.maxReplicas` caps blast radius. Workers spawn on request and destroy when idle — memory stays on the agent/fleet bus. With `ROPEX_EXECUTOR=container`, each plan is one session image that every step shares; the image is deleted after learn. Operators pause, drain, run pipelines, and follow Hermes against DeepSeek from CLI or [`ropex ui`](./docs/control-plane-ui.md).
 
 ## Why this exists
 
@@ -104,7 +104,8 @@ npx tsx src/cli.ts health
 
 | Guide | Topics |
 | --- | --- |
-| [**Operations**](./docs/operations.md) | One-click `npm run up/down`, Podman Compose, stack API |
+| [**Operations**](./docs/operations.md) | One-click `npm run up/down`, Podman or Docker, container sessions |
+| [**Ephemeral sessions**](./docs/ephemeral-sessions.md) | One image per plan. Hermes plans, DeepSeek runs, the session is deleted |
 | [**System architecture (visual)**](./docs/system-architecture.md) | Diagrams — layers, ingress, workflow, state, module map |
 | [**Architecture**](./docs/architecture.md) | Kubernetes mapping, image digests, queue, workflow, executor layer |
 | [**Control-plane UI**](./docs/control-plane-ui.md) | React SPA — live Grafana-style monitoring, Hermes/DeepSeek console, pipeline SSE |

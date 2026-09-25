@@ -15,7 +15,7 @@ Ropex executes Hermes plans through `bootDsh` (`src/dsh.ts`). The default backen
 | `liveDshScaffold()` | Checklist + env hints for optional `@deepseek-ai/dsh` CLI |
 | Policy admission | Deny / requireApproval stay in front of tools (permissions plugin) |
 
-`backend: "live"` **fails closed** with an error that points at the next scaffold step. Do not call network APIs from tests.
+`backend: "live"` **fails closed** with an error that points at the next scaffold step. Do not call network APIs from tests. On the dashboard, the harness is the execute and deliver lane of the [follow strip](./control-plane-ui.md). It runs inside the [session](./ephemeral-sessions.md); the control plane keeps the result.
 
 ## Install
 

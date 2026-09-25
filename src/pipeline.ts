@@ -152,6 +152,39 @@ function planPipelineHeuristic(prompt: string, agents: string[]): PipelineStageP
   return [{ id: "run", agent: agents[0], role: "worker", prompt }];
 }
 
+/** Fixed prompt for the one-click smoke pipeline. */
+export const SIMPLE_PIPELINE_PROMPT =
+  "Say what this control plane does in one sentence, then review that sentence.";
+
+/**
+ * Two-step smoke pipeline against agents that are actually in the fleet.
+ * Prefers triage → reviewer. Falls back to the first agent, then a second
+ * distinct agent when one exists. One stage when the fleet has a single agent.
+ */
+export function simplePipelinePlan(state: ClusterState): PipelineStagePlan[] {
+  const agents = state.desired.map((a) => a.metadata.name);
+  const first = agents.find((a) => a === "triage") ?? agents[0] ?? "default";
+  const second =
+    agents.find((a) => a === "reviewer" && a !== first) ?? agents.find((a) => a !== first);
+
+  const look: PipelineStagePlan = {
+    id: "look",
+    agent: first,
+    role: "triage",
+    prompt: "Say what this control plane does in one sentence. Keep it plain.",
+  };
+  if (!second) return [look];
+  return [
+    look,
+    {
+      id: "check",
+      agent: second,
+      role: "reviewer",
+      prompt: "Review the previous answer. Reply with PASS or FAIL and one sentence explaining why.",
+    },
+  ];
+}
+
 /** Build a multi-stage plan from a user prompt and fleet agents. */
 export function planPipeline(
   prompt: string,

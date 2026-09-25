@@ -38,6 +38,8 @@ import { cloneStatusReport, cloneAllGitRepos } from "./clone.js";
 import { decideApproval } from "./approval.js";
 import { pruneAffinity } from "./affinity.js";
 import { DSH_PROFILE_PACKS, liveDshScaffold, resolveDshBackend } from "./dsh.js";
+import { resolveContainerBin, useContainerSession } from "./session.js";
+import { maxReplicas } from "./spec.js";
 import { resolveRuntimeKind, workerRuntimeScaffold } from "./worker-runtime.js";
 import { liveHermesScaffold, resolveHermesBackend } from "./hermes.js";
 import { githubAppScaffold } from "./github-app.js";
@@ -542,7 +544,24 @@ export function buildControlPlaneView(state: ClusterState, root = process.cwd())
             stages: p.stages.length,
             doneStages: p.stages.filter((s) => s.status === "done").length,
             updatedAt: p.updatedAt,
+            steps: p.stages.map((s) => ({ id: s.id, agent: s.agent, status: s.status })),
           })),
+      };
+    })(),
+    placement: (() => {
+      const cap = maxReplicas(state.policies ?? []);
+      const bin = resolveContainerBin();
+      return {
+        executor: useContainerSession() ? ("container" as const) : ("inprocess" as const),
+        workerImage: process.env.ROPEX_WORKER_IMAGE?.trim() || "ropex-worker:latest",
+        runtime: bin.split("/").pop() || bin,
+        maxReplicas: Number.isFinite(cap) ? cap : null,
+        agents: (state.desired ?? []).map((a) => ({
+          name: a.metadata.name,
+          live: state.workers.filter((w) => w.agent === a.metadata.name && w.status !== "retired").length,
+          maxConcurrent: Math.max(1, Math.floor(a.spec.maxConcurrent ?? a.spec.replicas ?? 1)),
+          scale: a.spec.scale === "static" ? ("static" as const) : ("onDemand" as const),
+        })),
       };
     })(),
   };

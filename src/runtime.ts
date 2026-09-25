@@ -35,7 +35,7 @@ export type RunTaskOptions = ImageResolveOptions & {
 export type TaskProgress = {
   taskId: string;
   agent: string;
-  kind: "plan" | "thought" | "observation" | "tool";
+  kind: "plan" | "thought" | "observation" | "tool" | "deliver" | "learn";
   message: string;
 };
 
@@ -187,6 +187,14 @@ export async function runTask(
   } catch {
     delivery = undefined;
   }
+  if (delivery) {
+    opts.onProgress?.({
+      taskId: task.id,
+      agent: worker.agent,
+      kind: "deliver",
+      message: `deliver ${delivery.kind}`,
+    });
+  }
 
   // learn (Hermes) — runtime volume; does not mutate the image digest
   const learned = hermes.learn(task, steps);
@@ -211,6 +219,12 @@ export async function runTask(
     tags: ["task-complete"],
   });
   maybeExportRememberedFact(state, root, remembered, agent.spec.hermes.exportMemory);
+  opts.onProgress?.({
+    taskId: task.id,
+    agent: worker.agent,
+    kind: "learn",
+    message: learned ? `learned skill ${learned.name}` : `remembered on the control plane (${rememberScope})`,
+  });
 
   const result: RunResult = {
     task,

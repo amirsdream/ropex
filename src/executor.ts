@@ -4,11 +4,21 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { recordAudit } from "./audit.js";
 import { SharedMemoryStore, memoryContextFor } from "./memory.js";
 import { enqueueTask } from "./queue.js";
 import { drainQueue, type DrainOptions } from "./scheduler.js";
-import { planPipeline, type PipelineStagePlan } from "./pipeline.js";
+import { planPipeline, simplePipelinePlan, SIMPLE_PIPELINE_PROMPT, type PipelineStagePlan } from "./pipeline.js";
+import {
+  runPipelineSession,
+  snapshotSession,
+  useContainerSession,
+  type DockerExec,
+  type SessionResult,
+} from "./session.js";
 import type { TaskProgress } from "./runtime.js";
 import type { ClusterState, PipelinePhase, PipelineRun, PipelineStageRun, Task } from "./types.js";
 
@@ -42,6 +52,8 @@ export type SubmitPipelineOptions = {
   pipelineId?: string;
   action?: "submit" | "drain";
   stages?: PipelineStagePlan[];
+  /** Run the built-in two-step smoke pipeline against the loaded fleet. */
+  simple?: boolean;
   agents?: string[];
   drain?: boolean;
   concurrency?: number;
@@ -123,6 +135,20 @@ export function emitExecutorEvent(event: ExecutorEvent, state?: ClusterState): v
 
   if (event.kind === "pipeline.end") {
     closePipelineSubscribers(event.pipelineId);
+  }
+}
+
+/** Push an event to live subscribers without writing it again. */
+function broadcastExecutorEvent(event: ExecutorEvent): void {
+  const payload = `data: ${JSON.stringify(event)}\n\n`;
+  for (const sub of subscribers) {
+    if (sub.pipelineId === event.pipelineId || sub.pipelineId === "*") {
+      try {
+        sub.write(payload);
+      } catch {
+        subscribers.delete(sub);
+      }
+    }
   }
 }
 
@@ -365,12 +391,97 @@ function emitTerminalIfDone(state: ClusterState, pipeline: PipelineRun): void {
   emitExecutorEvent({ pipelineId: pipeline.id, at: nowIso(), kind: "pipeline.end", message: "closed" }, state);
 }
 
+function applySessionResult(state: ClusterState, pipeline: PipelineRun, result: SessionResult): void {
+  const src = result.pipeline;
+  pipeline.stages = src.stages;
+  pipeline.output = src.output;
+  pipeline.result = src.result;
+  pipeline.events = src.events;
+  pipeline.updatedAt = src.updatedAt ?? nowIso();
+  pipeline.status = result.ok && src.status === "done" ? "done" : "failed";
+  state.memory = result.memory ?? state.memory;
+  state.skills = result.skills ?? state.skills;
+  state.skillRegistry = result.skillRegistry ?? state.skillRegistry;
+  if (result.trajectories?.length) {
+    state.trajectories = [...(state.trajectories ?? []), ...result.trajectories];
+  }
+  if (pipeline.status === "failed" && !pipeline.result) {
+    pipeline.result = {
+      status: "failed",
+      output: pipeline.output ?? "",
+      stageCount: pipeline.stages.length,
+      producedBy: pipeline.stages.filter((s) => s.output).map((s) => s.agent),
+      at: nowIso(),
+      error: result.error,
+    };
+  } else if (pipeline.status === "failed" && pipeline.result && result.error && !pipeline.result.error) {
+    pipeline.result.error = result.error;
+  }
+  // The session ran off-process. Replay its step log so a subscriber can follow
+  // Hermes and DeepSeek in order. Host start/plan events were already sent.
+  for (const event of src.events ?? []) {
+    if (event.kind !== "stage.start" && event.kind !== "stage.log" && event.kind !== "stage.complete" && event.kind !== "stage.failed") {
+      continue;
+    }
+    broadcastExecutorEvent({
+      pipelineId: pipeline.id,
+      at: event.at,
+      kind: event.kind,
+      stageId: event.stageId,
+      agent: event.agent,
+      taskId: event.taskId,
+      workerId: event.workerId,
+      message: event.message,
+      artifact: event.artifact,
+      meta: event.meta,
+    });
+  }
+}
+
+/** All stages share one session image. Memory comes back; the image is deleted. */
+async function drainPipelineInSession(
+  state: ClusterState,
+  pipeline: PipelineRun,
+  opts: { root: string; docker?: DockerExec },
+): Promise<number> {
+  const tmp = mkdtempSync(join(tmpdir(), "ropex-session-"));
+  try {
+    const result = await runPipelineSession({
+      request: snapshotSession(state, pipeline),
+      workDir: tmp,
+      docker: opts.docker,
+    });
+    applySessionResult(state, pipeline, result);
+    return pipeline.stages.filter((s) => s.status === "done").length;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    pipeline.status = "failed";
+    pipeline.updatedAt = nowIso();
+    pipeline.result = {
+      status: "failed",
+      output: pipeline.output ?? "",
+      stageCount: pipeline.stages.length,
+      producedBy: pipeline.stages.filter((s) => s.output).map((s) => s.agent),
+      at: nowIso(),
+      error: message,
+    };
+    return 0;
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
 /** Run pending stages sequentially; optional prefix scopes drain to this pipeline. */
 export async function drainPipelineStages(
   state: ClusterState,
   pipeline: PipelineRun,
-  opts: DrainOptions & { root?: string } = {},
+  opts: DrainOptions & { root?: string; docker?: DockerExec } = {},
 ): Promise<number> {
+  if (useContainerSession()) {
+    if (!opts.root) throw new Error("container session requires a workspace root");
+    return drainPipelineInSession(state, pipeline, { root: opts.root, docker: opts.docker });
+  }
+
   const prefix = `${pipeline.id}:`;
   let drained = 0;
   let failed = false;
@@ -507,13 +618,15 @@ export async function submitPipeline(
     return result;
   }
 
-  const prompt = opts.prompt?.trim();
+  const prompt = opts.simple ? SIMPLE_PIPELINE_PROMPT : opts.prompt?.trim();
   if (!prompt) throw new Error("prompt required");
 
-  const stages = planPipeline(prompt, state, {
-    agents: opts.agents,
-    stages: opts.stages,
-  });
+  const stages = opts.simple
+    ? simplePipelinePlan(state)
+    : planPipeline(prompt, state, {
+        agents: opts.agents,
+        stages: opts.stages,
+      });
 
   if (!stages.length) throw new Error("stages must not be empty");
   const ids = stages.map((s) => s.id);
@@ -640,6 +753,7 @@ export function mapExecutorEventToUi(event: ExecutorEvent): { type: string; data
         data: {
           agent_id: event.taskId,
           role: event.meta?.role ?? event.stageId,
+          stage_id: event.stageId,
           output: event.artifact ?? event.message,
           error: event.kind === "stage.failed" || event.meta?.error === true,
           artifacts: event.artifact ? [{ path: `${event.stageId}.txt`, content: event.artifact }] : [],

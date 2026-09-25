@@ -1,4 +1,4 @@
-# Same stack as docker-compose.yml. Podman Compose reads this file name.
+# One click: docker compose up --build
 # The worker service builds the harness image and exits. It is not a session.
 # Each pipeline builds ropex-session:<id> from that image and deletes it after learn.
 

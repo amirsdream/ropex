@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { loadDotEnv } from "./env.js";
+import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { applyManifestText, loadState, planReconcile, saveState } from "./controller.js";
 import { writeSnapshot, restoreSnapshot } from "./snapshot.js";
@@ -17,6 +18,7 @@ import { compactJournal } from "./journal.js";
 import { runTask } from "./runtime.js";
 import { drainQueue, setDrainConcurrency, getDrainConcurrency } from "./scheduler.js";
 import { submitPipeline } from "./executor.js";
+import { executeSessionRequest } from "./session-run.js";
 import { hygieneReport, runHygiene } from "./hygiene.js";
 import { budgetReport } from "./budget.js";
 import { planAutoscale } from "./autoscale.js";
@@ -56,6 +58,8 @@ import { ingestGithubWebhook, signGithubPayload } from "./webhook.js";
 import { parseInterval, watchLoop, watchOnce, watchDeclaredRepos, watchReposLoop } from "./watch.js";
 import type { AuditKind, GithubEvent, ReconcilePlan } from "./types.js";
 
+loadDotEnv();
+
 const HELP = `ropex — GitOps control plane for agent fleets
 
 Usage:
@@ -89,6 +93,8 @@ Usage:
                                      Claim idle workers; --concurrency persists preference
   ropex pipeline <prompt> [--no-drain] [--concurrency N]
                                      Run multi-stage pipeline (executor API)
+  ropex pipeline --simple            Two-step smoke test: triage, then reviewer
+  ropex session-exec <request.json>  Run a pipeline inside a session container
   ropex sync [--due]                  Sync declared GitRepos (multi-repo union)
   ropex replay <delivery-id>          Replay a delivery into the journal
   ropex demo [--root path]            End-to-end sandbox demo (no network)
@@ -499,14 +505,28 @@ async function main(argv: string[]): Promise<number> {
       for (const r of results) console.log(`  ${r.worker.id}: ${r.output}`);
       return 0;
     }
+    case "session-exec": {
+      const file = rest[0];
+      if (!file) return fail("usage: ropex session-exec <request.json>");
+      process.env.ROPEX_IN_SESSION = "1";
+      process.env.ROPEX_EXECUTOR = "inprocess";
+      const request = JSON.parse(readFileSync(file, "utf8"));
+      const result = await executeSessionRequest(request, root);
+      mkdirSync("/session", { recursive: true });
+      writeFileSync("/session/result.json", JSON.stringify(result));
+      console.log(`session ${result.pipeline.status} stages=${result.pipeline.stages.length}`);
+      return result.ok ? 0 : 1;
+    }
     case "pipeline": {
+      const simple = rest.includes("--simple");
       const prompt = rest.filter((a) => !a.startsWith("--")).join(" ").trim();
-      if (!prompt) return fail("pipeline requires a prompt");
+      if (!simple && !prompt) return fail("pipeline requires a prompt, or use --simple");
       const state = loadState(root);
       const drain = !rest.includes("--no-drain");
       const concurrency = flag(rest, "--concurrency");
       const result = await submitPipeline(state, {
-        prompt,
+        prompt: simple ? undefined : prompt,
+        simple,
         root,
         drain,
         concurrency: concurrency !== undefined ? Number(concurrency) : undefined,

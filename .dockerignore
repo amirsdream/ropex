@@ -1,0 +1,9 @@
+node_modules
+dist
+web/node_modules
+.ropex
+sandbox
+.git
+.env
+*.log
+coverage
