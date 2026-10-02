@@ -1,5 +1,3 @@
-import { existsSync } from "node:fs";
-
 import { admitCalls } from "./admission.js";
 import { requestApprovals } from "./approval.js";
 import { composeBrief } from "./brief.js";
@@ -13,7 +11,8 @@ import { isOnDemandAgent } from "./scale.js";
 import { recordTrajectory } from "./trajectory.js";
 import { composeWorkflow } from "./workflow.js";
 import { bootWorker } from "./worker-runtime.js";
-import { ensureWorktree } from "./worktree.js";
+import { acquireSandbox, needsHostWorktree, type Sandbox } from "./sandbox.js";
+import { recordAudit } from "./audit.js";
 import type {
   ClusterState,
   DesiredAgent,
@@ -58,11 +57,75 @@ export async function runTask(
   }
 
   const root = opts.worktreeRoot ?? opts.root ?? process.cwd();
-  // A recorded worktree can outlive the directory (container restart, cleanup).
-  // Re-materialise it rather than handing a runtime a path that no longer exists.
-  const worktree =
-    worker.worktree && existsSync(worker.worktree) ? worker.worktree : ensureWorktree(root, worker);
-  worker.worktree = worktree;
+  const sandbox = await acquireSandbox(agent.spec.sandbox, {
+    root,
+    worker,
+    taskId: task.id,
+    policies: state.policies,
+  });
+  worker.sandbox =
+    sandbox.kind === "local"
+      ? undefined
+      : { provider: sandbox.kind, id: sandbox.id, imageRef: sandbox.imageRef };
+  if (needsHostWorktree(agent.spec.sandbox)) worker.worktree = sandbox.hostCwd;
+
+  try {
+    return await executeTask(state, worker, task, { agent, workflow, root, sandbox }, opts);
+  } finally {
+    await releaseSandbox(state, worker, task, agent, sandbox);
+  }
+}
+
+/** Snapshot when the agent asks for it, then always dispose — even when the task failed. */
+async function releaseSandbox(
+  state: ClusterState,
+  worker: Worker,
+  task: Task,
+  agent: DesiredAgent,
+  sandbox: Sandbox,
+): Promise<void> {
+  try {
+    if (agent.spec.sandbox?.lifecycle?.after === "snapshot") {
+      const snapshot = await sandbox.snapshot(task.id);
+      if (snapshot) {
+        recordAudit(state, {
+          kind: "info",
+          message: `sandbox snapshot ${snapshot.imageRef}`,
+          agent: worker.agent,
+          workerId: worker.id,
+          taskId: task.id,
+          meta: { key: snapshot.key, bytes: snapshot.bytes, tarPath: snapshot.tarPath ?? null },
+        });
+      }
+    }
+  } catch (err) {
+    recordAudit(state, {
+      kind: "info",
+      message: `sandbox snapshot failed: ${err instanceof Error ? err.message : String(err)}`,
+      agent: worker.agent,
+      workerId: worker.id,
+      taskId: task.id,
+    });
+  } finally {
+    await sandbox.dispose().catch(() => undefined);
+    worker.sandbox = undefined;
+  }
+}
+
+async function executeTask(
+  state: ClusterState,
+  worker: Worker,
+  task: Task,
+  run: {
+    agent: DesiredAgent;
+    workflow: ReturnType<typeof composeWorkflow>;
+    root: string;
+    sandbox: Sandbox;
+  },
+  opts: RunTaskOptions,
+): Promise<RunResult> {
+  const { agent, workflow, root, sandbox } = run;
+  const worktree = sandbox.hostCwd;
 
   const policy = effectivePolicy(state.policies);
   const store = SharedMemoryStore.fromState(state);
@@ -86,6 +149,7 @@ export async function runTask(
     hermes,
     memory: hermes.port,
     cwd: worktree,
+    sandbox,
   });
 
   if (!hermes.port || !runtimeAdapter.kernel) {

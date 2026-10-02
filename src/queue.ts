@@ -17,6 +17,7 @@ import {
   spawnWorker,
 } from "./scale.js";
 import { maxReplicas } from "./spec.js";
+import { needsHostWorktree } from "./sandbox.js";
 import { ensureWorktree } from "./worktree.js";
 import type { ClusterMetrics, ClusterState, QueuedTask, Task, Worker } from "./types.js";
 
@@ -181,7 +182,7 @@ export function acquireWorker(
     status: "pending",
   });
   if (!worker) return undefined;
-  if (opts.root) {
+  if (opts.root && needsHostWorktree(agent?.spec.sandbox)) {
     worker.worktree = ensureWorktree(opts.root, worker);
   }
   return worker;

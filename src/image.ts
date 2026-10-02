@@ -6,6 +6,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { canonicalSandbox } from "./sandbox-spec.js";
 import type { DesiredAgent, HarnessSpec, HermesSpec, GithubSpec } from "./types.js";
 
 export type AgentImage = {
@@ -66,6 +67,9 @@ export function agentImagePayload(agent: DesiredAgent, soulText: string): string
       timeoutMs: agent.spec.runtime.timeoutMs ?? null,
       requireEnv: agent.spec.runtime.requireEnv ? [...agent.spec.runtime.requireEnv].sort() : null,
     };
+  }
+  if (agent.spec.sandbox) {
+    base.sandbox = canonicalSandbox(agent.spec.sandbox);
   }
   if (agent.spec.placement) {
     base.placement = {

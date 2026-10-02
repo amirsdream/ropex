@@ -148,11 +148,16 @@ async function bootCliRuntime(
   const runtime = spec.runtime;
   const env = process.env;
   const bin = resolveRuntimeBin(descriptor, runtime, env);
-  const resolvedBin = binOnPath(bin, env);
+  const sandbox = opts.sandbox;
+  const isolated = sandbox !== undefined && sandbox.kind !== "local";
+  const resolvedBin = isolated ? await sandbox.resolveBin(bin) : binOnPath(bin, env);
   if (!resolvedBin) {
     throw new Error(
-      `${descriptor.label} runtime unavailable — "${bin}" not found on PATH. ` +
-        `Install it, or set ${runtimeBinEnvVar(descriptor.kind)} / spec.runtime.command.`,
+      isolated
+        ? `${descriptor.label} runtime unavailable — "${bin}" not found inside the ${sandbox.kind} sandbox. ` +
+            `Install it in spec.sandbox.image (e.g. npm: [...]), or set spec.runtime.command to a path inside it.`
+        : `${descriptor.label} runtime unavailable — "${bin}" not found on PATH. ` +
+            `Install it, or set ${runtimeBinEnvVar(descriptor.kind)} / spec.runtime.command.`,
     );
   }
 
@@ -190,8 +195,16 @@ async function bootCliRuntime(
   });
 
   const pack = alignPack(spec, descriptor.kind);
-  const cwd = opts.cwd ?? process.cwd();
+  const cwd = sandbox?.cwd ?? opts.cwd ?? process.cwd();
   const timeoutMs = runtime?.timeoutMs ?? DEFAULT_RUNTIME_TIMEOUT_MS;
+  // Credentials the CLI needs inside an isolate. Forwarded by name; values stay off argv.
+  const forwardEnv: Record<string, string> = {};
+  if (isolated) {
+    for (const name of [...descriptor.credentialEnv, ...(runtime?.requireEnv ?? [])]) {
+      const value = env[name]?.trim();
+      if (value) forwardEnv[name] = value;
+    }
+  }
   const model = runtime?.model ?? descriptor.defaultModel;
 
   return {
@@ -207,11 +220,10 @@ async function bootCliRuntime(
         ...(runtime?.commandArgs ?? []),
         ...descriptor.argv({ prompt, model, cwd, permissionArgs: policy.args }),
       ];
-      const res = await runProcess(resolvedBin, args, {
-        cwd,
-        timeoutMs,
-        stdin: descriptor.promptChannel === "stdin" ? prompt : undefined,
-      });
+      const stdin = descriptor.promptChannel === "stdin" ? prompt : undefined;
+      const res = sandbox
+        ? await sandbox.exec(resolvedBin, args, { timeoutMs, stdin, env: forwardEnv })
+        : await runProcess(resolvedBin, args, { cwd, timeoutMs, stdin });
       if (res.timedOut) {
         throw new Error(`${descriptor.label} timed out after ${timeoutMs}ms`);
       }

@@ -12,6 +12,7 @@ import { runProcess } from "./proc.js";
 import type { AgentSpec, HarnessProfile, TrajectoryStep } from "./types.js";
 import type { HermesContract, MemoryPort, WorkerExecContext } from "./contracts.js";
 import type { Kernel } from "./plugins.js";
+import type { Sandbox } from "./sandbox.js";
 
 const require = createRequire(import.meta.url);
 
@@ -131,6 +132,8 @@ export type BootDshOptions = {
   memory?: MemoryPort;
   cwd?: string;
   backend?: DshBackend;
+  /** Isolate the executor runs in. Defaults to running on the host in `cwd`. */
+  sandbox?: Sandbox;
 };
 
 /** Checklist returned by `liveDshScaffold` — docs + UI surface this. */
@@ -316,6 +319,12 @@ async function bootEmbeddedDsh(
 }
 
 async function bootLiveDsh(spec: AgentSpec, opts: BootDshOptions): Promise<DshAdapter> {
+  if (opts.sandbox && opts.sandbox.kind !== "local") {
+    throw new Error(
+      `dsh live backend cannot run inside a ${opts.sandbox.kind} sandbox (the dsh package lives on the control plane). ` +
+        `Use a CLI runtime (spec.runtime.kind) with that sandbox, or unset ROPEX_DSH_BACKEND=live.`,
+    );
+  }
   const pack = profilePack(spec.harness.profile);
   const resolvedTools = toolsFor(spec);
   const liveMeta = loadLiveProfileMeta(spec.harness.profile);
