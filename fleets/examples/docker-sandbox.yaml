@@ -1,0 +1,90 @@
+# Docker sandbox: each task runs in its own container.
+#
+# The control plane builds one environment image from the recipe (cached as
+# ropex-env:<digest>), starts a container per task, checks the repo out with a token
+# read from the control plane's environment, runs the Codex CLI inside it, then
+# disposes of the container. A warm snapshot of "image + repo checked out" is kept
+# under .ropex/sandboxes so the next task starts from it.
+#
+# Needs Docker or Podman, plus GITHUB_TOKEN and OPENAI_API_KEY in the environment.
+# Check with: ropex sandboxes
+apiVersion: ropex.dev/v1
+kind: Policy
+metadata:
+  name: sandbox-guardrails
+spec:
+  maxReplicas: 4
+  permissions:
+    deny: [exfiltrate]
+    requireApproval: []
+  sandbox:
+    allowProviders: [local, docker]
+    allowBaseImages: ["node:*", "debian:*"]
+    maxSnapshotBytes: 8589934592
+---
+apiVersion: ropex.dev/v1
+kind: Agent
+metadata:
+  name: builder
+spec:
+  scale: onDemand
+  maxConcurrent: 2
+  idleTTLMs: 0
+  runtime:
+    kind: codex
+    timeoutMs: 900000
+  sandbox:
+    provider: docker
+    image:
+      base: node:22-bookworm
+      tools: [git, gh, curl, codecs]
+      apt: [jq]
+      npm: ["@openai/codex"]
+      setup: ["corepack enable"]
+    repo:
+      url: https://github.com/example-org/example-repo.git
+      ref: main
+      depth: 1
+      tokenEnv: GITHUB_TOKEN
+    env:
+      CI: "1"
+    secrets: [OPENAI_API_KEY]
+    resources:
+      cpus: 2
+      memory: 4g
+      network: bridge
+    lifecycle:
+      after: dispose
+      warmSnapshot: true
+      keep: 3
+      ttlMs: 604800000
+  harness:
+    profile: code
+    plugins: [fs, shell, github]
+  hermes:
+    memory: shared
+    learning: true
+    skills: []
+  github:
+    events: [issues.labeled]
+    deliver: pull_request
+---
+# Same fleet, no container: the default. Commands run in the worker's git worktree.
+apiVersion: ropex.dev/v1
+kind: Agent
+metadata:
+  name: triage
+spec:
+  scale: onDemand
+  maxConcurrent: 4
+  idleTTLMs: 0
+  harness:
+    profile: minimal
+    plugins: [github]
+  hermes:
+    memory: shared
+    learning: false
+    skills: []
+  github:
+    events: [issues.opened]
+    deliver: comment

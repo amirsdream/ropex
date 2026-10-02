@@ -13,6 +13,7 @@ import { composeWorkflow } from "./workflow.js";
 import { bootWorker } from "./worker-runtime.js";
 import { acquireSandbox, needsHostWorktree, type Sandbox } from "./sandbox.js";
 import { recordAudit } from "./audit.js";
+import type { DockerRun } from "./sandbox-client.js";
 import type {
   ClusterState,
   DesiredAgent,
@@ -29,6 +30,8 @@ export type RunTaskOptions = ImageResolveOptions & {
   worktreeRoot?: string;
   /** Optional progress hook (pipeline SSE, tests). */
   onProgress?: (progress: TaskProgress) => void;
+  /** Docker client for the sandbox layer. Tests inject a fake; defaults to the host CLI. */
+  sandboxDocker?: DockerRun;
 };
 
 export type TaskProgress = {
@@ -62,6 +65,7 @@ export async function runTask(
     worker,
     taskId: task.id,
     policies: state.policies,
+    docker: opts.sandboxDocker,
   });
   worker.sandbox =
     sandbox.kind === "local"
