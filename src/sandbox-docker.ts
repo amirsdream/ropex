@@ -319,6 +319,33 @@ export type SandboxGcResult = {
 
 const LIVE_STATUSES = new Set(["running", "pending"]);
 
+/** True when any desired agent or live worker uses a docker sandbox. */
+export function usesDockerSandbox(state: ClusterState): boolean {
+  return (
+    state.desired.some((a) => a.spec.sandbox?.provider === "docker") ||
+    state.workers.some((w) => w.sandbox?.provider === "docker")
+  );
+}
+
+export type SandboxContainer = { name: string; worker: string };
+
+export function listSandboxContainers(run: DockerSync): SandboxContainer[] | string {
+  const listed = run([
+    "ps",
+    "-a",
+    "--filter",
+    `label=${SANDBOX_LABEL}=1`,
+    "--format",
+    '{{.Names}}\t{{.Label "ropex.worker"}}',
+  ]);
+  if (listed.code !== 0) return listed.stderr.trim() || `ps exited ${listed.code}`;
+  return listed.stdout
+    .split("\n")
+    .map((line) => line.split("\t"))
+    .filter(([name]) => name?.trim())
+    .map(([name, worker]) => ({ name: name.trim(), worker: (worker ?? "").trim() }));
+}
+
 /**
  * Remove sandbox containers and scratch directories whose worker is gone.
  * A worker that is `running` or `pending` keeps its sandbox; everything else is orphaned.
@@ -330,6 +357,12 @@ export function gcOrphanSandboxes(
 ): SandboxGcResult {
   const env = opts.env ?? process.env;
   const result: SandboxGcResult = { removedContainers: [], keptContainers: [], removedScratch: [] };
+  // Never touch containers on a host whose fleet does not use docker sandboxes: the
+  // containers may belong to another control plane.
+  if (!usesDockerSandbox(state)) {
+    result.skipped = "no docker sandbox declared";
+    return result;
+  }
   const live = new Set(
     state.workers.filter((w) => LIVE_STATUSES.has(w.status)).map((w) => w.id),
   );
@@ -349,27 +382,18 @@ export function gcOrphanSandboxes(
     result.skipped = "no container runtime on PATH";
     return result;
   }
-  const listed = run([
-    "ps",
-    "-a",
-    "--filter",
-    `label=${SANDBOX_LABEL}=1`,
-    "--format",
-    '{{.Names}}\t{{.Label "ropex.worker"}}',
-  ]);
-  if (listed.code !== 0) {
-    result.skipped = listed.stderr.trim() || `ps exited ${listed.code}`;
+  const listed = listSandboxContainers(run);
+  if (typeof listed === "string") {
+    result.skipped = listed;
     return result;
   }
-  for (const line of listed.stdout.split("\n")) {
-    const [name, worker] = line.split("\t");
-    if (!name?.trim()) continue;
-    if (worker && live.has(worker.trim())) {
-      result.keptContainers.push(name.trim());
+  for (const { name, worker } of listed) {
+    if (worker && live.has(worker)) {
+      result.keptContainers.push(name);
       continue;
     }
-    run(["rm", "-f", name.trim()]);
-    result.removedContainers.push(name.trim());
+    run(["rm", "-f", name]);
+    result.removedContainers.push(name);
   }
   return result;
 }

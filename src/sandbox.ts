@@ -7,13 +7,27 @@
  * (SSH host, VM) is one more provider implementing `SandboxProvider`.
  */
 
-import { dockerProvider } from "./sandbox-docker.js";
+import {
+  dockerProvider,
+  listSandboxContainers,
+  usesDockerSandbox,
+  type SandboxContainer,
+} from "./sandbox-docker.js";
 import { localProvider } from "./sandbox-local.js";
 import { admitSandbox, sandboxProvider } from "./sandbox-spec.js";
-import type { SnapshotRecord } from "./sandbox-store.js";
+import {
+  catalogSummary,
+  evictSnapshots,
+  sandboxStoreDir,
+  type EvictionRules,
+  type SnapshotRecord,
+} from "./sandbox-store.js";
 import type { RunProcessResult } from "./proc.js";
-import type { DockerRun } from "./sandbox-client.js";
+import { defaultDockerRun, defaultDockerSync, type DockerRun, type DockerSync } from "./sandbox-client.js";
+import { binOnPath } from "./proc.js";
+import { resolveContainerBin } from "./session.js";
 import type {
+  ClusterState,
   Policy,
   SandboxProviderKind,
   SandboxSpec,
@@ -119,4 +133,59 @@ export async function acquireSandbox(
   const provider = SANDBOX_PROVIDERS[kind];
   if (!provider) throw new Error(`unknown sandbox provider "${kind}"`);
   return provider.acquire(spec, { ...ctx, env });
+}
+
+export type SandboxReport = {
+  providers: SandboxProbe[];
+  /** Agents that declare a sandbox, with the provider each asks for. */
+  agents: Array<{ agent: string; provider: SandboxProviderKind; base?: string; repo?: string }>;
+  store: { dir: string; snapshots: SnapshotRecord[]; bytes: number };
+  /** Live containers; empty (with `containersSkipped`) when docker is unused or unreachable. */
+  containers: SandboxContainer[];
+  containersSkipped?: string;
+};
+
+/** Read-only view for the CLI and `GET /api/v1/sandboxes`. Spawns docker only when a fleet uses it. */
+export function sandboxReport(
+  root: string,
+  state: ClusterState,
+  opts: { env?: NodeJS.ProcessEnv; docker?: DockerSync } = {},
+): SandboxReport {
+  const env = opts.env ?? process.env;
+  const report: SandboxReport = {
+    providers: sandboxScaffold(env),
+    agents: state.desired
+      .filter((a) => a.spec.sandbox)
+      .map((a) => ({
+        agent: a.metadata.name,
+        provider: sandboxProvider(a.spec.sandbox),
+        base: a.spec.sandbox?.image?.base ?? a.spec.sandbox?.image?.dockerfile,
+        repo: a.spec.sandbox?.repo?.url,
+      })),
+    store: catalogSummary(sandboxStoreDir(root, env)),
+    containers: [],
+  };
+  if (!usesDockerSandbox(state)) {
+    report.containersSkipped = "no docker sandbox declared";
+    return report;
+  }
+  const run = opts.docker ?? (binOnPath(resolveContainerBin(env), env) ? defaultDockerSync(env) : undefined);
+  if (!run) {
+    report.containersSkipped = "no container runtime on PATH";
+    return report;
+  }
+  const listed = listSandboxContainers(run);
+  if (typeof listed === "string") report.containersSkipped = listed;
+  else report.containers = listed;
+  return report;
+}
+
+/** Evict snapshots (and their tarballs) by retention rules. `keep: 0` clears the store. */
+export async function pruneSandboxSnapshots(
+  root: string,
+  rules: EvictionRules,
+  opts: { env?: NodeJS.ProcessEnv; docker?: DockerRun } = {},
+): Promise<SnapshotRecord[]> {
+  const env = opts.env ?? process.env;
+  return evictSnapshots(opts.docker ?? defaultDockerRun(env), sandboxStoreDir(root, env), rules);
 }

@@ -539,6 +539,7 @@ export const API_ROUTES = {
   policySim: "/api/v1/policy/simulate",
   hygiene: "/api/v1/hygiene",
   runtimes: "/api/v1/runtimes",
+  sandboxes: "/api/v1/sandboxes",
   pipeline: "/api/v1/pipeline",
   events: "/api/v1/events",
   stack: "/api/v1/stack",

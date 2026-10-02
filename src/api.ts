@@ -38,6 +38,7 @@ import { cloneStatusReport, cloneAllGitRepos } from "./clone.js";
 import { decideApproval } from "./approval.js";
 import { pruneAffinity } from "./affinity.js";
 import { DSH_PROFILE_PACKS, liveDshScaffold, resolveDshBackend } from "./dsh.js";
+import { sandboxReport } from "./sandbox.js";
 import { resolveContainerBin, useContainerSession } from "./session.js";
 import { maxReplicas } from "./spec.js";
 import { resolveRuntimeKind, workerRuntimeScaffold } from "./worker-runtime.js";
@@ -1128,6 +1129,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse, opts: Se
   }
   if (url.pathname === API_ROUTES.runtimes) {
     return json(res, { runtimes: workerRuntimeScaffold() });
+  }
+  if (url.pathname === API_ROUTES.sandboxes) {
+    return json(res, sandboxReport(opts.root, state));
   }
   if (url.pathname === API_ROUTES.ratelimits) {
     return json(res, rateLimitReport(state));
