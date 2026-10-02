@@ -179,6 +179,10 @@ Three places show the same idea.
 | `web/src/components/FollowLanes.tsx` | Services follow strip |
 | `web/src/hooks/useStream.ts` | SSE client that classifies each beat |
 
+## Sessions and sandboxes
+
+A session runs a whole **pipeline** in one container, Hermes included. A [sandbox](./sandboxes.md) (`spec.sandbox`) runs one agent's **execute stage** per task in a container you configure, with Hermes staying on the control plane. Choose one per deployment: inside a session (`ROPEX_IN_SESSION=1`) a `docker` sandbox fails closed because there is no nested Docker.
+
 ## Related
 
 - [Operations](./operations.md) — `npm run up`, Podman, stack API

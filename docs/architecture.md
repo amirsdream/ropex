@@ -338,7 +338,7 @@ sequenceDiagram
 - Scheduler **claims** an idle worker → `running`, runs Hermes→DeepSeek, then back to `idle`.
 - `runTask` requires worker digest == desired image digest (drift fails closed).
 - Spec shrink or image roll marks the old worker `retired` (kept in history).
-- Each live worker gets an isolated **worktree** under `sandbox/worktrees/`; retired workers tear it down.
+- Each live worker gets an isolated **worktree** under `sandbox/worktrees/`; retired workers tear it down. `spec.sandbox` can move the execute stage into a per-task Docker container instead — see [sandboxes.md](./sandboxes.md).
 
 ## Work queue
 

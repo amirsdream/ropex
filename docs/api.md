@@ -107,6 +107,7 @@ See [control-plane-ui.md](./control-plane-ui.md) for UI mapping.
 | `POST /api/v1/drain` | `ropex drain --concurrency N` |
 | `GET /api/v1/trajectories?format=jsonl` | `ropex trajectories --jsonl` |
 | `GET /api/v1/health` | `ropex health` |
+| `GET /api/v1/sandboxes` | `ropex sandboxes` |
 | `GET /api/v1/metrics?format=prometheus` | `ropex metrics --prometheus` |
 
 ## Related
@@ -115,6 +116,26 @@ See [control-plane-ui.md](./control-plane-ui.md) for UI mapping.
 - [Architecture](./architecture.md)
 - [Executor API](./executor-api.md)
 - [Control-plane UI](./control-plane-ui.md)
+
+## `GET /api/v1/sandboxes`
+
+Sandbox providers, the agents that declare a sandbox, stored snapshots and live
+containers. Docker is queried only when a desired agent or worker uses a docker
+sandbox; otherwise `containersSkipped` says why `containers` is empty.
+
+```json
+{
+  "providers": [
+    { "kind": "local", "ready": true, "hint": "..." },
+    { "kind": "docker", "ready": true, "bin": "/usr/bin/docker", "hint": "..." }
+  ],
+  "agents": [{ "agent": "builder", "provider": "docker", "base": "node:22-bookworm", "repo": "https://github.com/org/repo.git" }],
+  "store": { "dir": ".ropex/sandboxes", "bytes": 0, "snapshots": [] },
+  "containers": []
+}
+```
+
+CLI: `ropex sandboxes`. See [sandboxes.md](./sandboxes.md).
 
 ## `GET /api/v1/runtimes`
 

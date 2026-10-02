@@ -79,7 +79,8 @@ npx tsx src/cli.ts up fleets/examples/github-control-plane.yaml --serve --port 7
 | `ROPEX_PORT` / `--port` | Dashboard port (default 7780) |
 | `ROPEX_EXECUTOR` | `container` for one image per plan. Unset or anything else stays in-process |
 | `ROPEX_WORKER_IMAGE` | Base image (default `ropex-worker:latest`) |
-| `ROPEX_CONTAINER_BIN` | `docker` or `podman` |
+| `ROPEX_CONTAINER_BIN` | `docker` or `podman`. Also used by `spec.sandbox` with `provider: docker` |
+| `ROPEX_SANDBOX_DIR` | Where sandbox snapshots and `catalog.json` are kept (default `.ropex/sandboxes`) |
 | `ROPEX_HERMES_BACKEND` | `embedded` (default) or `live` |
 | `ROPEX_DSH_BACKEND` | `embedded` (default) or `live` |
 | `OPENAI_API_KEY` | Preferred model key. Forwarded into the session. Never baked into the image |

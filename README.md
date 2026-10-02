@@ -92,6 +92,7 @@ npx tsx src/cli.ts health
 | [**Hermes wiring**](./docs/hermes.md) | Embedded brain vs live `hermes-agent` |
 | [**DeepSeek wiring**](./docs/dsh.md) | Embedded harness vs live `@deepseek-ai/dsh` |
 | [**Worker runtimes**](./docs/worker-runtimes.md) | Swap the execute stage: dsh, Claude Code, Codex, Copilot |
+| [**Sandboxes**](./docs/sandboxes.md) | Run the execute stage in a local worktree or a Docker container with a configurable image, repo checkout, tokens and snapshots |
 | [**Magentic integration**](./integrations/magentic/README.md) | External chat UI → Ropex executor |
 | [**Docs index**](./docs/README.md) | Full table of contents |
 
@@ -146,6 +147,8 @@ Example fleets: `fleets/examples/github-control-plane.yaml`, `forge-local.yaml`.
 **DeepSeek Harness** (`src/dsh.ts`, `src/plugins.ts`) — Cordis-shaped kernel: loop mode, tools, permissions, delivery plugin. The default worker runtime.
 
 **Pluggable executors** (`src/worker-runtime.ts`, `src/cli-runtimes.ts`) — `spec.runtime.kind` swaps the `execute` stage for an external headless coding agent (`claude -p`, `codex exec`, `copilot -p`) running in the worker worktree. Hermes still composes, plans, and learns; Ropex policy is translated into each CLI's own permission flags and fails closed when a runtime cannot express a denial. `ropex runtimes` reports what is usable. See [worker-runtimes.md](./docs/worker-runtimes.md).
+
+**Sandboxes** (`src/sandbox.ts`, `src/sandbox-docker.ts`) — `spec.sandbox` picks where `execute` runs: the local git worktree (default) or one Docker container per task, built from a recipe (base image, apt/npm/pip, tools), with the repo checked out by token, warm snapshots kept on disk, and the container disposed afterwards. See [sandboxes.md](./docs/sandboxes.md).
 
 **Ropex glue** — `src/runtime.ts` runs the fixed workflow; `src/scale.ts` + `src/queue.ts` spawn/destroy on-demand workers; `src/controller.ts` reconciles definitions; `src/executor.ts` runs multi-stage pipelines for external orchestrators.
 
