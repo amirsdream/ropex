@@ -46,6 +46,7 @@ If a Cloud Agent is stuck on Starting remote server, the usual cause is a blocki
 | Spec / reconcile | `spec.ts`, `controller.ts`, `image.ts`, `worktree.ts`, `watch.ts`, `gitrepo.ts`, `clone.ts`, `tick.ts`, `canary.ts`, `snapshot.ts`, `drift.ts` |
 | Brain / execute | `hermes.ts`, `dsh.ts`, `harness.ts`, `plugins.ts`, `workflow.ts`, `runtime.ts`, `brief.ts` |
 | Worker runtimes | `worker-runtime.ts` (registry + boot dispatch), `cli-runtimes.ts` (per-CLI descriptors), `proc.ts` (subprocess primitive) |
+| Sandboxes | `sandbox/` — `index.ts` (provider contract + registry), `local.ts`, `docker.ts`, `image.ts`, `store.ts`, `spec.ts`, `client.ts`; where `execute` runs (see `docs/sandboxes.md`) |
 | Executor API | `pipeline.ts`, `executor.ts` — multi-stage pipelines, SSE, scoped drain |
 | Memory / skills | `memory.ts`, `skills.ts`, `gitmemory.ts`, `contracts.ts` |
 | Queue / scale | `queue.ts`, `scheduler.ts`, `scale.ts` (on-demand spawn/destroy), `fanout.ts`, `admission.ts`, `approval.ts`, `autoscale.ts`, `budget.ts`, `placement.ts`, `fairness.ts` |
@@ -67,6 +68,7 @@ If a Cloud Agent is stuck on Starting remote server, the usual cause is a blocki
 - [docs/api.md](./docs/api.md) — HTTP routes including `/api/v1/stack`
 - [docs/executor-api.md](./docs/executor-api.md) — pipeline contract
 - [docs/worker-runtimes.md](./docs/worker-runtimes.md) — pluggable executors (dsh, Claude Code, Codex, Copilot)
+- [docs/sandboxes.md](./docs/sandboxes.md) — isolated execution: local worktree or Docker container per task
 - [integrations/magentic/README.md](./integrations/magentic/README.md) — external UI adapter
 
 ## Overnight orthodoxy

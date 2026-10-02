@@ -12,8 +12,14 @@ import type {
   TaskManifest,
   MemoryManifest,
 } from "./types.js";
-import { API_VERSION, HARNESS_PROFILES, WORKER_RUNTIME_KINDS_LIST } from "./types.js";
+import {
+  API_VERSION,
+  HARNESS_PROFILES,
+  SANDBOX_PROVIDER_KINDS_LIST,
+  WORKER_RUNTIME_KINDS_LIST,
+} from "./types.js";
 import { resolveMaxConcurrent, resolveScaleMode } from "./scale.js";
+import { cloneSandboxSpec, validateSandboxSpec } from "./sandbox/spec.js";
 
 export function parseManifests(raw: string): Manifest[] {
   const docs = parseAllDocuments(raw);
@@ -58,6 +64,17 @@ function validateManifest(data: unknown): Manifest {
       : spec) as Record<string, unknown> | undefined;
     validateAgentSpec(agentSpec, `${kind} ${metadata.name}`);
   }
+  if (kind === "Policy") {
+    const sandbox = (m.spec as { sandbox?: { allowProviders?: unknown } } | undefined)?.sandbox;
+    const allowed = sandbox?.allowProviders;
+    if (allowed !== undefined) {
+      if (!Array.isArray(allowed) || allowed.some((p) => !SANDBOX_PROVIDER_KINDS_LIST.includes(p as never))) {
+        throw new Error(
+          `Policy ${metadata.name}: sandbox.allowProviders must be a list of ${SANDBOX_PROVIDER_KINDS_LIST.join(" | ")}`,
+        );
+      }
+    }
+  }
   if (kind === "Memory") {
     const spec = m.spec as { agent?: string; text?: string } | undefined;
     if (!spec?.agent || !spec?.text) {
@@ -75,6 +92,7 @@ function validateAgentSpec(spec: Record<string, unknown> | undefined, where: str
       `${where}: unsupported harness.profile "${String(harness.profile)}" (expected ${HARNESS_PROFILES.join(" | ")})`,
     );
   }
+  validateSandboxSpec(spec?.sandbox, where);
   const runtime = spec?.runtime as
     | { kind?: unknown; command?: unknown; commandArgs?: unknown }
     | undefined;
@@ -125,6 +143,7 @@ function cloneAgentSpec(tpl: Omit<AgentSpec, "replicas"> & { replicas?: number }
           requireEnv: tpl.runtime.requireEnv ? [...tpl.runtime.requireEnv] : undefined,
         }
       : undefined,
+    sandbox: tpl.sandbox ? cloneSandboxSpec(tpl.sandbox) : undefined,
     hermes: {
       ...tpl.hermes,
       skills: [...tpl.hermes.skills],

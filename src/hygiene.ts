@@ -11,6 +11,7 @@ import {
 } from "./queue.js";
 import type { ClusterState } from "./types.js";
 import { WEBHOOK_SEEN_MAX } from "./webhook.js";
+import { gcOrphanSandboxes, type SandboxGcResult } from "./sandbox/docker.js";
 import { gcOrphanWorktrees, type WorktreeGcResult } from "./worktree.js";
 
 export type PoolCell = {
@@ -113,6 +114,7 @@ export type HygieneRunResult = {
   reclaimed: number;
   aged: number;
   gc?: WorktreeGcResult;
+  sandboxGc?: SandboxGcResult;
   report: HygieneReport;
 };
 
@@ -127,6 +129,7 @@ export function runHygiene(
   let reclaimed = 0;
   let aged = 0;
   let gc: WorktreeGcResult | undefined;
+  let sandboxGc: SandboxGcResult | undefined;
 
   const doReclaim = action === "reclaim" || action === "all";
   const doAge = action === "age" || action === "all";
@@ -143,6 +146,7 @@ export function runHygiene(
       throw new Error("gc requires root");
     }
     gc = gcOrphanWorktrees(opts.root, state);
+    sandboxGc = gcOrphanSandboxes(opts.root, state);
   }
 
   return {
@@ -150,6 +154,7 @@ export function runHygiene(
     reclaimed,
     aged,
     gc,
+    sandboxGc,
     report: hygieneReport(state),
   };
 }

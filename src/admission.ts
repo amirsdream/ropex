@@ -5,6 +5,7 @@
 
 import { isToolApproved } from "./approval.js";
 import { admitBudget } from "./budget.js";
+import { admitSandbox } from "./sandbox/spec.js";
 import type { ClusterState, Policy, Task } from "./types.js";
 
 export type AdmissionDecision =
@@ -87,6 +88,11 @@ export function admitTask(state: ClusterState, task: Task): AdmissionDecision {
   const budget = admitBudget(state, task);
   if (budget.status === "deny") {
     return { status: "deny", reason: budget.reason };
+  }
+  const agent = state.desired.find((a) => a.metadata.name === task.agent);
+  if (agent) {
+    const sandbox = admitSandbox(state.policies, agent.spec.sandbox);
+    if (!sandbox.ok) return { status: "deny", reason: sandbox.reason };
   }
   const perms = effectivePermissions(state.policies);
   for (const tool of perms.deny) {

@@ -13,6 +13,7 @@ import { syncDueGitRepos, type MultiRepoSyncResult } from "./gitrepo.js";
 import { ageQueuePriorities, queueSummary, reclaimExpiredLeases } from "./queue.js";
 import { drainQueue, type DrainOptions } from "./scheduler.js";
 import { sweepIdleWorkers } from "./scale.js";
+import { gcOrphanSandboxes, type SandboxGcResult } from "./sandbox/docker.js";
 import { gcOrphanWorktrees, type WorktreeGcResult } from "./worktree.js";
 import type { ClusterState, QueuedTask, RunResult } from "./types.js";
 
@@ -44,6 +45,7 @@ export type TickResult = {
   autoscale: AutoscalePlan | null;
   queue: ReturnType<typeof queueSummary>;
   gc: WorktreeGcResult | null;
+  sandboxGc: SandboxGcResult | null;
   aged: number;
   clones: CloneResult[] | null;
   journal: CompactJournalResult | null;
@@ -70,8 +72,10 @@ export async function controlPlaneTick(
   const swept = sweepIdleWorkers(state, { root, now, reason: "tick-idleTTL" });
 
   let gc: WorktreeGcResult | null = null;
+  let sandboxGc: SandboxGcResult | null = null;
   if (opts.gc) {
     gc = gcOrphanWorktrees(root, state);
+    sandboxGc = gcOrphanSandboxes(root, state);
   }
 
   let aged = 0;
@@ -147,6 +151,7 @@ export async function controlPlaneTick(
     autoscale,
     queue: queueSummary(state),
     gc,
+    sandboxGc,
     aged,
     clones,
     journal,
