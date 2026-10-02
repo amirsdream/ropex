@@ -4,8 +4,8 @@
  * Every value that reaches a generated Dockerfile or a docker argv is validated here.
  */
 
-import type { Policy, SandboxProviderKind, SandboxSpec } from "./types.js";
-import { SANDBOX_PROVIDER_KINDS_LIST } from "./types.js";
+import type { Policy, SandboxProviderKind, SandboxSpec } from "../types.js";
+import { SANDBOX_PROVIDER_KINDS_LIST } from "../types.js";
 
 export const DEFAULT_SANDBOX_BASE = "node:22-bookworm";
 export const DEFAULT_SANDBOX_PROVIDER: SandboxProviderKind = "local";

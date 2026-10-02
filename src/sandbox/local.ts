@@ -6,10 +6,10 @@
 
 import { cpSync, existsSync } from "node:fs";
 
-import { binOnPath, runProcess } from "./proc.js";
-import type { Sandbox, SandboxAcquireContext, SandboxProvider } from "./sandbox.js";
-import type { SandboxSpec } from "./types.js";
-import { ensureWorktree } from "./worktree.js";
+import { binOnPath, runProcess } from "../proc.js";
+import type { Sandbox, SandboxAcquireContext, SandboxProvider } from "./index.js";
+import type { SandboxSpec } from "../types.js";
+import { ensureWorktree } from "../worktree.js";
 
 function cleanEnv(env: Record<string, string | undefined>): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {};

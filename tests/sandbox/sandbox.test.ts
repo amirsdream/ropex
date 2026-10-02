@@ -2,12 +2,12 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { admitTask } from "../src/admission.ts";
-import { emptyState } from "../src/controller.ts";
-import { buildAgentImage } from "../src/image.ts";
-import { sandboxReport, sandboxScaffold, needsHostWorktree, acquireSandbox } from "../src/sandbox.ts";
-import { ensureEnvImage, planEnvImage, renderDockerfile } from "../src/sandbox-image.ts";
-import { admitSandbox, resolveAptPackages } from "../src/sandbox-spec.ts";
+import { admitTask } from "../../src/admission.ts";
+import { emptyState } from "../../src/controller.ts";
+import { buildAgentImage } from "../../src/image.ts";
+import { sandboxReport, sandboxScaffold, needsHostWorktree, acquireSandbox } from "../../src/sandbox/index.ts";
+import { ensureEnvImage, planEnvImage, renderDockerfile } from "../../src/sandbox/image.ts";
+import { admitSandbox, resolveAptPackages } from "../../src/sandbox/spec.ts";
 import {
   evictSnapshots,
   loadCatalog,
@@ -15,10 +15,10 @@ import {
   registerSnapshot,
   warmSnapshotKey,
   type SnapshotRecord,
-} from "../src/sandbox-store.ts";
-import { expandDesired, parseManifests } from "../src/spec.ts";
-import type { Policy } from "../src/types.ts";
-import { fakeDocker } from "./helpers/fake-docker.ts";
+} from "../../src/sandbox/store.ts";
+import { expandDesired, parseManifests } from "../../src/spec.ts";
+import type { Policy } from "../../src/types.ts";
+import { fakeDocker } from "./fake-docker.ts";
 
 const temps: string[] = [];
 const tmp = (prefix = "ropex-sbx-") => {

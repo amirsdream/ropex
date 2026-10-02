@@ -145,7 +145,7 @@ A restricted `allowBaseImages` also rejects `image.dockerfile`, because the base
 
 ## Adding another provider
 
-A provider is one file implementing `SandboxProvider` in `src/sandbox.ts`, plus a member of `SANDBOX_PROVIDER_KINDS_LIST` in `src/types.ts` and a registry entry. SSH hosts and VMs fit the same contract.
+A provider is one file implementing `SandboxProvider` in `src/sandbox/`, registered in `src/sandbox/index.ts`, plus a member of `SANDBOX_PROVIDER_KINDS_LIST` in `src/types.ts` and a registry entry. SSH hosts and VMs fit the same contract.
 
 | Member | Contract |
 | --- | --- |
@@ -161,12 +161,12 @@ A provider is one file implementing `SandboxProvider` in `src/sandbox.ts`, plus 
 
 | Path | Role |
 | --- | --- |
-| `src/sandbox.ts` | Provider contract, registry, `acquireSandbox`, `sandboxReport` |
-| `src/sandbox-local.ts` | The worktree provider |
-| `src/sandbox-docker.ts` | Container lifecycle, git checkout, token forwarding, orphan GC |
-| `src/sandbox-image.ts` | Recipe to Dockerfile, digest tag, build-if-missing |
-| `src/sandbox-store.ts` | Catalog, tarball export and restore, retention |
-| `src/sandbox-spec.ts` | Validation, tool presets, canonical form, policy checks |
-| `src/sandbox-client.ts` | Docker client (injectable in tests) |
+| `src/sandbox/index.ts` | Provider contract, registry, `acquireSandbox`, `sandboxReport` |
+| `src/sandbox/local.ts` | The worktree provider |
+| `src/sandbox/docker.ts` | Container lifecycle, git checkout, token forwarding, orphan GC |
+| `src/sandbox/image.ts` | Recipe to Dockerfile, digest tag, build-if-missing |
+| `src/sandbox/store.ts` | Catalog, tarball export and restore, retention |
+| `src/sandbox/spec.ts` | Validation, tool presets, canonical form, policy checks |
+| `src/sandbox/client.ts` | Docker client (injectable in tests) |
 
-Tests use an in-memory fake docker (`tests/helpers/fake-docker.ts`) and need no container runtime. `ROPEX_TEST_DOCKER=1 npx vitest run tests/sandbox-integration.test.ts` runs a smoke test against a real runtime.
+Tests use an in-memory fake docker (`tests/sandbox/fake-docker.ts`) and need no container runtime. `ROPEX_TEST_DOCKER=1 npx vitest run tests/sandbox/integration.test.ts` runs a smoke test against a real runtime.

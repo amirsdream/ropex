@@ -19,7 +19,7 @@ import {
   WORKER_RUNTIME_KINDS_LIST,
 } from "./types.js";
 import { resolveMaxConcurrent, resolveScaleMode } from "./scale.js";
-import { cloneSandboxSpec, validateSandboxSpec } from "./sandbox-spec.js";
+import { cloneSandboxSpec, validateSandboxSpec } from "./sandbox/spec.js";
 
 export function parseManifests(raw: string): Manifest[] {
   const docs = parseAllDocuments(raw);

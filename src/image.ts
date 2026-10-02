@@ -6,7 +6,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { canonicalSandbox } from "./sandbox-spec.js";
+import { canonicalSandbox } from "./sandbox/spec.js";
 import type { DesiredAgent, HarnessSpec, HermesSpec, GithubSpec } from "./types.js";
 
 export type AgentImage = {

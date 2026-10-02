@@ -22,7 +22,7 @@ import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { createGzip } from "node:zlib";
 
-import { expectOk, type DockerRun } from "./sandbox-client.js";
+import { expectOk, type DockerRun } from "./client.js";
 
 export type SnapshotKind = "warm" | "task";
 

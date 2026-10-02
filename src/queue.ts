@@ -17,7 +17,7 @@ import {
   spawnWorker,
 } from "./scale.js";
 import { maxReplicas } from "./spec.js";
-import { needsHostWorktree } from "./sandbox.js";
+import { needsHostWorktree } from "./sandbox/index.js";
 import { ensureWorktree } from "./worktree.js";
 import type { ClusterMetrics, ClusterState, QueuedTask, Task, Worker } from "./types.js";
 

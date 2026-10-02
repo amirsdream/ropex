@@ -12,27 +12,27 @@ import {
   listSandboxContainers,
   usesDockerSandbox,
   type SandboxContainer,
-} from "./sandbox-docker.js";
-import { localProvider } from "./sandbox-local.js";
-import { admitSandbox, sandboxProvider } from "./sandbox-spec.js";
+} from "./docker.js";
+import { localProvider } from "./local.js";
+import { admitSandbox, sandboxProvider } from "./spec.js";
 import {
   catalogSummary,
   evictSnapshots,
   sandboxStoreDir,
   type EvictionRules,
   type SnapshotRecord,
-} from "./sandbox-store.js";
-import type { RunProcessResult } from "./proc.js";
-import { defaultDockerRun, defaultDockerSync, type DockerRun, type DockerSync } from "./sandbox-client.js";
-import { binOnPath } from "./proc.js";
-import { resolveContainerBin } from "./session.js";
+} from "./store.js";
+import type { RunProcessResult } from "../proc.js";
+import { defaultDockerRun, defaultDockerSync, type DockerRun, type DockerSync } from "./client.js";
+import { binOnPath } from "../proc.js";
+import { resolveContainerBin } from "../session.js";
 import type {
   ClusterState,
   Policy,
   SandboxProviderKind,
   SandboxSpec,
   Worker,
-} from "./types.js";
+} from "../types.js";
 
 export type SandboxExecOptions = {
   /** Directory the command starts in. Defaults to the sandbox `cwd`. */

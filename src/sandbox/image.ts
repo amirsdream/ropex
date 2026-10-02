@@ -10,9 +10,9 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
-import { expectOk, type DockerRun } from "./sandbox-client.js";
-import { DEFAULT_SANDBOX_BASE, resolveAptPackages } from "./sandbox-spec.js";
-import type { SandboxSpec } from "./types.js";
+import { expectOk, type DockerRun } from "./client.js";
+import { DEFAULT_SANDBOX_BASE, resolveAptPackages } from "./spec.js";
+import type { SandboxSpec } from "../types.js";
 
 export const ENV_IMAGE_REPO = "ropex-env";
 export const SANDBOX_WORKDIR = "/workspace";

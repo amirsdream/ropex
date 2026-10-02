@@ -11,7 +11,7 @@ import {
 } from "./queue.js";
 import type { ClusterState } from "./types.js";
 import { WEBHOOK_SEEN_MAX } from "./webhook.js";
-import { gcOrphanSandboxes, type SandboxGcResult } from "./sandbox-docker.js";
+import { gcOrphanSandboxes, type SandboxGcResult } from "./sandbox/docker.js";
 import { gcOrphanWorktrees, type WorktreeGcResult } from "./worktree.js";
 
 export type PoolCell = {

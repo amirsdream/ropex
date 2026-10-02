@@ -5,7 +5,7 @@
 
 import { isToolApproved } from "./approval.js";
 import { admitBudget } from "./budget.js";
-import { admitSandbox } from "./sandbox-spec.js";
+import { admitSandbox } from "./sandbox/spec.js";
 import type { ClusterState, Policy, Task } from "./types.js";
 
 export type AdmissionDecision =

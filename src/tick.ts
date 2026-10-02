@@ -13,7 +13,7 @@ import { syncDueGitRepos, type MultiRepoSyncResult } from "./gitrepo.js";
 import { ageQueuePriorities, queueSummary, reclaimExpiredLeases } from "./queue.js";
 import { drainQueue, type DrainOptions } from "./scheduler.js";
 import { sweepIdleWorkers } from "./scale.js";
-import { gcOrphanSandboxes, type SandboxGcResult } from "./sandbox-docker.js";
+import { gcOrphanSandboxes, type SandboxGcResult } from "./sandbox/docker.js";
 import { gcOrphanWorktrees, type WorktreeGcResult } from "./worktree.js";
 import type { ClusterState, QueuedTask, RunResult } from "./types.js";
 

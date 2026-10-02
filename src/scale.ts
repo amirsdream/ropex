@@ -8,7 +8,7 @@ import { recordAudit } from "./audit.js";
 import { type ImageResolveOptions } from "./image.js";
 import { promoteMemoryFact } from "./memory.js";
 import { workerFromDesired } from "./runtime.js";
-import { removeContainerSync } from "./sandbox-docker.js";
+import { removeContainerSync } from "./sandbox/docker.js";
 import { removeWorktree } from "./worktree.js";
 import type { ClusterState, DesiredAgent, ScaleMode, Worker } from "./types.js";
 

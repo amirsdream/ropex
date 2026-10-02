@@ -13,17 +13,17 @@ import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-import { binOnPath } from "./proc.js";
+import { binOnPath } from "../proc.js";
 import {
   defaultDockerRun,
   defaultDockerSync,
   expectOk,
   type DockerRun,
   type DockerSync,
-} from "./sandbox-client.js";
-import { ensureEnvImage, SANDBOX_WORKDIR } from "./sandbox-image.js";
-import type { Sandbox, SandboxAcquireContext, SandboxProvider } from "./sandbox.js";
-import { snapshotByteCap } from "./sandbox-spec.js";
+} from "./client.js";
+import { ensureEnvImage, SANDBOX_WORKDIR } from "./image.js";
+import type { Sandbox, SandboxAcquireContext, SandboxProvider } from "./index.js";
+import { snapshotByteCap } from "./spec.js";
 import {
   evictSnapshots,
   exportSnapshotTar,
@@ -36,10 +36,10 @@ import {
   touchSnapshot,
   warmSnapshotKey,
   type SnapshotRecord,
-} from "./sandbox-store.js";
-import { resolveContainerBin } from "./session.js";
-import type { ClusterState, SandboxSpec } from "./types.js";
-import { ensureWorktree, worktreeSlug } from "./worktree.js";
+} from "./store.js";
+import { resolveContainerBin } from "../session.js";
+import type { ClusterState, SandboxSpec } from "../types.js";
+import { ensureWorktree, worktreeSlug } from "../worktree.js";
 
 export const SANDBOX_LABEL = "ropex.sandbox";
 export const SCRATCH_ROOT = join("sandbox", "scratch");

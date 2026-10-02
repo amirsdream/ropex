@@ -11,9 +11,9 @@ import { isOnDemandAgent } from "./scale.js";
 import { recordTrajectory } from "./trajectory.js";
 import { composeWorkflow } from "./workflow.js";
 import { bootWorker } from "./worker-runtime.js";
-import { acquireSandbox, needsHostWorktree, type Sandbox } from "./sandbox.js";
+import { acquireSandbox, needsHostWorktree, type Sandbox } from "./sandbox/index.js";
 import { recordAudit } from "./audit.js";
-import type { DockerRun } from "./sandbox-client.js";
+import type { DockerRun } from "./sandbox/client.js";
 import type {
   ClusterState,
   DesiredAgent,

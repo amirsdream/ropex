@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 
-import type { DockerRun, DockerRunOptions } from "../../src/sandbox-client.ts";
+import type { DockerRun, DockerRunOptions } from "../../src/sandbox/client.ts";
 
 export type DockerCall = { args: string[]; env?: NodeJS.ProcessEnv; stdin?: string };
 

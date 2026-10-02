@@ -2,15 +2,15 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { emptyState } from "../src/controller.ts";
-import { expandWorkers, runTask } from "../src/runtime.ts";
-import { acquireSandbox } from "../src/sandbox.ts";
-import { gcOrphanSandboxes, scratchPath } from "../src/sandbox-docker.ts";
-import { findSnapshot, loadCatalog } from "../src/sandbox-store.ts";
-import { destroyWorker } from "../src/scale.ts";
-import { expandDesired, parseManifests } from "../src/spec.ts";
-import type { SandboxSpec, Worker } from "../src/types.ts";
-import { fakeDocker } from "./helpers/fake-docker.ts";
+import { emptyState } from "../../src/controller.ts";
+import { expandWorkers, runTask } from "../../src/runtime.ts";
+import { acquireSandbox } from "../../src/sandbox/index.ts";
+import { gcOrphanSandboxes, scratchPath } from "../../src/sandbox/docker.ts";
+import { findSnapshot, loadCatalog } from "../../src/sandbox/store.ts";
+import { destroyWorker } from "../../src/scale.ts";
+import { expandDesired, parseManifests } from "../../src/spec.ts";
+import type { SandboxSpec, Worker } from "../../src/types.ts";
+import { fakeDocker } from "./fake-docker.ts";
 
 const TOKEN = "ghp_supersecrettoken123";
 const API_KEY = "sk-test-secret-456";

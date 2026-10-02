@@ -12,7 +12,7 @@ import { runProcess } from "./proc.js";
 import type { AgentSpec, HarnessProfile, TrajectoryStep } from "./types.js";
 import type { HermesContract, MemoryPort, WorkerExecContext } from "./contracts.js";
 import type { Kernel } from "./plugins.js";
-import type { Sandbox } from "./sandbox.js";
+import type { Sandbox } from "./sandbox/index.js";
 
 const require = createRequire(import.meta.url);
 

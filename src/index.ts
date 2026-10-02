@@ -62,7 +62,7 @@ export {
   pruneSandboxSnapshots,
   sandboxReport,
   sandboxScaffold,
-} from "./sandbox.js";
+} from "./sandbox/index.js";
 export type {
   Sandbox,
   SandboxAcquireContext,
@@ -70,18 +70,18 @@ export type {
   SandboxProbe,
   SandboxProvider,
   SandboxReport,
-} from "./sandbox.js";
-export { gcOrphanSandboxes } from "./sandbox-docker.js";
-export { ensureEnvImage, planEnvImage, renderDockerfile } from "./sandbox-image.js";
-export { admitSandbox, validateSandboxSpec } from "./sandbox-spec.js";
+} from "./sandbox/index.js";
+export { gcOrphanSandboxes } from "./sandbox/docker.js";
+export { ensureEnvImage, planEnvImage, renderDockerfile } from "./sandbox/image.js";
+export { admitSandbox, validateSandboxSpec } from "./sandbox/spec.js";
 export {
   catalogSummary,
   evictSnapshots,
   planEviction,
   sandboxStoreDir,
   warmSnapshotKey,
-} from "./sandbox-store.js";
-export type { SnapshotRecord } from "./sandbox-store.js";
+} from "./sandbox/store.js";
+export type { SnapshotRecord } from "./sandbox/store.js";
 export {
   ensureWorktree,
   removeWorktree,

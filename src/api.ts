@@ -38,7 +38,7 @@ import { cloneStatusReport, cloneAllGitRepos } from "./clone.js";
 import { decideApproval } from "./approval.js";
 import { pruneAffinity } from "./affinity.js";
 import { DSH_PROFILE_PACKS, liveDshScaffold, resolveDshBackend } from "./dsh.js";
-import { sandboxReport } from "./sandbox.js";
+import { sandboxReport } from "./sandbox/index.js";
 import { resolveContainerBin, useContainerSession } from "./session.js";
 import { maxReplicas } from "./spec.js";
 import { resolveRuntimeKind, workerRuntimeScaffold } from "./worker-runtime.js";

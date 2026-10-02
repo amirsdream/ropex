@@ -4,8 +4,8 @@
  * subprocess, and tests inject a fake instead of needing a container runtime.
  */
 
-import { runProcess, runProcessSync, type RunProcessResult } from "./proc.js";
-import { resolveContainerBin } from "./session.js";
+import { runProcess, runProcessSync, type RunProcessResult } from "../proc.js";
+import { resolveContainerBin } from "../session.js";
 
 export type DockerRunOptions = {
   cwd?: string;

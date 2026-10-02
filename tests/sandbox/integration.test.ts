@@ -2,11 +2,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { acquireSandbox } from "../src/sandbox.ts";
+import { acquireSandbox } from "../../src/sandbox/index.ts";
 
 /**
  * Real container smoke test. Needs a container runtime and network (it builds an
- * image), so it only runs when asked: ROPEX_TEST_DOCKER=1 npx vitest run tests/sandbox-integration.test.ts
+ * image), so it only runs when asked: ROPEX_TEST_DOCKER=1 npx vitest run tests/sandbox/integration.test.ts
  */
 describe.runIf(process.env.ROPEX_TEST_DOCKER === "1")("docker sandbox against a real runtime", () => {
   it("builds an env image, execs in /workspace, and removes the container", async () => {
