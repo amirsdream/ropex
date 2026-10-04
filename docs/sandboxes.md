@@ -124,8 +124,8 @@ A restricted `allowBaseImages` also rejects `image.dockerfile`, because the base
 
 ## Runtimes
 
-- **CLI runtimes** (`claude-code`, `codex`, `copilot`) run inside the sandbox. The binary must exist in the image (add it to `image.npm`, or `setup`). If it does not, the task fails with a message naming `spec.sandbox.image`. Binary resolution happens inside the container, so `PATH` on the host does not matter.
-- **`dsh` embedded** runs its tool loop on the control plane, but `fs` `write` and `shell` `commit` execute inside the sandbox. Other tool actions stay descriptors.
+- **CLI runtimes** (`claude-code`, `codex`, `copilot`) run inside the sandbox and are the harness for that run: the brief's `## Workspace` block is the plan, and the CLI writes the files and commits. The binary must exist in the image (add it to `image.npm`, or `setup`). If it does not, the task fails with a message naming `spec.sandbox.image`. Binary resolution happens inside the container, so `PATH` on the host does not matter.
+- **`dsh` embedded** is the same harness in-process. Its tool loop runs on the control plane, but `fs` `write` and `shell` `commit` execute inside the sandbox. Other tool actions stay descriptors.
 - **`dsh` live** cannot run in a docker sandbox, because the dsh package lives on the control plane. It fails closed with a message saying so.
 
 ## Operations
