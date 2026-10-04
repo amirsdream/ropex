@@ -33,11 +33,14 @@ Only `execute` changes owner. Delivery still goes through the harness delivery
 plugin, and policy, memory, skills and trajectories are untouched.
 
 The difference is what `execute` is handed. `dsh` receives the Hermes plan as a
-tool program and its `fs` / `shell` tools write the files and commit. A CLI
-runtime is the same harness with a different loop: `claude -p`, `codex exec`,
-or `copilot -p` receives a **brief** (`src/brief.ts`) — the same inputs rendered
-as a prompt. When the plan writes files, the brief includes a `## Workspace`
-block and that CLI applies the files and commits them. The brief carries
+tool program and applies each call in the workspace. A CLI runtime is the same
+harness with a different loop: `claude -p`, `codex exec`, or `copilot -p`
+receives a **brief** (`src/brief.ts`) — the same inputs rendered as a prompt —
+and carries out those intended actions itself. A call is one tool invocation,
+`{ name, input }`. The name is the agent's tool. The workspace only applies an
+input that asks for a command (`argv`) or a file (`path` and `content`); every
+other call stays with the agent, so a new tool does not need a new call shape.
+The brief carries
 identity, prior knowledge, skills, plan, intended actions, and the task. Claude Code and
 Codex take that brief on **stdin** so a large soul cannot blow `ARG_MAX`. Copilot
 still needs `-p <prompt>` for programmatic mode, so its brief stays on argv. The

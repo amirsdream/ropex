@@ -14,7 +14,7 @@ spec.sandbox ──► acquireSandbox ──► provider
                     │ policy gate         ├─ local   worktree on the host
                     │ (fails closed)      └─ docker  env image ─► (warm snapshot) ─► container
                                                                      │
-                                          exec ◄── CLI runtime, or harness fs write + shell commit
+                                          exec ◄── harness applies the plan in the workspace
                                                                      │
                                        dispose  or  snapshot ─► dispose      store: .ropex/sandboxes
 ```
@@ -80,7 +80,7 @@ A runnable version is in [`fleets/examples/docker-sandbox.yaml`](../fleets/examp
 2. **Warm snapshot** (`lifecycle.warmSnapshot`). The first run checks the repo out into the container and commits it as `ropex-snap:warm-<key>`. The key is the environment digest, repo URL, ref and depth. Later runs start from that snapshot and only run `git fetch`, `checkout` and `clean`.
 3. **Container.** `docker run -d` with `--init`, `--security-opt no-new-privileges`, a pids limit (default 512), your cpus, memory and network limits, and labels `ropex.sandbox=1`, `ropex.worker`, `ropex.agent`, `ropex.task`. The working directory is `/workspace`.
 4. **Checkout.** `git init`, `remote add`, `fetch`, `checkout --detach FETCH_HEAD`. This works for branches, tags and commit SHAs.
-5. **Execute.** The runtime CLI runs through `docker exec -i -w /workspace`. The brief goes in over stdin. Timeout and kill escalation are the same as every other subprocess. The embedded harness does the same place's writes and commits itself: an `fs` `write` call and a `shell` `commit` call run through `docker exec` in `/workspace`. There is no control-plane step that commits afterwards.
+5. **Execute.** The runtime CLI runs through `docker exec -i -w /workspace`. The brief goes in over stdin. Timeout and kill escalation are the same as every other subprocess. The embedded harness applies the same plan in that workspace. A call is a tool invocation (`name` + `input`); the workspace runs it when the input asks for a command (`argv`) or a file (`path` and `content`). Any other call stays with the agent. There is no control-plane step that commits afterwards.
 6. **Finish.** With `after: snapshot` the container is committed as a task snapshot first. The container is then always removed, including when the task failed or timed out. A killed `docker exec` client does not stop the process inside, but removing the container does.
 
 `workspace: mount` skips the clone and bind-mounts the worker's host worktree at `/workspace`. Use it when the control plane runs on the host. Do not use it when the control plane itself runs in a container, because the path would be wrong. Files the container writes are owned by the container user.
@@ -124,8 +124,8 @@ A restricted `allowBaseImages` also rejects `image.dockerfile`, because the base
 
 ## Runtimes
 
-- **CLI runtimes** (`claude-code`, `codex`, `copilot`) run inside the sandbox and are the harness for that run: the brief's `## Workspace` block is the plan, and the CLI writes the files and commits. The binary must exist in the image (add it to `image.npm`, or `setup`). If it does not, the task fails with a message naming `spec.sandbox.image`. Binary resolution happens inside the container, so `PATH` on the host does not matter.
-- **`dsh` embedded** is the same harness in-process. Its tool loop runs on the control plane, but `fs` `write` and `shell` `commit` execute inside the sandbox. Other tool actions stay descriptors.
+- **CLI runtimes** (`claude-code`, `codex`, `copilot`) run inside the sandbox and are the harness for that run. The brief lists the plan's calls. A call is a tool invocation. The workspace runs a command when the input has `argv`, and writes a file when it has `path` and `content`. Every other call is the agent's. The binary must exist in the image (add it to `image.npm`, or `setup`). If it does not, the task fails with a message naming `spec.sandbox.image`. Binary resolution happens inside the container, so `PATH` on the host does not matter.
+- **`dsh` embedded** is the same harness in-process. Its tool loop runs on the control plane and applies the same effects inside the sandbox, under whatever tool name the plan used. Other inputs stay descriptors until a tool implements them.
 - **`dsh` live** cannot run in a docker sandbox, because the dsh package lives on the control plane. It fails closed with a message saying so.
 
 ## Operations

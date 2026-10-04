@@ -50,9 +50,9 @@ export type CreateHarnessOptions = {
   hermes?: HermesContract;
   /** Shared memory port (defaults to hermes.port when present). */
   memory?: MemoryPort;
-  /** Worker worktree cwd — fs/shell tools are chrooted here. */
+  /** Worker worktree cwd — tool calls run here. */
   cwd?: string;
-  /** Run fs/shell inside the sandbox. Defaults to a host process in `cwd`. */
+  /** Run workspace effects inside the sandbox. Defaults to a host process in `cwd`. */
   exec?: WorkspaceExec;
 };
 

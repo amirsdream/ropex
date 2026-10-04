@@ -2,9 +2,9 @@
 /**
  * Stand-in for `claude -p`, `codex exec`, and `copilot -p`.
  *
- * Reads the composed brief, applies the ## Workspace files, and git-commits
- * them in the process cwd — the same job the real CLI does as the harness.
- * Speaks each CLI's output shape so the real argv() and parse() are what run.
+ * Reads the brief's intended actions and applies each one in cwd:
+ * `argv` runs a command, `path` + `content` writes a file. Any other action
+ * is left for a real agent. Speaks each CLI's output shape.
  */
 
 import { execFileSync } from "node:child_process";
@@ -36,43 +36,47 @@ if (prompt === null) {
   process.exit(2);
 }
 
-const block = prompt.match(/## Workspace\n[\s\S]*?```json\n([\s\S]*?)\n```/);
-if (!block) {
-  process.stderr.write("fake-harness-cli: brief has no ## Workspace edits\n");
+const actions = prompt.split("## Intended actions\n")[1]?.split("\n## ")[0] ?? "";
+const calls = [];
+for (const line of actions.split("\n")) {
+  const match = line.match(/^- [A-Za-z0-9_-]+\((.*)\)\s*$/);
+  if (!match) continue;
+  calls.push(JSON.parse(match[1]));
+}
+if (!calls.length) {
+  process.stderr.write("fake-harness-cli: brief has no intended actions\n");
   process.exit(1);
 }
-const edits = JSON.parse(block[1]);
-const files = Array.isArray(edits.files) ? edits.files : [];
-for (const file of files) {
-  if (!file.path || file.path.startsWith("/") || file.path.split(/[\\/]/).includes("..")) {
-    process.stderr.write(`fake-harness-cli: refusing path ${file.path}\n`);
-    process.exit(1);
+
+for (const input of calls) {
+  if (Array.isArray(input.argv) && input.argv.length && input.argv.every((part) => typeof part === "string")) {
+    const [bin, ...args] = input.argv;
+    const gitArgs =
+      bin === "git"
+        ? ["-c", "user.name=Ropex", "-c", "user.email=ropex@localhost", "-c", "commit.gpgsign=false", ...args]
+        : args;
+    execFileSync(bin, gitArgs, {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: "Ropex",
+        GIT_AUTHOR_EMAIL: "ropex@localhost",
+        GIT_COMMITTER_NAME: "Ropex",
+        GIT_COMMITTER_EMAIL: "ropex@localhost",
+      },
+    });
+    continue;
   }
-  mkdirSync(dirname(file.path), { recursive: true });
-  writeFileSync(file.path, String(file.content ?? ""));
+  if (typeof input.path === "string" && typeof input.content === "string") {
+    if (input.path.startsWith("/") || input.path.split(/[\\/]/).includes("..")) {
+      process.stderr.write(`fake-harness-cli: refusing path ${input.path}\n`);
+      process.exit(1);
+    }
+    mkdirSync(dirname(input.path), { recursive: true });
+    writeFileSync(input.path, input.content);
+  }
 }
 
-const message = String(edits.message ?? "").trim() || "task";
-execFileSync(
-  "git",
-  ["add", "-A", "--", ".", ":(exclude).ropex-worker.json", ":(exclude)README.ropex"],
-  { cwd: process.cwd() },
-);
-execFileSync(
-  "git",
-  [
-    "-c",
-    "user.name=Ropex",
-    "-c",
-    "user.email=ropex@localhost",
-    "-c",
-    "commit.gpgsign=false",
-    "commit",
-    "-m",
-    message,
-  ],
-  { cwd: process.cwd() },
-);
 const sha = execFileSync("git", ["rev-parse", "HEAD"], { cwd: process.cwd(), encoding: "utf8" }).trim();
 const summary = `committed ${sha}`;
 

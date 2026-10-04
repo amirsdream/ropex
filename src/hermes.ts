@@ -185,8 +185,9 @@ export function createHermes(spec: AgentSpec, options: HermesCreateOptions = {})
 }
 
 /**
- * File blocks in a task prompt become harness tool calls.
- * Hermes only names the calls; the harness `fs` tool writes and `shell` commits.
+ * File blocks in a task prompt become ordinary harness calls.
+ * The embedded planner uses the `fs` and `shell` tools it has. The workspace
+ * applies whatever the input asks for, and does not special-case those names.
  *
  *     add a greeting argument
  *
@@ -225,9 +226,15 @@ function planCalls(
     return [
       ...edits.files.map((file) => ({
         name: "fs",
-        input: { action: "write", path: file.path, content: file.content },
+        input: { path: file.path, content: file.content },
       })),
-      { name: "shell", input: { action: "commit", message: edits.message } },
+      {
+        name: "shell",
+        input: {
+          argv: ["git", "add", "-A", "--", ".", ":(exclude).ropex-worker.json", ":(exclude)README.ropex"],
+        },
+      },
+      { name: "shell", input: { argv: ["git", "commit", "-m", edits.message] } },
     ];
   }
   const event = task.event?.type ?? "";

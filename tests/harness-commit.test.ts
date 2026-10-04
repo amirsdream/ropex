@@ -91,22 +91,17 @@ describe("harness writes and commits", () => {
       { worktreeRoot: repo },
     );
 
-    const commitStep = result.steps.find((step) => step.calls.some((call) => call.name === "shell"));
+    const shells = result.steps.filter((step) => step.calls.some((call) => call.name === "shell"));
     const wrote = result.steps.filter((step) => step.calls.some((call) => call.name === "fs"));
     expect(wrote).toHaveLength(2);
-    expect(commitStep?.calls[0].plugin).toBe("dsh");
-    const observed = JSON.parse(commitStep?.observation ?? "{}") as {
-      action: string;
-      committed: boolean;
-      sha: string;
-      files: string[];
-    };
-    expect(observed.action).toBe("commit");
-    expect(observed.committed).toBe(true);
-    expect(observed.files.sort()).toEqual(["src/hello.test.ts", "src/hello.ts"]);
+    expect(shells.every((step) => step.calls[0].plugin === "dsh")).toBe(true);
+    const commit = shells.find((step) => {
+      const argv = step.calls[0].input.argv;
+      return Array.isArray(argv) && argv.includes("commit");
+    });
+    expect(commit).toBeDefined();
 
     const worktree = result.worktree as string;
-    expect(git(worktree, ["rev-parse", "HEAD"])).toBe(observed.sha);
     expect(git(worktree, ["log", "-1", "--format=%an <%ae>"])).toBe("Ropex <ropex@localhost>");
     expect(git(worktree, ["log", "-1", "--format=%s"])).toBe("add a greeting argument");
     expect(git(worktree, ["show", "HEAD:src/hello.ts"])).toContain("hello, ${name}");

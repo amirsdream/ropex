@@ -46,7 +46,12 @@ export type MemoryPort = {
   snapshot(): SharedMemoryFact[];
 };
 
-/** Hermes plan shape (brain output before DeepSeek executes). */
+/**
+ * Hermes plan shape (brain output before the harness executes).
+ * A call is one tool invocation. `name` is the agent's tool — `fs`, `shell`,
+ * `github`, `web`, or anything a later harness adds. `input` is that tool's
+ * own payload. The workspace does not interpret the name.
+ */
 export type HermesPlan = {
   thoughts: string[];
   calls: Array<{ name: string; input: Record<string, unknown> }>;

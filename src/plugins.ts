@@ -147,18 +147,12 @@ export function toolsPlugin(
               cwd = undefined;
             }
           }
-          if ((name === "fs" || name === "str_replace_editor") && input.action === "write") {
-            const path = workspacePath(input.path);
-            await writeWorkspaceFile(exec, path, String(input.content ?? ""));
-            return JSON.stringify({ ok: true, tool: name, action: "write", path, ...(cwd ? { cwd } : {}) });
+          // Tool name is the agent's. Effects run only when the input asks.
+          const applied = await applyHarnessCall(exec, name, input);
+          if (applied !== undefined) {
+            return JSON.stringify({ ...applied, ...(cwd ? { cwd } : {}) });
           }
-          if ((name === "shell" || name === "bash") && input.action === "commit") {
-            const message = String(input.message ?? "").replace(/[\r\n]+/g, " ").trim().slice(0, 72);
-            if (!message) throw new Error("harness shell commit requires a message");
-            const committed = await commitWorkspace(exec, message);
-            return JSON.stringify({ ok: true, tool: name, action: "commit", ...committed, ...(cwd ? { cwd } : {}) });
-          }
-          // Other actions stay descriptors. fs/shell are chrooted to the worker worktree when present.
+          // Calls with no workspace effect stay descriptors.
           if ((name === "fs" || name === "shell" || name === "bash") && cwd) {
             return JSON.stringify({ ok: true, tool: name, cwd, input });
           }
@@ -280,9 +274,6 @@ const AUTHOR_ENV = {
   GIT_COMMITTER_EMAIL: "ropex@localhost",
 };
 
-/** Control-plane bookkeeping that a harness commit must leave untracked. */
-const WORKSPACE_MARKERS = new Set([".ropex-worker.json", "README.ropex"]);
-
 function workspacePath(value: unknown): string {
   const path = String(value ?? "").trim();
   if (!path || path.startsWith("/") || /^[A-Za-z]:/.test(path) || path.split(/[\\/]/).includes("..")) {
@@ -298,67 +289,82 @@ async function writeWorkspaceFile(exec: WorkspaceExec, path: string, content: st
     { stdin: content },
   );
   if (res.code !== 0) {
-    throw new Error(`harness fs write ${path} failed: ${(res.stderr || res.stdout).trim() || `exit ${res.code}`}`);
+    throw new Error(`harness file write ${path} failed: ${(res.stderr || res.stdout).trim() || `exit ${res.code}`}`);
   }
 }
 
-function porcelainPaths(stdout: string): string[] {
-  const files: string[] = [];
-  for (const line of stdout.split("\n")) {
-    if (line.length < 4) continue;
-    let path = line.slice(3).trim();
-    const arrow = path.lastIndexOf(" -> ");
-    if (arrow !== -1) path = path.slice(arrow + 4);
-    if (path.startsWith('"') && path.endsWith('"')) path = path.slice(1, -1);
-    if (!WORKSPACE_MARKERS.has(path)) files.push(path);
-  }
-  return files;
-}
-
-async function git(exec: WorkspaceExec, args: string[], what: string): Promise<RunProcessResult> {
-  const res = await exec("git", args, { env: AUTHOR_ENV });
-  if (res.code !== 0) {
-    throw new Error(`harness git ${what} failed: ${(res.stderr || res.stdout).trim() || `exit ${res.code}`}`);
-  }
-  return res;
-}
-
-/** Commit whatever the harness wrote. A clean tree (ignoring marker files) is not an error. */
-async function commitWorkspace(
+/**
+ * One thing the workspace can do for any tool. A call stays `{ name, input }`:
+ * `name` is whichever tool the agent invoked. An effect runs only when `input`
+ * asks for it. Append an effect to teach the workspace a new capability;
+ * every other call stays a descriptor for that tool.
+ */
+export type WorkspaceEffect = (
   exec: WorkspaceExec,
-  message: string,
-): Promise<{ committed: boolean; sha?: string; files?: string[]; reason?: string }> {
-  const inside = await exec("git", ["rev-parse", "--is-inside-work-tree"]);
-  if (inside.code !== 0 || inside.stdout.trim() === "false") {
-    throw new Error("harness shell commit requires a git checkout in the workspace");
+  name: string,
+  input: Record<string, unknown>,
+) => Promise<Record<string, unknown> | undefined>;
+
+/** Workspace capabilities. Order is first match. Tool names are not listed here. */
+export const workspaceEffects: WorkspaceEffect[] = [commandEffect, fileEffect];
+
+/** Apply one plan call. Returns undefined when no workspace effect claims it. */
+export async function applyHarnessCall(
+  exec: WorkspaceExec,
+  name: string,
+  input: Record<string, unknown>,
+): Promise<Record<string, unknown> | undefined> {
+  for (const effect of workspaceEffects) {
+    const applied = await effect(exec, name, input);
+    if (applied !== undefined) return applied;
   }
-  const status = await git(exec, ["status", "--porcelain"], "status");
-  if (porcelainPaths(status.stdout).length === 0) {
-    return { committed: false, reason: "clean" };
+  return undefined;
+}
+
+/** `input.argv` runs a command, whatever tool asked for it. */
+async function commandEffect(
+  exec: WorkspaceExec,
+  name: string,
+  input: Record<string, unknown>,
+): Promise<Record<string, unknown> | undefined> {
+  const argv = stringList(input.argv);
+  if (!argv?.length) return undefined;
+  const ran = await runArgv(exec, argv, typeof input.stdin === "string" ? input.stdin : undefined);
+  return { ok: true, tool: name, argv, code: ran.code, stdout: ran.stdout.trim() };
+}
+
+/** `input.path` + `input.content` writes a file, whatever tool asked for it. */
+async function fileEffect(
+  exec: WorkspaceExec,
+  name: string,
+  input: Record<string, unknown>,
+): Promise<Record<string, unknown> | undefined> {
+  if (typeof input.path !== "string" || typeof input.content !== "string") return undefined;
+  const path = workspacePath(input.path);
+  await writeWorkspaceFile(exec, path, input.content);
+  return { ok: true, tool: name, path };
+}
+
+function stringList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value) || value.length === 0 || value.some((item) => typeof item !== "string")) {
+    return undefined;
   }
-  await git(
-    exec,
-    ["add", "-A", "--", ".", ":(exclude).ropex-worker.json", ":(exclude)README.ropex"],
-    "add",
+  return value as string[];
+}
+
+/** Run a command. Git gets a harness identity and signing turned off so a commit cannot wait on gpg. */
+async function runArgv(exec: WorkspaceExec, argv: string[], stdin?: string): Promise<RunProcessResult> {
+  const [bin, ...args] = argv;
+  const git = bin === "git";
+  const res = await exec(
+    bin,
+    git ? ["-c", "user.name=Ropex", "-c", "user.email=ropex@localhost", "-c", "commit.gpgsign=false", ...args] : args,
+    { stdin, env: git ? AUTHOR_ENV : undefined },
   );
-  const committed = await exec(
-    "git",
-    ["-c", "user.name=Ropex", "-c", "user.email=ropex@localhost", "-c", "commit.gpgsign=false", "commit", "-m", message],
-    { env: AUTHOR_ENV },
-  );
-  if (committed.code !== 0) {
-    const detail = `${committed.stderr}\n${committed.stdout}`.toLowerCase();
-    if (detail.includes("nothing to commit") || detail.includes("no changes added")) {
-      return { committed: false, reason: "clean" };
-    }
+  if (res.code !== 0) {
     throw new Error(
-      `harness git commit failed: ${(committed.stderr || committed.stdout).trim() || `exit ${committed.code}`}`,
+      `harness ${argv.join(" ")} failed: ${(res.stderr || res.stdout).trim() || `exit ${res.code}`}`,
     );
   }
-  const sha = (await git(exec, ["rev-parse", "HEAD"], "rev-parse")).stdout.trim();
-  const files = (await git(exec, ["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"], "diff-tree"))
-    .stdout.split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-  return { committed: true, sha, files };
+  return res;
 }
