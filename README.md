@@ -148,7 +148,7 @@ Example fleets: `fleets/examples/github-control-plane.yaml`, `forge-local.yaml`.
 
 **Pluggable executors** (`src/worker-runtime.ts`, `src/cli-runtimes.ts`) — `spec.runtime.kind` swaps the `execute` stage for an external headless coding agent (`claude -p`, `codex exec`, `copilot -p`) running in the worker worktree. Hermes still composes, plans, and learns; Ropex policy is translated into each CLI's own permission flags and fails closed when a runtime cannot express a denial. `ropex runtimes` reports what is usable. See [worker-runtimes.md](./docs/worker-runtimes.md).
 
-**Sandboxes** (`src/sandbox/`) — `spec.sandbox` picks where `execute` runs: the local git worktree (default) or one Docker container per task, built from a recipe (base image, apt/npm/pip, tools), with the repo checked out by token, warm snapshots kept on disk, and the container disposed afterwards. `spec.sandbox.git.commit` commits the task's file changes onto `ropex/{taskId}` (and can push that branch). See [sandboxes.md](./docs/sandboxes.md).
+**Sandboxes** (`src/sandbox/`) — `spec.sandbox` picks where `execute` runs: the local git worktree (default) or one Docker container per task, built from a recipe (base image, apt/npm/pip, tools), with the repo checked out by token, warm snapshots kept on disk, and the container disposed afterwards. See [sandboxes.md](./docs/sandboxes.md).
 
 **Ropex glue** — `src/runtime.ts` runs the fixed workflow; `src/scale.ts` + `src/queue.ts` spawn/destroy on-demand workers; `src/controller.ts` reconciles definitions; `src/executor.ts` runs multi-stage pipelines for external orchestrators.
 

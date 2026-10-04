@@ -161,11 +161,6 @@ declare `spec.sandbox` with `provider: docker` and list the CLI under
 `image.npm`. Ropex builds the image, checks the repo out, forwards the
 credentials by name and runs the CLI inside it. See [sandboxes.md](./sandboxes.md).
 
-Set `spec.sandbox.git.commit: true` to commit whatever the CLI changed in that
-workspace onto `ropex/{taskId}` after a successful execute. `git.push: true`
-pushes the branch to `origin` before a docker sandbox is removed. See
-[sandboxes.md](./sandboxes.md).
-
 Without a sandbox the CLI runs on the host, in the worker worktree. Inside a
 sandbox the binary is resolved in the container, so `spec.runtime.command` must
 name a path inside the image and `ROPEX_RUNTIME_BIN_<KIND>` is not consulted.

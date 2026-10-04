@@ -295,7 +295,10 @@ async function bootEmbeddedDsh(
     requireApproval: opts.requireApproval,
     hermes: opts.hermes,
     memory: opts.memory,
-    cwd: opts.cwd,
+    cwd: opts.sandbox?.cwd ?? opts.cwd,
+    exec: opts.sandbox
+      ? (bin, args, o) => opts.sandbox!.exec(bin, args, { stdin: o?.stdin, env: o?.env })
+      : undefined,
   });
 
   return {

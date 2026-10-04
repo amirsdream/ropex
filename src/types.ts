@@ -87,22 +87,6 @@ export type SandboxLifecycleSpec = {
   ttlMs?: number;
 };
 
-/**
- * Commit the execute stage's file changes back into the sandbox repo.
- * Opt-in: without this block the workspace is left as the runtime left it.
- */
-export type SandboxGitSpec = {
-  /** Create a commit when the workspace has changes after a successful execute. */
-  commit?: boolean;
-  /**
-   * Branch to put the commit on. `{taskId}` is replaced with the task id.
-   * Default `ropex/{taskId}`.
-   */
-  branch?: string;
-  /** Push that branch to `origin` after the commit. Implies `commit`. */
-  push?: boolean;
-};
-
 export type SandboxSpec = {
   /** Defaults to `local`. */
   provider?: SandboxProviderKind;
@@ -114,8 +98,6 @@ export type SandboxSpec = {
   secrets?: string[];
   resources?: SandboxResourcesSpec;
   lifecycle?: SandboxLifecycleSpec;
-  /** Commit (and optionally push) workspace changes after a successful execute. */
-  git?: SandboxGitSpec;
 };
 
 /** Live sandbox bound to a worker while a task runs (visibility + GC). */
@@ -799,15 +781,4 @@ export type RunResult = {
   output: string;
   /** Worktree cwd used for fs/shell isolation. */
   worktree?: string;
-  /** Git commit of the sandbox workspace, when `spec.sandbox.git` asked for one. */
-  commit?: {
-    committed: boolean;
-    sha?: string;
-    branch?: string;
-    files?: string[];
-    pushed?: boolean;
-    /** Host path of a git bundle, when a docker clone would otherwise drop the commit. */
-    bundle?: string;
-    reason?: string;
-  };
 };

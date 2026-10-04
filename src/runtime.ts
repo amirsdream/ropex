@@ -12,11 +12,8 @@ import { recordTrajectory } from "./trajectory.js";
 import { composeWorkflow } from "./workflow.js";
 import { bootWorker } from "./worker-runtime.js";
 import { acquireSandbox, needsHostWorktree, type Sandbox } from "./sandbox/index.js";
-import { commitSandboxChanges, sandboxCommitBranch, sandboxCommitMessage } from "./sandbox/git.js";
-import { sandboxStoreDir } from "./sandbox/store.js";
 import { recordAudit } from "./audit.js";
 import type { DockerRun } from "./sandbox/client.js";
-import { join } from "node:path";
 import type {
   ClusterState,
   DesiredAgent,
@@ -81,33 +78,6 @@ export async function runTask(
   } finally {
     await releaseSandbox(state, worker, task, agent, sandbox);
   }
-}
-
-/**
- * Commit dirty workspace files when the agent asked for it.
- * A docker clone that is not pushed is also exported as a git bundle, because
- * disposing the container would otherwise delete the commit.
- */
-async function commitWorkspace(
-  agent: DesiredAgent,
-  sandbox: Sandbox,
-  task: Task,
-  root: string,
-): Promise<RunResult["commit"]> {
-  const git = agent.spec.sandbox?.git;
-  if (!git?.commit && !git?.push) return undefined;
-  const branch = sandboxCommitBranch(git.branch, task.id);
-  const mount = agent.spec.sandbox?.repo?.workspace === "mount";
-  const bundlePath =
-    sandbox.kind === "docker" && !mount && !git.push
-      ? join(sandboxStoreDir(root), "commits", `${branch.replace(/[^A-Za-z0-9._-]+/g, "_")}.bundle`)
-      : undefined;
-  return commitSandboxChanges(sandbox, {
-    branch,
-    message: sandboxCommitMessage(task.prompt),
-    push: git.push === true,
-    bundlePath,
-  });
 }
 
 /** Snapshot when the agent asks for it, then always dispose — even when the task failed. */
@@ -274,37 +244,6 @@ async function executeTask(
   ];
   const steps = gatedSteps;
 
-  // Commit workspace edits before delivery, and before the sandbox is disposed.
-  const commit = await commitWorkspace(agent, sandbox, task, root);
-  if (commit?.committed && commit.sha) {
-    recordAudit(state, {
-      kind: "info",
-      message: `sandbox commit ${commit.sha.slice(0, 12)} on ${commit.branch}`,
-      agent: worker.agent,
-      workerId: worker.id,
-      taskId: task.id,
-      meta: {
-        sha: commit.sha,
-        branch: commit.branch ?? null,
-        files: commit.files?.length ?? 0,
-        pushed: commit.pushed ?? false,
-        bundle: commit.bundle ?? null,
-      },
-    });
-    opts.onProgress?.({
-      taskId: task.id,
-      agent: worker.agent,
-      kind: "observation",
-      message: `commit ${commit.sha.slice(0, 12)} on ${commit.branch}`,
-    });
-  }
-
-  const summary = summarize(task, steps);
-  const output =
-    commit?.committed && commit.sha
-      ? `${summary}\ncommit ${commit.sha.slice(0, 12)} on ${commit.branch}`
-      : summary;
-
   // deliver (DeepSeek)
   let delivery: RunResult["delivery"];
   try {
@@ -312,7 +251,7 @@ async function executeTask(
       kind: "comment" | "pull_request" | "check";
       send: (body: string) => { kind: "comment" | "pull_request" | "check"; body: string };
     }>("delivery");
-    delivery = d.send(output);
+    delivery = d.send(summarize(task, steps));
   } catch {
     delivery = undefined;
   }
@@ -364,9 +303,8 @@ async function executeTask(
     steps,
     delivery,
     learned,
-    output,
+    output: summarize(task, steps),
     worktree,
-    commit,
   };
   recordDelivery(state, result);
   recordTrajectory(state, result);

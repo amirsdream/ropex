@@ -31,8 +31,6 @@ const APT_PKG = /^[a-z0-9][a-z0-9+.\-]*(=[A-Za-z0-9.+:~\-]+)?$/;
 const NPM_PKG = /^(@[a-z0-9._-]+\/)?[a-z0-9._-]+(@[A-Za-z0-9._\-^~*]+)?$/;
 const PIP_PKG = /^[A-Za-z0-9][A-Za-z0-9._-]*(\[[A-Za-z0-9,_-]+\])?((==|>=|<=|~=|!=)[A-Za-z0-9.*+!_-]+)?$/;
 const GIT_REF = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
-/** Branch template: a git ref plus the `{taskId}` placeholder. */
-const GIT_BRANCH_TMPL = /^[A-Za-z0-9][A-Za-z0-9._/{}$-]*$/;
 const MEMORY = /^\d+(\.\d+)?[bkmg]?$/i;
 
 function fail(where: string, message: string): never {
@@ -57,23 +55,6 @@ function checkList(
 
 function singleLine(where: string, field: string, value: string): void {
   if (/[\r\n\0]/.test(value)) fail(where, `${field} must be a single line`);
-}
-
-function validateGit(where: string, git: unknown): void {
-  if (git === undefined) return;
-  if (!git || typeof git !== "object" || Array.isArray(git)) fail(where, "git must be an object");
-  const g = git as Record<string, unknown>;
-  if (g.commit !== undefined && typeof g.commit !== "boolean") fail(where, "git.commit must be a boolean");
-  if (g.push !== undefined && typeof g.push !== "boolean") fail(where, "git.push must be a boolean");
-  if (g.push === true && g.commit === false) fail(where, "git.push requires git.commit");
-  if (g.branch !== undefined) {
-    if (typeof g.branch !== "string" || !GIT_BRANCH_TMPL.test(g.branch)) {
-      fail(where, `git.branch "${String(g.branch)}" is not a valid branch template`);
-    }
-    if (g.branch.includes("..") || g.branch.endsWith("/") || g.branch.endsWith(".lock")) {
-      fail(where, `git.branch "${g.branch}" is not a valid branch template`);
-    }
-  }
 }
 
 /** Structural checks the `as Manifest` cast cannot make. */
@@ -101,7 +82,6 @@ export function validateSandboxSpec(raw: unknown, where: string): void {
     }
   }
   checkList(where, "secrets", sandbox.secrets, ENV_NAME);
-  validateGit(where, sandbox.git);
 
   if (provider === "local") {
     for (const field of ["image", "repo", "resources"]) {
@@ -236,8 +216,7 @@ export function canonicalSandbox(spec: SandboxSpec): Record<string, unknown> {
   const sorted = (xs?: string[]) => (xs ? [...xs].sort() : null);
   const sortedEnv = (env?: Record<string, string>) =>
     env ? Object.fromEntries(Object.entries(env).sort(([a], [b]) => a.localeCompare(b))) : null;
-  // `git` is omitted when unset so agents that already declare a sandbox keep their digest.
-  const canonical: Record<string, unknown> = {
+  return {
     provider: sandboxProvider(spec),
     image: spec.image
       ? {
@@ -278,14 +257,6 @@ export function canonicalSandbox(spec: SandboxSpec): Record<string, unknown> {
         }
       : null,
   };
-  if (spec.git) {
-    canonical.git = {
-      commit: spec.git.commit ?? false,
-      push: spec.git.push ?? false,
-      branch: spec.git.branch ?? null,
-    };
-  }
-  return canonical;
 }
 
 export function cloneSandboxSpec(spec: SandboxSpec): SandboxSpec {

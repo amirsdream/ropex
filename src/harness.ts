@@ -12,6 +12,7 @@ import {
   soulPlugin,
   toolsPlugin,
   type LoopMode,
+  type WorkspaceExec,
 } from "./plugins.js";
 
 const PROFILE_TOOLS: Record<HarnessProfile, string[]> = {
@@ -51,6 +52,8 @@ export type CreateHarnessOptions = {
   memory?: MemoryPort;
   /** Worker worktree cwd — fs/shell tools are chrooted here. */
   cwd?: string;
+  /** Run fs/shell inside the sandbox. Defaults to a host process in `cwd`. */
+  exec?: WorkspaceExec;
 };
 
 export async function createHarness(
@@ -69,7 +72,7 @@ export async function createHarness(
     .use(modelPlugin(model))
     .use(sessionPlugin())
     .use(permissionsPlugin(opts.deny ?? [], opts.requireApproval ?? []))
-    .use(toolsPlugin(tools, { cwd: opts.cwd }))
+    .use(toolsPlugin(tools, { cwd: opts.cwd, exec: opts.exec }))
     .use(loopPlugin(loopModeFor(spec.harness.profile)));
 
   if (opts.hermes) {

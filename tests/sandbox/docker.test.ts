@@ -391,63 +391,6 @@ describe("runTask with a docker sandbox", () => {
     expect(result.worktree).toBe(scratchPath(root, w.id));
   });
 
-  it("commits workspace changes inside the container and exports a bundle", async () => {
-    process.env.OPENAI_API_KEY = API_KEY;
-    const root = tmp();
-    const docker = fakeDocker({
-      onExec: (args) => {
-        if (args.includes("--sandbox")) return { stdout: JSON.stringify({ message: "patched in container" }) };
-        if (args.includes("--is-inside-work-tree")) return { stdout: "true\n" };
-        if (args.includes("--porcelain")) return { stdout: " M src/hello.ts\n?? src/hello.test.ts\n" };
-        if (args.includes("rev-parse") && args.includes("HEAD")) {
-          return { stdout: "abc123def456abc123def456abc123def456abcd\n" };
-        }
-        if (args.includes("diff-tree")) return { stdout: "src/hello.test.ts\nsrc/hello.ts\n" };
-        return undefined;
-      },
-    });
-    const { state, worker: w } = runnable(
-      codexAgent(`${block}\n    git: { commit: true, branch: "ropex/{taskId}" }`),
-    );
-    const result = await runTask(state, w, { id: "task-9", agent: "builder", prompt: "fix the bug" }, {
-      root,
-      sandboxDocker: docker.run,
-    });
-
-    expect(result.commit?.committed).toBe(true);
-    expect(result.commit?.branch).toBe("ropex/task-9");
-    expect(result.commit?.sha).toBe("abc123def456abc123def456abc123def456abcd");
-    expect(result.commit?.files).toEqual(["src/hello.test.ts", "src/hello.ts"]);
-    expect(result.commit?.bundle).toMatch(/commits\/ropex_task-9\.bundle$/);
-
-    const gitArgs = docker.calls.filter((c) => c.args[0] === "exec" && c.args.includes("git")).map((c) => c.args);
-    const commit = gitArgs.find((a) => a.includes("commit") && a.includes("-m"));
-    expect(commit).toBeDefined();
-    expect(commit).toContain("ropex: fix the bug");
-    expect(commit).toContain("user.name=Ropex");
-    expect(gitArgs.some((a) => a.includes("-B") && a.includes("ropex/task-9"))).toBe(true);
-    expect(gitArgs.some((a) => a.includes("bundle") && a.includes("create"))).toBe(true);
-    expect(docker.calls.some((c) => c.args[0] === "cp" && c.args.some((a) => a.endsWith("ropex_task-9.bundle")))).toBe(true);
-    expect(JSON.stringify(docker.calls.map((c) => c.args))).not.toContain(API_KEY);
-    expect(docker.verbs()[docker.verbs().length - 1]).toBe("rm");
-  });
-
-  it("does not commit when the executor fails", async () => {
-    process.env.OPENAI_API_KEY = API_KEY;
-    const docker = fakeDocker({
-      onExec: (args) => (args.includes("--sandbox") ? { code: 2, stderr: "codex crashed" } : undefined),
-    });
-    const { state, worker: w } = runnable(codexAgent(`${block}\n    git: { commit: true }`));
-    await expect(
-      runTask(state, w, { id: "task-fail", agent: "builder", prompt: "x" }, { root: tmp(), sandboxDocker: docker.run }),
-    ).rejects.toThrow(/codex crashed/);
-    const committed = docker.calls.some(
-      (c) => c.args[0] === "exec" && c.args.includes("commit") && c.args.includes("-m"),
-    );
-    expect(committed).toBe(false);
-    expect(docker.containers.size).toBe(0);
-  });
-
   it("disposes the container even when the task fails", async () => {
     process.env.OPENAI_API_KEY = API_KEY;
     const docker = fakeDocker({

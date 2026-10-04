@@ -3,6 +3,8 @@
  * Everything — model, tools, loop, permissions, session — is a plugin.
  */
 
+import { runProcess, type RunProcessResult } from "./proc.js";
+
 export type PluginKind =
   | "model"
   | "tools"
@@ -27,6 +29,13 @@ export type Plugin = {
 };
 
 export type ToolFn = (input: Record<string, unknown>, ctx: PluginContext) => Promise<string> | string;
+
+/** Run a command in the harness workspace (the sandbox, or the host worktree). */
+export type WorkspaceExec = (
+  bin: string,
+  args: string[],
+  opts?: { stdin?: string; env?: Record<string, string> },
+) => Promise<RunProcessResult>;
 
 export class Kernel {
   private readonly services = new Map<string, unknown>();
@@ -111,7 +120,13 @@ export function permissionsPlugin(deny: string[], requireApproval: string[]): Pl
   };
 }
 
-export function toolsPlugin(names: string[], opts: { cwd?: string } = {}): Plugin {
+export function toolsPlugin(
+  names: string[],
+  opts: { cwd?: string; exec?: WorkspaceExec } = {},
+): Plugin {
+  const exec: WorkspaceExec =
+    opts.exec ??
+    ((bin, args, o) => runProcess(bin, args, { cwd: opts.cwd, stdin: o?.stdin, env: o?.env }));
   return {
     name: `tools:${names.join("+")}`,
     kind: "tools",
@@ -119,7 +134,7 @@ export function toolsPlugin(names: string[], opts: { cwd?: string } = {}): Plugi
       const kernel = ctx.get<Kernel>("kernel");
       if (opts.cwd) ctx.set("cwd", opts.cwd);
       for (const name of names) {
-        kernel.registerTool(name, (input) => {
+        kernel.registerTool(name, async (input) => {
           const perms = ctx.get<{ deny: string[] }>("permissions");
           if (perms.deny.includes(name)) {
             return `denied: ${name}`;
@@ -132,7 +147,18 @@ export function toolsPlugin(names: string[], opts: { cwd?: string } = {}): Plugi
               cwd = undefined;
             }
           }
-          // fs/shell are chrooted to the worker worktree when present.
+          if ((name === "fs" || name === "str_replace_editor") && input.action === "write") {
+            const path = workspacePath(input.path);
+            await writeWorkspaceFile(exec, path, String(input.content ?? ""));
+            return JSON.stringify({ ok: true, tool: name, action: "write", path, ...(cwd ? { cwd } : {}) });
+          }
+          if ((name === "shell" || name === "bash") && input.action === "commit") {
+            const message = String(input.message ?? "").replace(/[\r\n]+/g, " ").trim().slice(0, 72);
+            if (!message) throw new Error("harness shell commit requires a message");
+            const committed = await commitWorkspace(exec, message);
+            return JSON.stringify({ ok: true, tool: name, action: "commit", ...committed, ...(cwd ? { cwd } : {}) });
+          }
+          // Other actions stay descriptors. fs/shell are chrooted to the worker worktree when present.
           if ((name === "fs" || name === "shell" || name === "bash") && cwd) {
             return JSON.stringify({ ok: true, tool: name, cwd, input });
           }
@@ -245,4 +271,94 @@ export function soulPlugin(soul: string): Plugin {
       ctx.set("soul", soul);
     },
   };
+}
+
+const AUTHOR_ENV = {
+  GIT_AUTHOR_NAME: "Ropex",
+  GIT_AUTHOR_EMAIL: "ropex@localhost",
+  GIT_COMMITTER_NAME: "Ropex",
+  GIT_COMMITTER_EMAIL: "ropex@localhost",
+};
+
+/** Control-plane bookkeeping that a harness commit must leave untracked. */
+const WORKSPACE_MARKERS = new Set([".ropex-worker.json", "README.ropex"]);
+
+function workspacePath(value: unknown): string {
+  const path = String(value ?? "").trim();
+  if (!path || path.startsWith("/") || /^[A-Za-z]:/.test(path) || path.split(/[\\/]/).includes("..")) {
+    throw new Error(`fs path escapes the workspace: ${path || "(empty)"}`);
+  }
+  return path;
+}
+
+async function writeWorkspaceFile(exec: WorkspaceExec, path: string, content: string): Promise<void> {
+  const res = await exec(
+    "sh",
+    ["-c", 'mkdir -p -- "$(dirname -- "$1")" && cat > "$1"', "sh", path],
+    { stdin: content },
+  );
+  if (res.code !== 0) {
+    throw new Error(`harness fs write ${path} failed: ${(res.stderr || res.stdout).trim() || `exit ${res.code}`}`);
+  }
+}
+
+function porcelainPaths(stdout: string): string[] {
+  const files: string[] = [];
+  for (const line of stdout.split("\n")) {
+    if (line.length < 4) continue;
+    let path = line.slice(3).trim();
+    const arrow = path.lastIndexOf(" -> ");
+    if (arrow !== -1) path = path.slice(arrow + 4);
+    if (path.startsWith('"') && path.endsWith('"')) path = path.slice(1, -1);
+    if (!WORKSPACE_MARKERS.has(path)) files.push(path);
+  }
+  return files;
+}
+
+async function git(exec: WorkspaceExec, args: string[], what: string): Promise<RunProcessResult> {
+  const res = await exec("git", args, { env: AUTHOR_ENV });
+  if (res.code !== 0) {
+    throw new Error(`harness git ${what} failed: ${(res.stderr || res.stdout).trim() || `exit ${res.code}`}`);
+  }
+  return res;
+}
+
+/** Commit whatever the harness wrote. A clean tree (ignoring marker files) is not an error. */
+async function commitWorkspace(
+  exec: WorkspaceExec,
+  message: string,
+): Promise<{ committed: boolean; sha?: string; files?: string[]; reason?: string }> {
+  const inside = await exec("git", ["rev-parse", "--is-inside-work-tree"]);
+  if (inside.code !== 0 || inside.stdout.trim() === "false") {
+    throw new Error("harness shell commit requires a git checkout in the workspace");
+  }
+  const status = await git(exec, ["status", "--porcelain"], "status");
+  if (porcelainPaths(status.stdout).length === 0) {
+    return { committed: false, reason: "clean" };
+  }
+  await git(
+    exec,
+    ["add", "-A", "--", ".", ":(exclude).ropex-worker.json", ":(exclude)README.ropex"],
+    "add",
+  );
+  const committed = await exec(
+    "git",
+    ["-c", "user.name=Ropex", "-c", "user.email=ropex@localhost", "-c", "commit.gpgsign=false", "commit", "-m", message],
+    { env: AUTHOR_ENV },
+  );
+  if (committed.code !== 0) {
+    const detail = `${committed.stderr}\n${committed.stdout}`.toLowerCase();
+    if (detail.includes("nothing to commit") || detail.includes("no changes added")) {
+      return { committed: false, reason: "clean" };
+    }
+    throw new Error(
+      `harness git commit failed: ${(committed.stderr || committed.stdout).trim() || `exit ${committed.code}`}`,
+    );
+  }
+  const sha = (await git(exec, ["rev-parse", "HEAD"], "rev-parse")).stdout.trim();
+  const files = (await git(exec, ["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"], "diff-tree"))
+    .stdout.split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return { committed: true, sha, files };
 }
