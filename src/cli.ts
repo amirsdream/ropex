@@ -13,6 +13,10 @@ import { agentsForEvent, eventToTask, pickWorker } from "./github.js";
 import { buildControlPlaneView, startControlPlaneServer } from "./api.js";
 import { enqueueTask, queueSummary, deadLetters, requeueDead, reclaimExpiredLeases, ageQueuePriorities, pauseQueue, resumeQueue, isQueuePaused } from "./queue.js";
 import { gcOrphanWorktrees } from "./worktree.js";
+import { gcOrphanSandboxes } from "./sandbox/docker.js";
+import { pruneSandboxSnapshots, sandboxReport } from "./sandbox/index.js";
+import { defaultDockerRun } from "./sandbox/client.js";
+import { ensureEnvImage } from "./sandbox/image.js";
 import { promoteMemoryFact } from "./memory.js";
 import { compactJournal } from "./journal.js";
 import { runTask } from "./runtime.js";
@@ -88,7 +92,7 @@ Usage:
   ropex pause                     Stop claiming new queue work
   ropex resume                    Allow claims again
   ropex compact [--keep N]        Soft-cap delivery journal
-  ropex gc                        Remove orphan worker worktrees
+  ropex gc                        Remove orphan worker worktrees and sandbox containers
   ropex drain [--limit N] [--concurrency N]
                                      Claim idle workers; --concurrency persists preference
   ropex pipeline <prompt> [--no-drain] [--concurrency N]
@@ -118,6 +122,10 @@ Usage:
   ropex metrics [--prometheus]    Export cluster metrics
   ropex health                    Worker probes + backlog SLO
   ropex runtimes                  Worker runtimes (dsh, claude-code, codex, copilot)
+  ropex sandboxes [--json]        Sandbox providers, agents, snapshots, live containers
+  ropex sandbox build <agent>     Build (or reuse) the agent's environment image
+  ropex sandbox prune [--keep N] [--ttl-ms N]
+                                     Evict snapshots (default: all)
   ropex audit [--kind k] [--jsonl]  Control-plane event trail
   ropex journal                   Show delivery journal
   ropex skills [share <name> --to <agent>]
@@ -487,6 +495,15 @@ async function main(argv: string[]): Promise<number> {
         `gc worktrees kept=${result.kept.length} removed=${result.removed.length} root=${result.root}`,
       );
       for (const id of result.removed) console.log(`  removed ${id}`);
+      const sandboxes = gcOrphanSandboxes(root, state);
+      if (sandboxes.skipped) {
+        console.log(`gc sandboxes skipped (${sandboxes.skipped})`);
+      } else {
+        console.log(
+          `gc sandboxes kept=${sandboxes.keptContainers.length} removed=${sandboxes.removedContainers.length}`,
+        );
+        for (const name of sandboxes.removedContainers) console.log(`  removed ${name}`);
+      }
       return 0;
     }
     case "drain": {
@@ -871,6 +888,58 @@ async function main(argv: string[]): Promise<number> {
         console.log(`        ${s.hint}`);
       }
       return 0;
+    }
+    case "sandboxes": {
+      const report = sandboxReport(root, loadState(root));
+      if (rest.includes("--json")) {
+        console.log(JSON.stringify(report, null, 2));
+        return 0;
+      }
+      for (const p of report.providers) {
+        console.log(`${p.ready ? "ready " : "      "} ${p.kind.padEnd(8)} ${p.label}`);
+        console.log(`        ${p.hint}`);
+      }
+      for (const a of report.agents) {
+        console.log(`agent ${a.agent} → ${a.provider}${a.base ? ` (${a.base})` : ""}${a.repo ? ` repo=${a.repo}` : ""}`);
+      }
+      console.log(`snapshots ${report.store.snapshots.length} (${report.store.bytes} bytes) in ${report.store.dir}`);
+      for (const snap of report.store.snapshots) {
+        console.log(`  ${snap.key.padEnd(32)} ${snap.kind.padEnd(5)} ${snap.imageRef} last=${snap.lastUsedAt}`);
+      }
+      console.log(
+        report.containersSkipped
+          ? `containers skipped (${report.containersSkipped})`
+          : `containers ${report.containers.length}`,
+      );
+      for (const c of report.containers) console.log(`  ${c.name} worker=${c.worker || "-"}`);
+      return 0;
+    }
+    case "sandbox": {
+      const [sub, ...args] = rest;
+      if (sub === "build") {
+        const name = args[0];
+        if (!name) return fail("usage: ropex sandbox build <agent>");
+        const agent = loadState(root).desired.find((a) => a.metadata.name === name);
+        if (!agent) return fail(`unknown agent: ${name}`);
+        if (agent.spec.sandbox?.provider !== "docker") {
+          return fail(`agent ${name} does not use sandbox provider: docker`);
+        }
+        const image = await ensureEnvImage(defaultDockerRun(), agent.spec.sandbox, root);
+        console.log(`${image.built ? "built" : "cached"} ${image.ref}`);
+        return 0;
+      }
+      if (sub === "prune") {
+        const keep = flag(args, "--keep");
+        const ttl = flag(args, "--ttl-ms");
+        const evicted = await pruneSandboxSnapshots(root, {
+          keep: keep === undefined && ttl === undefined ? 0 : keep === undefined ? undefined : Number(keep),
+          ttlMs: ttl === undefined ? undefined : Number(ttl),
+        });
+        console.log(`pruned ${evicted.length} snapshot(s)`);
+        for (const snap of evicted) console.log(`  ${snap.imageRef}`);
+        return 0;
+      }
+      return fail("usage: ropex sandbox <build <agent>|prune [--keep N] [--ttl-ms N]>");
     }
     case "health": {
       const state = loadState(root);

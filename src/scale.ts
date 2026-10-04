@@ -8,6 +8,7 @@ import { recordAudit } from "./audit.js";
 import { type ImageResolveOptions } from "./image.js";
 import { promoteMemoryFact } from "./memory.js";
 import { workerFromDesired } from "./runtime.js";
+import { removeContainerSync } from "./sandbox/docker.js";
 import { removeWorktree } from "./worktree.js";
 import type { ClusterState, DesiredAgent, ScaleMode, Worker } from "./types.js";
 
@@ -224,6 +225,10 @@ export function destroyWorker(
     removeWorktree(opts.root, workerId);
     w.worktree = undefined;
   }
+  if (w.sandbox?.provider === "docker") {
+    removeContainerSync(w.sandbox.id);
+  }
+  w.sandbox = undefined;
   recordAudit(state, {
     kind: "info",
     message: `destroyed ${workerId}${promoted ? ` (promoted ${promoted} memory)` : ""}`,

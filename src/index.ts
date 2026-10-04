@@ -56,6 +56,33 @@ export type { ExecutorEvent, ExecutorEventKind, SubmitPipelineOptions, SubmitPip
 export { planPipeline } from "./pipeline.js";
 export type { PipelineStagePlan } from "./pipeline.js";
 export {
+  SANDBOX_PROVIDERS,
+  acquireSandbox,
+  needsHostWorktree,
+  pruneSandboxSnapshots,
+  sandboxReport,
+  sandboxScaffold,
+} from "./sandbox/index.js";
+export type {
+  Sandbox,
+  SandboxAcquireContext,
+  SandboxExecOptions,
+  SandboxProbe,
+  SandboxProvider,
+  SandboxReport,
+} from "./sandbox/index.js";
+export { gcOrphanSandboxes } from "./sandbox/docker.js";
+export { ensureEnvImage, planEnvImage, renderDockerfile } from "./sandbox/image.js";
+export { admitSandbox, validateSandboxSpec } from "./sandbox/spec.js";
+export {
+  catalogSummary,
+  evictSnapshots,
+  planEviction,
+  sandboxStoreDir,
+  warmSnapshotKey,
+} from "./sandbox/store.js";
+export type { SnapshotRecord } from "./sandbox/store.js";
+export {
   ensureWorktree,
   removeWorktree,
   worktreePath,

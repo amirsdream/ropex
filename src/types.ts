@@ -37,6 +37,76 @@ export type RuntimeSpec = {
   requireEnv?: string[];
 };
 
+/** Where an agent's `execute` stage runs. `local` is the per-worker git worktree. */
+export const SANDBOX_PROVIDER_KINDS_LIST = ["local", "docker"] as const;
+
+export type SandboxProviderKind = (typeof SANDBOX_PROVIDER_KINDS_LIST)[number];
+
+/** Image recipe: a base image plus the dependencies installed on top. */
+export type SandboxImageSpec = {
+  /** Base image (default `node:22-bookworm`). Presets assume a Debian/Ubuntu base. */
+  base?: string;
+  /** Named presets that expand to apt packages (git, gh, curl, ffmpeg, codecs, web, ...). */
+  tools?: string[];
+  apt?: string[];
+  npm?: string[];
+  pip?: string[];
+  /** Extra single-line `RUN` commands, executed after the package layers. */
+  setup?: string[];
+  /** Escape hatch: a Dockerfile path relative to the workspace root. Exclusive with the recipe fields. */
+  dockerfile?: string;
+};
+
+export type SandboxRepoSpec = {
+  /** Remote to check out (required for `workspace: clone`). */
+  url?: string;
+  ref?: string;
+  depth?: number;
+  /** Name of the control-plane env var holding the git token. Never the value. */
+  tokenEnv?: string;
+  /** `clone` checks the repo out inside the container; `mount` bind-mounts the host worktree. */
+  workspace?: "clone" | "mount";
+};
+
+export type SandboxResourcesSpec = {
+  cpus?: number;
+  /** Docker memory limit, e.g. `4g`. */
+  memory?: string;
+  pids?: number;
+  network?: "bridge" | "none";
+};
+
+export type SandboxLifecycleSpec = {
+  /** What happens to the container after the task: `dispose` (default) or `snapshot` then dispose. */
+  after?: "dispose" | "snapshot";
+  /** Reuse an "env image + repo checked out" snapshot across runs. */
+  warmSnapshot?: boolean;
+  /** Newest snapshots to keep per environment. */
+  keep?: number;
+  /** Evict snapshots not used for this many ms. */
+  ttlMs?: number;
+};
+
+export type SandboxSpec = {
+  /** Defaults to `local`. */
+  provider?: SandboxProviderKind;
+  image?: SandboxImageSpec;
+  repo?: SandboxRepoSpec;
+  /** Non-secret environment baked into the container config. */
+  env?: Record<string, string>;
+  /** Names of control-plane env vars forwarded per exec. Values never reach an image or a snapshot. */
+  secrets?: string[];
+  resources?: SandboxResourcesSpec;
+  lifecycle?: SandboxLifecycleSpec;
+};
+
+/** Live sandbox bound to a worker while a task runs (visibility + GC). */
+export type WorkerSandbox = {
+  provider: SandboxProviderKind;
+  id: string;
+  imageRef?: string;
+};
+
 export type HarnessSpec = {
   /** DeepSeek Harness profile: loop + tool surface. */
   profile: HarnessProfile;
@@ -100,6 +170,8 @@ export type AgentSpec = {
   harness: HarnessSpec;
   /** Executor for the `execute` stage. Defaults to `{ kind: "dsh" }`. */
   runtime?: RuntimeSpec;
+  /** Isolation for the `execute` stage. Defaults to the local worktree. */
+  sandbox?: SandboxSpec;
   hermes: HermesSpec;
   github?: GithubSpec;
   /**
@@ -230,7 +302,18 @@ export type Policy = {
       /** Scope for the ledger key (default cluster). */
       scope?: "cluster" | "fleet" | "agent";
     };
+    /** Optional ceiling on what agents may ask of the sandbox layer. */
+    sandbox?: PolicySandbox;
   };
+};
+
+export type PolicySandbox = {
+  /** When set, only these providers may run. `local` is a provider like any other. */
+  allowProviders?: SandboxProviderKind[];
+  /** Glob patterns (`*` wildcard) a docker base image must match. */
+  allowBaseImages?: string[];
+  /** Total bytes of snapshots kept in the store. */
+  maxSnapshotBytes?: number;
 };
 
 export type Manifest = Agent | Fleet | GitRepo | Policy | TaskManifest | MemoryManifest;
@@ -256,6 +339,8 @@ export type Worker = {
   model: string;
   /** Isolated sandbox path for fs/shell (sandbox/worktrees/<id>). */
   worktree?: string;
+  /** Container (or other isolate) bound to this worker while a task runs. */
+  sandbox?: WorkerSandbox;
   /** Last task finish time — fair scheduling prefers least-recently-used. */
   lastTaskAt?: string;
   /** When true, scheduler will not claim this worker (drain/cordon). */

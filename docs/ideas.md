@@ -64,7 +64,7 @@ Clone attempts emit phase logs (`resolve`→`done`/`failed`) with progress %; re
 
 ## Worktree GC + webhook idempotency + priority aging
 
-`ropex gc` removes orphan sandbox worktrees. Webhook `x-github-delivery` remembered on `webhookSeen` (duplicate → no re-enqueue). Pending queue priorities age (+1/min, cap +10) via `effectivePriority` / `ropex age`. Example Policy includes `budget`. `ropex memory promote`.
+`ropex gc` removes orphan sandbox worktrees (and orphan sandbox containers when a fleet uses `spec.sandbox`). Webhook `x-github-delivery` remembered on `webhookSeen` (duplicate → no re-enqueue). Pending queue priorities age (+1/min, cap +10) via `effectivePriority` / `ropex age`. Example Policy includes `budget`. `ropex memory promote`.
 
 **Shipped (2026-08-22 night):** `gcOrphanWorktrees`, webhook seen set, age boosts, memory promote CLI.
 

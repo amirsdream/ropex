@@ -156,6 +156,11 @@ as `src/**`.
 ## Containers
 
 The published Ropex image does **not** bundle these CLIs — they are large npm
-trees and most deployments want one. To run CLI runtimes in a container, derive
-an image that installs the ones you need and point `spec.runtime.command` or
-`ROPEX_RUNTIME_BIN_<KIND>` at them.
+trees and most deployments want one. To run a CLI runtime in its own container,
+declare `spec.sandbox` with `provider: docker` and list the CLI under
+`image.npm`. Ropex builds the image, checks the repo out, forwards the
+credentials by name and runs the CLI inside it. See [sandboxes.md](./sandboxes.md).
+
+Without a sandbox the CLI runs on the host, in the worker worktree. Inside a
+sandbox the binary is resolved in the container, so `spec.runtime.command` must
+name a path inside the image and `ROPEX_RUNTIME_BIN_<KIND>` is not consulted.
