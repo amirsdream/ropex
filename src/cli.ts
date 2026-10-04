@@ -321,6 +321,11 @@ async function main(argv: string[]): Promise<number> {
       const result = await runTask(state, worker, { id: `cli-${Date.now()}`, agent, prompt }, { root });
       saveState(root, state);
       console.log(result.output);
+      if (result.commit?.committed) {
+        console.log(
+          `commit ${result.commit.sha} ${result.commit.branch}${result.commit.pushed ? " (pushed)" : ""}`,
+        );
+      }
       if (result.delivery) console.log(`deliver ${result.delivery.kind}`);
       if (result.learned) console.log(`learned skill ${result.learned.name}`);
       console.log(`image ${result.imageDigest}  workflow ${result.workflow.map((s) => `${s.id}:${s.owner}`).join(" → ")}`);
@@ -345,6 +350,9 @@ async function main(argv: string[]): Promise<number> {
       const results = await drainQueue(state, { root });
       for (const result of results) {
         console.log(`${result.worker.agent}: ${result.output}`);
+        if (result.commit?.committed) {
+          console.log(`  commit ${result.commit.sha} ${result.commit.branch}`);
+        }
         if (result.delivery) console.log(`  -> ${result.delivery.kind}`);
         console.log(`  image ${result.imageDigest}  worktree ${result.worktree ?? "-"}`);
       }

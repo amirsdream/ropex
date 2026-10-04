@@ -16,6 +16,8 @@ spec.sandbox ──► acquireSandbox ──► provider
                                                                      │
                                           exec ◄── runtime CLI (codex, claude -p, copilot -p)
                                                                      │
+                                       git commit (optional) ─► push or bundle
+                                                                     │
                                        dispose  or  snapshot ─► dispose      store: .ropex/sandboxes
 ```
 
@@ -52,6 +54,10 @@ spec:
       warmSnapshot: true
       keep: 3
       ttlMs: 604800000
+    git:
+      commit: true                    # commit workspace changes after a successful execute
+      branch: "ropex/{taskId}"        # default
+      push: false                     # true pushes the branch to origin before dispose
 ```
 
 A runnable version is in [`fleets/examples/docker-sandbox.yaml`](../fleets/examples/docker-sandbox.yaml). The whole block is part of the agent **image digest**, so editing it rolls the agent's workers like any other spec change.
@@ -81,7 +87,8 @@ A runnable version is in [`fleets/examples/docker-sandbox.yaml`](../fleets/examp
 3. **Container.** `docker run -d` with `--init`, `--security-opt no-new-privileges`, a pids limit (default 512), your cpus, memory and network limits, and labels `ropex.sandbox=1`, `ropex.worker`, `ropex.agent`, `ropex.task`. The working directory is `/workspace`.
 4. **Checkout.** `git init`, `remote add`, `fetch`, `checkout --detach FETCH_HEAD`. This works for branches, tags and commit SHAs.
 5. **Execute.** The runtime CLI runs through `docker exec -i -w /workspace`. The brief goes in over stdin. Timeout and kill escalation are the same as every other subprocess.
-6. **Finish.** With `after: snapshot` the container is committed as a task snapshot first. The container is then always removed, including when the task failed or timed out. A killed `docker exec` client does not stop the process inside, but removing the container does.
+6. **Commit.** When `git.commit` is set and the task succeeded, dirty files are committed on `git.branch` (default `ropex/{taskId}`). The author is `Ropex <ropex@localhost>` for that commit only. Control-plane marker files (`.ropex-worker.json`, `README.ropex`) are left out. A clean tree is not an error. A failed execute does not commit. `git.push: true` then runs `git push -u origin <branch>` before the container is removed. Without a push, a cloned workspace is exported as a git bundle under `.ropex/sandboxes/commits/` so disposing the container does not delete the commit. A `mount` workspace and the local provider commit straight into the host repository, which already keeps the commit.
+7. **Finish.** With `after: snapshot` the container is committed as a task snapshot first. The container is then always removed, including when the task failed or timed out. A killed `docker exec` client does not stop the process inside, but removing the container does.
 
 `workspace: mount` skips the clone and bind-mounts the worker's host worktree at `/workspace`. Use it when the control plane runs on the host. Do not use it when the control plane itself runs in a container, because the path would be wrong. Files the container writes are owned by the container user.
 
@@ -164,6 +171,7 @@ A provider is one file implementing `SandboxProvider` in `src/sandbox/`, registe
 | `src/sandbox/index.ts` | Provider contract, registry, `acquireSandbox`, `sandboxReport` |
 | `src/sandbox/local.ts` | The worktree provider |
 | `src/sandbox/docker.ts` | Container lifecycle, git checkout, token forwarding, orphan GC |
+| `src/sandbox/git.ts` | Commit workspace changes onto a branch, optional push, bundle export |
 | `src/sandbox/image.ts` | Recipe to Dockerfile, digest tag, build-if-missing |
 | `src/sandbox/store.ts` | Catalog, tarball export and restore, retention |
 | `src/sandbox/spec.ts` | Validation, tool presets, canonical form, policy checks |

@@ -58,6 +58,13 @@ spec:
       warmSnapshot: true
       keep: 3
       ttlMs: 604800000
+    # After a successful execute, commit dirty files on ropex/<task-id>.
+    # push: true sends that branch to origin before the container is removed.
+    # Without a push the commit is saved as a bundle under .ropex/sandboxes/commits.
+    git:
+      commit: true
+      branch: "ropex/{taskId}"
+      push: false
   harness:
     profile: code
     plugins: [fs, shell, github]

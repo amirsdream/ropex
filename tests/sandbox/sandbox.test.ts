@@ -113,6 +113,8 @@ ${dockerBlock.replace(/^/gm, "    ")}
     ["snapshot on local", "  sandbox:\n    lifecycle:\n      after: snapshot", /provider: docker/],
     ["bad memory", "  sandbox:\n    provider: docker\n    resources:\n      memory: lots", /memory/],
     ["warm snapshot without repo", "  sandbox:\n    provider: docker\n    lifecycle:\n      warmSnapshot: true", /needs a repo/],
+    ["bad git branch", "  sandbox:\n    git:\n      commit: true\n      branch: 'ropex/../x'", /git\.branch/],
+    ["push without commit", "  sandbox:\n    git:\n      commit: false\n      push: true", /git\.push requires git\.commit/],
   ])("rejects %s", (_name, block, message) => {
     expect(() => parseManifests(agentYaml(block))).toThrow(message);
   });
@@ -137,6 +139,19 @@ spec:
     expect(buildAgentImage(plain).digest).toBe(buildAgentImage(expandDesired(parseManifests(agentYaml()))[0]).digest);
     expect(buildAgentImage(withBlock).digest).not.toBe(buildAgentImage(plain).digest);
     expect(buildAgentImage(changed).digest).not.toBe(buildAgentImage(withBlock).digest);
+  });
+
+  it("rolls the image digest when git commit is declared", () => {
+    const local = "  sandbox:\n    provider: local";
+    const committed = '  sandbox:\n    provider: local\n    git: { commit: true, branch: "ropex/{taskId}" }';
+    const reordered = '  sandbox:\n    git: { branch: "ropex/{taskId}", commit: true }\n    provider: local';
+    const plain = expandDesired(parseManifests(agentYaml(local)))[0];
+    const withGit = expandDesired(parseManifests(agentYaml(committed)))[0];
+    const same = expandDesired(parseManifests(agentYaml(reordered)))[0];
+    expect(buildAgentImage(withGit).digest).not.toBe(buildAgentImage(plain).digest);
+    expect(buildAgentImage(same).digest).toBe(buildAgentImage(withGit).digest);
+    expect(withGit.spec.sandbox?.git?.commit).toBe(true);
+    expect(withGit.spec.sandbox?.git?.branch).toBe("ropex/{taskId}");
   });
 
   it("treats key order and list order as the same sandbox", () => {

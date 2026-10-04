@@ -75,6 +75,12 @@ export { gcOrphanSandboxes } from "./sandbox/docker.js";
 export { ensureEnvImage, planEnvImage, renderDockerfile } from "./sandbox/image.js";
 export { admitSandbox, validateSandboxSpec } from "./sandbox/spec.js";
 export {
+  commitSandboxChanges,
+  sandboxCommitBranch,
+  sandboxCommitMessage,
+} from "./sandbox/git.js";
+export type { SandboxCommitResult } from "./sandbox/git.js";
+export {
   catalogSummary,
   evictSnapshots,
   planEviction,
