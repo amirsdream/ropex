@@ -62,9 +62,21 @@ function requireEnvValue(env: NodeJS.ProcessEnv, name: string, what: string): st
   return value;
 }
 
+/**
+ * A container has no git identity. These match the author the embedded harness
+ * passes on `git` argv, so a CLI harness can commit without writing config
+ * into the snapshot.
+ */
+const GIT_IDENTITY_ENV: Record<string, string> = {
+  GIT_AUTHOR_NAME: "Ropex",
+  GIT_AUTHOR_EMAIL: "ropex@localhost",
+  GIT_COMMITTER_NAME: "Ropex",
+  GIT_COMMITTER_EMAIL: "ropex@localhost",
+};
+
 /** Values forwarded into every exec, by name. Keys are env names, values stay out of argv. */
 function buildExecEnv(spec: SandboxSpec, env: NodeJS.ProcessEnv): Record<string, string> {
-  const out: Record<string, string> = {};
+  const out: Record<string, string> = { ...GIT_IDENTITY_ENV };
   for (const name of spec.secrets ?? []) out[name] = requireEnvValue(env, name, "secrets");
   const tokenEnv = spec.repo?.tokenEnv;
   if (tokenEnv) {

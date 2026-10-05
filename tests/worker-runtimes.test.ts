@@ -134,6 +134,14 @@ describe("policy translation", () => {
     expect(open.args).toEqual(["--sandbox", "workspace-write", "-c", "approval_policy=never"]);
     const locked = CLI_RUNTIMES.codex.permissions({ deny: ["shell"], requireApproval: [] });
     expect(locked.args).toEqual(["--sandbox", "read-only", "-c", "approval_policy=never"]);
+    const inside = CLI_RUNTIMES.codex.permissions({ deny: [], requireApproval: [], isolated: true });
+    expect(inside.args).toEqual(["--sandbox", "danger-full-access", "-c", "approval_policy=never"]);
+    const insideLocked = CLI_RUNTIMES.codex.permissions({
+      deny: ["fs"],
+      requireApproval: [],
+      isolated: true,
+    });
+    expect(insideLocked.args).toEqual(["--sandbox", "read-only", "-c", "approval_policy=never"]);
   });
 
   it("reports denies a runtime cannot express so boot can fail closed", () => {

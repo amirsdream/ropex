@@ -176,6 +176,7 @@ async function bootCliRuntime(
   const policy: PermissionPlan = descriptor.permissions({
     deny: opts.deny ?? [],
     requireApproval: opts.requireApproval ?? [],
+    isolated,
   });
   if (policy.unmappable.length) {
     throw new Error(

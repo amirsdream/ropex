@@ -135,6 +135,10 @@ interfaces for the others:
 - Codex `exec` is non-interactive but a sandbox escalation still prompts unless
   `-c approval_policy=never` is set. Copilot `-p` prompts on every tool unless
   `--allow-all-tools` is set; `--deny-tool` still wins over allow-all.
+- Inside a Ropex container, Codex uses `--sandbox danger-full-access`. The
+  container is created with `no-new-privileges`, so Codex's own `workspace-write`
+  namespace cannot be created and both shell and file writes fail. A policy
+  that denies `fs` or `shell` still selects `--sandbox read-only`.
 - Codex's default provider reads `~/.codex/auth.json` and connects to the
   Responses websocket. A container has no login file, and that websocket
   rejects an API key. Headless runs instead set a provider whose `env_key` is

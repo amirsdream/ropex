@@ -32,6 +32,8 @@ export type CliArgvInput = {
 export type PolicyInput = {
   deny: string[];
   requireApproval: string[];
+  /** Already inside a Ropex container. Codex must not start a nested sandbox. */
+  isolated?: boolean;
 };
 
 export type PermissionPlan = {
@@ -288,7 +290,11 @@ export const CLI_RUNTIMES: Record<CliRuntimeKind, CliRuntimeDescriptor> = {
       // Codex gates by sandbox level, not per tool.
       const blocksWrite = toolDenies.some((t) => t === "fs" || t === "str_replace_editor");
       const blocksShell = toolDenies.some((t) => t === "shell" || t === "bash");
-      const sandbox = blocksWrite || blocksShell ? "read-only" : "workspace-write";
+      // workspace-write uses a user namespace. The container already sets
+      // no-new-privileges, so that namespace cannot be created. The container
+      // is the sandbox; Codex writes directly in it.
+      const sandbox =
+        blocksWrite || blocksShell ? "read-only" : policy.isolated ? "danger-full-access" : "workspace-write";
       const expressible = new Set(["fs", "str_replace_editor", "shell", "bash", "memory"]);
       const unmappable = toolDenies.filter((t) => !expressible.has(t));
       // `approval_policy=never` is required for headless exec — without it a

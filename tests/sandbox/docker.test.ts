@@ -100,8 +100,14 @@ describe("docker sandbox lifecycle", () => {
     expect(exec.args.slice(-3)).toEqual(["codex", "exec", "--json"]);
     expect(exec.args).toContain("OPENAI_API_KEY");
     expect(exec.args).toContain("EXTRA");
+    expect(exec.args).toContain("GIT_AUTHOR_NAME");
     expect(exec.stdin).toBe("the brief");
     expect(exec.env?.OPENAI_API_KEY).toBe(API_KEY);
+    expect(exec.env?.GIT_AUTHOR_NAME).toBe("Ropex");
+    expect(exec.env?.GIT_AUTHOR_EMAIL).toBe("ropex@localhost");
+    expect(exec.env?.GIT_COMMITTER_NAME).toBe("Ropex");
+    expect(exec.env?.GIT_COMMITTER_EMAIL).toBe("ropex@localhost");
+    expect(exec.args.join(" ")).not.toContain("ropex@localhost");
   });
 
   it("resolves binaries inside the container", async () => {
