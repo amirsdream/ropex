@@ -546,9 +546,19 @@ export function buildControlPlaneView(state: ClusterState, root = process.cwd())
             doneStages: p.stages.filter((s) => s.status === "done").length,
             updatedAt: p.updatedAt,
             steps: p.stages.map((s) => ({ id: s.id, agent: s.agent, status: s.status })),
+            fleet: p.fleet
+              ? { name: p.fleet.name, mode: p.fleet.mode, pinned: p.fleet.pinned }
+              : undefined,
           })),
       };
     })(),
+    fleetPins: (state.fleetPins ?? []).slice(0, 16).map((p) => ({
+      key: p.key,
+      fleet: p.fleet,
+      agents: [...p.agents],
+      prompt: p.prompt.slice(0, 160),
+      at: p.at,
+    })),
     placement: (() => {
       const cap = maxReplicas(state.policies ?? []);
       const bin = resolveContainerBin();

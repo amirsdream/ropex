@@ -14,7 +14,9 @@ Each worker is **DeepSeek Harness** (Cordis plugin kernel) plus **Hermes** (soul
 
 Top to bottom: git desired state → work ingress (GitHub webhooks with **HMAC + rate limit**, CLI, executor API) → control plane (controller · queue · executor · tick) → ephemeral workers claimed by a **bounded drain** → the **start → transform → result** spine → delivery.
 
-**Scale is a concurrency commit:** raise `maxConcurrent` (on-demand) or `replicas` (static). `Policy.maxReplicas` caps blast radius. Workers spawn on request and destroy when idle — memory stays on the agent/fleet bus. With `ROPEX_EXECUTOR=container`, each plan is one session image that every step shares; the image is deleted after learn. Operators pause, drain, run pipelines, and follow Hermes against DeepSeek from CLI or [`ropex ui`](./docs/control-plane-ui.md).
+**An interaction resolves a fleet, then runs it.** If a definition already exists, the run reuses it — that is how a repeatable task keeps its agents, caps, and Hermes memory. If none exists, the run mints an in-flight fleet and throws the workers away when it finishes. Pinning writes the definition back to git so the next run reuses it. Git is that reflection, not a form you fill in before the first prompt.
+
+**Scale is a concurrency commit:** raise `maxConcurrent` (on-demand) or `replicas` (static). `Policy.maxReplicas` caps blast radius. Workers spawn on request and destroy when idle — memory stays on the agent/fleet bus. With `ROPEX_EXECUTOR=container`, each plan is one session image that every step shares; the image is deleted after learn. Operators pause, drain, run pipelines, and follow Hermes against DeepSeek from CLI or [`ropex ui`](./docs/control-plane-ui.md). The lifetimes are written up in [architecture](./docs/architecture.md#three-lifetimes).
 
 ## Why this exists
 
@@ -85,7 +87,7 @@ npx tsx src/cli.ts health
 | [**Ephemeral sessions**](./docs/ephemeral-sessions.md) | One image per plan. Hermes plans, DeepSeek runs, the session is deleted |
 | [**System architecture (visual)**](./docs/system-architecture.md) | Diagrams — layers, ingress, workflow, state, module map |
 | [**Architecture**](./docs/architecture.md) | Kubernetes mapping, image digests, queue, workflow, executor layer |
-| [**Control-plane UI**](./docs/control-plane-ui.md) | React SPA — live Grafana-style monitoring, Hermes/DeepSeek console, pipeline SSE |
+| [**Control-plane UI**](./docs/control-plane-ui.md) | Now, Run, Plans, Fleet, and Results — follow Hermes against DeepSeek |
 | [**HTTP API**](./docs/api.md) | All `/api/v1/*` routes |
 | [**Executor API**](./docs/executor-api.md) | Pipelines, SSE events, Magentic contract |
 | [**Forge-neutral tasks**](./docs/forge-neutral.md) | Task YAML without GitHub |
@@ -180,9 +182,9 @@ Flow: submit prompt → plan stages → scoped sequential drain → stream `{ ty
 
 See [executor-api.md](./docs/executor-api.md) and [integrations/magentic/README.md](./integrations/magentic/README.md).
 
-The built-in **control-plane UI** — a Vite + React SPA — adds Grafana-style live monitoring, an interactive Hermes ↔ DeepSeek console that streams runs over SSE, and drill-down into trajectories and agent surfaces. See [control-plane-ui.md](./docs/control-plane-ui.md).
+The built-in **control-plane UI** is a Vite + React SPA. **Run** follows Hermes handing each step to DeepSeek. **Plans** shows whether the fleet was reused or minted. **Fleet** keeps the pin and the memory. **Results** is what the plan sent back. See [control-plane-ui.md](./docs/control-plane-ui.md).
 
-![Ropex control-plane dashboard — live monitoring](./docs/img/dashboard-monitor.png)
+![Run — Hermes learning while DeepSeek has finished deliver](./docs/img/dashboard-follow.png)
 
 ## GitHub as optional agent OS
 

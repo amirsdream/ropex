@@ -2,6 +2,12 @@
 
 Nightly capture. Newest first. Each entry should be one shippable idea, not a slogan.
 
+## An interaction reuses a fleet or mints one
+
+`bindFleet` runs at `submitPipeline`. A named fleet, an explicit agent list, or an existing pin is reused. Otherwise the plan mints a working set from the agents already loaded (triage and reviewer when both exist) and pins it for the simple pipeline. The pin is a state record, not a new Agent. `reflect: true` writes `.ropex/pinned/<key>.yaml` for reading; reconcile does not apply that file. The dashboard sidebar is Now, Run, Plans, Fleet, and Results — each one answers where the plan is, how to start it, which fleet it used, or what it produced.
+
+**Shipped:** `src/fleet-bind.ts`, `tests/fleet-bind.test.ts`, view `fleetPins`, and the five-tab control-plane UI.
+
 ## React SPA dashboard — live monitoring + Hermes/DeepSeek console
 
 Replace the vanilla `src/ui` with a modern single-page app in `web/` (Vite + React 19 + TypeScript, Tailwind v4, Recharts, TanStack Query, lucide-react), built to `dist/ui` and served by `ropex ui`. Adds a Grafana-style **Monitor** view (radial gauges + live time-series sampled from `/api/v1/view`), a **Services** view with an interactive console that streams a run stage-by-stage over SSE (Hermes plan → DeepSeek execute → deliver → result), and an **Overview** whose per-task workflow flow is rendered from the real `view.workflow` (ordered stages, phase bands, owners, and live per-stage run counts). Deep-linkable tabs, error boundary, code-split bundle.

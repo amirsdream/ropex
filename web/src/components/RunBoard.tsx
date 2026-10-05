@@ -86,7 +86,14 @@ export function RunBoard({ view }: { view: View }) {
                       <Box size={13} className={active ? "text-teal-300" : "text-slate-500"} />
                       {container ? `ropex-session:${p.id.slice(0, 8)}` : `plan ${p.id.slice(0, 8)}`}
                     </span>
-                    <Badge tone={active ? "teal" : finished ? "muted" : "info"}>{label}</Badge>
+                    <span className="flex items-center gap-1.5">
+                      {p.fleet ? (
+                        <Badge tone={p.fleet.mode === "reuse" ? "ok" : "info"}>
+                          {p.fleet.mode} {p.fleet.name}
+                        </Badge>
+                      ) : null}
+                      <Badge tone={active ? "teal" : finished ? "muted" : "info"}>{label}</Badge>
+                    </span>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     {steps.length === 0 ? (

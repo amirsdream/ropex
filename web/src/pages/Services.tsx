@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { BrainCircuit, Cpu, Play, RotateCcw, Terminal } from "lucide-react";
+import { Play, RotateCcw, Terminal } from "lucide-react";
 import type { View } from "../lib/api";
 import { useStream, type StageView } from "../hooks/useStream";
 import { FollowLanes } from "../components/FollowLanes";
-import { Badge, Button, Empty, KV, Panel, SectionHead } from "../components/ui";
+import { Badge, Button, KV, Panel, SectionHead } from "../components/ui";
 import { cn } from "../lib/cn";
 
 const stageTone: Record<StageView["status"], string> = {
@@ -59,7 +59,8 @@ function ServiceCard({
 
 const SIMPLE_PROMPT = "Say what this control plane does in one sentence, then review that sentence.";
 
-function Console({ container }: { container: boolean }) {
+function Console({ view }: { view: View }) {
+  const container = view.placement?.executor === "container";
   const { state, run, reset } = useStream();
   const [prompt, setPrompt] = useState(SIMPLE_PROMPT);
   const busy = state.status === "planning" || state.status === "running";
@@ -67,8 +68,8 @@ function Console({ container }: { container: boolean }) {
   return (
     <Panel>
       <SectionHead
-        title="Interactive console"
-        sub="Simple pipeline runs triage, then reviewer, on the fleet that is already loaded."
+        title="Run a plan"
+        sub="Hermes writes the plan. DeepSeek runs each step. Hermes keeps what is worth remembering."
         icon={<Terminal size={16} />}
         right={
           <Button size="sm" variant="subtle" onClick={reset} title="Clear">
@@ -94,8 +95,15 @@ function Console({ container }: { container: boolean }) {
             Run prompt
           </Button>
         </div>
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <Badge tone={view.hermesLive.backend === "live" ? "ok" : "muted"}>Hermes {view.hermesLive.backend}</Badge>
+          <Badge tone={view.dsh.backend === "live" ? "ok" : "copper"}>DeepSeek {view.dsh.backend}</Badge>
+          {view.hermes.map((h) => (
+            <Badge key={h.agent} tone="teal">{h.agent}</Badge>
+          ))}
+        </div>
         <p className="mt-2 text-[11px] text-slate-500">
-          Simple pipeline is two stages: triage writes one sentence, reviewer marks it PASS or FAIL. Watch Hermes hand each step to DeepSeek, then take memory back.
+          Simple pipeline is two stages: triage writes one sentence, reviewer marks it PASS or FAIL. The same prompt reuses the pinned agents.
         </p>
         <FollowLanes state={state} />
 
@@ -166,39 +174,14 @@ function Console({ container }: { container: boolean }) {
 }
 
 export function Services({ view }: { view: View }) {
+  const extra = (view.runtimes ?? []).filter((r) => r.kind !== "dsh" && r.ready);
   return (
     <div className="space-y-5">
-      <Console container={view.placement?.executor === "container"} />
+      <Console view={view} />
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <ServiceCard
-          name="Hermes — brain"
-          tone="teal"
-          icon={<BrainCircuit size={20} />}
-          backend={view.hermesLive.backend}
-          ready={view.hermesLive.liveReady}
-          rows={[
-            ["package", view.hermesLive.packageInstalled ? "installed" : "not installed"],
-            ["agents", String(view.hermes.length)],
-            ["role", "compose · plan · learn"],
-          ]}
-        />
-        {(view.runtimes ?? []).map((r) =>
-          r.kind === "dsh" ? (
-            <ServiceCard
-              key={r.kind}
-              name="DeepSeek — harness"
-              tone="copper"
-              icon={<Cpu size={20} />}
-              backend={view.dsh.backend}
-              ready={view.dsh.liveReady}
-              rows={[
-                ["api key", view.dsh.apiKeyPresent ? view.dsh.apiKeySource ?? "none" : "none"],
-                ["profiles", String(view.dsh.profiles.length)],
-                ["role", "execute · deliver"],
-              ]}
-            />
-          ) : (
+      {extra.length > 0 ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          {extra.map((r) => (
             <ServiceCard
               key={r.kind}
               name={r.label}
@@ -213,56 +196,9 @@ export function Services({ view }: { view: View }) {
                 ["role", "execute (autonomous)"],
               ]}
             />
-          ),
-        )}
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Panel>
-          <SectionHead title="Hermes surfaces" sub="soul · skills · memory · share" />
-          <div className="space-y-2 px-5 pb-5">
-            {view.hermes.length === 0 ? <Empty>No agents applied.</Empty> : view.hermes.map((h) => (
-              <div key={h.agent} className="rounded-xl bg-ink-900/50 p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-slate-100">{h.agent}</span>
-                  <Badge tone="teal">{h.memoryBackend}</Badge>
-                </div>
-                <div className="mt-1 text-[11px] text-slate-500">{h.soul}</div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {h.skills.map((s) => (
-                    <Badge key={s} tone="muted">{s}</Badge>
-                  ))}
-                  {h.learning ? <Badge tone="violet">learning</Badge> : null}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
-
-        <Panel>
-          <SectionHead title="Execute surfaces" sub="runtime · profile · model · plugins · tools" />
-          <div className="space-y-2 px-5 pb-5">
-            {view.harness.length === 0 ? <Empty>No agents applied.</Empty> : view.harness.map((h) => (
-              <div key={h.agent} className="rounded-xl bg-ink-900/50 p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-slate-100">{h.agent}</span>
-                  <div className="flex gap-1.5">
-                    <Badge tone={h.runtime === "dsh" ? "copper" : "violet"}>{h.runtime}</Badge>
-                    <Badge tone="copper">{h.profile}</Badge>
-                    <Badge tone="muted">{h.loop}</Badge>
-                  </div>
-                </div>
-                <div className="mt-1 font-mono text-[11px] text-slate-500">{h.model}</div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {h.plugins.map((p) => (
-                    <Badge key={p} tone="info">{p}</Badge>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
-      </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

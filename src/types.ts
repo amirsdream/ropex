@@ -513,6 +513,42 @@ export type PipelineInput = {
   /** Agents the plan was scoped to, when the caller pinned them. */
   agents?: string[];
   at: string;
+  /** Fleet definition this run resolved to. */
+  fleet?: string;
+};
+
+/** Reuse an existing definition, or mint a selection for this interaction only. */
+export type FleetBindingMode = "reuse" | "mint";
+
+/** Remembered agent set for a repeatable task. Stored on cluster state. */
+export type FleetPin = {
+  key: string;
+  fleet: string;
+  agents: string[];
+  prompt: string;
+  at: string;
+  /** Path of the readable copy under `.ropex/pinned`, when one was written. */
+  reflected?: string;
+};
+
+/** Workers an interaction claimed. Closed when the plan finishes. */
+export type InFlightFleet = {
+  id: string;
+  fleet: string;
+  mode: FleetBindingMode;
+  agents: string[];
+  pipelineId: string;
+  status: "open" | "closed";
+  createdAt: string;
+  closedAt?: string;
+};
+
+export type PipelineFleet = {
+  name: string;
+  mode: FleetBindingMode;
+  agents: string[];
+  pinned: boolean;
+  key: string;
 };
 
 /** The Result point: the single terminal outcome of a run. */
@@ -537,6 +573,8 @@ export type PipelineRun = {
   /** Start point — normalized input captured when the run was accepted. */
   input: PipelineInput;
   stages: PipelineStageRun[];
+  /** Definition this interaction reused or minted. */
+  fleet?: PipelineFleet;
   output?: string;
   /** Result point — terminal outcome, set exactly once when the run finishes. */
   result?: PipelineResult;
@@ -606,6 +644,10 @@ export type ClusterState = {
   affinity?: AffinityBinding[];
   /** Durable pipeline runs for external executor clients. */
   pipelines?: PipelineRun[];
+  /** Repeatable task → agent set. The next matching interaction reuses this. */
+  fleetPins?: FleetPin[];
+  /** Fleets raised by an interaction. Closed when that plan finishes. */
+  inflightFleets?: InFlightFleet[];
   lastReconcile?: string;
   /** One-click stack lifecycle (up/down from UI or `ropex up`). */
   stack?: StackRecord;

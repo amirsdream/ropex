@@ -10,23 +10,29 @@ For narrative detail see [architecture.md](./architecture.md). For API contracts
 
 Ropex is a **GitOps control plane for agent fleets**:
 
-- **Git** holds agent definitions, policy caps, tasks, and memory — not warm replica inventory.
-- The **controller** reconciles immutable agent images (content-addressed digests).
-- The **queue** admits work, spawns ephemeral workers on demand, and destroys them when idle.
-- Each task runs a fixed **Hermes → execute → learn** workflow: Hermes plans and learns; the execute stage is `dsh` by default or a declared CLI runtime.
+- **An interaction** (prompt, webhook, task, API) resolves a fleet, then runs it. It reuses a definition when one exists and mints an in-flight fleet when it does not.
+- **Git** is the reflection of fleet definitions — agents, souls, caps, memory — not a warm replica inventory and not a form you must fill in before the first prompt.
+- **A pinned definition** is what makes a task repeatable. The next run reuses that shape and the Hermes memory it already learned. Containers are not what persist.
+- **The controller** reconciles immutable agent images (content-addressed digests).
+- **The queue** admits work, spawns workers on demand, and destroys them when idle. `scale: static` or `idleTTLMs > 0` keeps a pool warm only when spawn cost matters.
+- Each task runs **Hermes → execute → learn**. Hermes plans and learns; the execute stage is `dsh` by default or a declared CLI runtime.
 - **Memory and skills** survive worker death on a scoped shared bus.
 - With `ROPEX_EXECUTOR=container`, the steps of one plan share `ropex-session:<id>`. That image is deleted after learn. See [ephemeral sessions](./ephemeral-sessions.md).
+- `bindFleet` (`src/fleet-bind.ts`) does the reuse-or-mint choice at `submitPipeline`. A pin lives in cluster state. The dashboard shows it on **Fleet** and on each plan.
 
 ```mermaid
 flowchart LR
-  GIT["Git YAML"] --> CTRL["Controller"]
-  CTRL --> STATE[".ropex/state.json"]
-  INGRESS["Work ingress"] --> QUEUE["Queue"]
-  QUEUE --> WORKER["Ephemeral worker"]
-  WORKER --> WF["Hermes + worker runtime"]
-  WF --> DELIVER["Comment / check / PR"]
+  IN["Interaction"] --> BIND{"Reuse or mint"}
+  GIT["Git definitions"] --> BIND
+  BIND --> QUEUE["Queue"]
+  QUEUE --> SESSION["One session per plan"]
+  SESSION --> WF["Hermes + execute"]
   WF --> LEARN["Memory + skills"]
+  WF --> DIE["Delete session"]
+  BIND -->|pin repeatable task| GIT
 ```
+
+Narrative and the shipped-versus-next line: [architecture.md](./architecture.md#three-lifetimes).
 
 ---
 

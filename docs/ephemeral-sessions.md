@@ -133,7 +133,7 @@ Live `dsh` on Node 26 can exit before the model call (`cordis-plugin-hmr` expect
 
 ## Simple pipeline
 
-The Services console has **Simple pipeline**. It does not invent agents. It uses two that are already in the fleet:
+The Run tab has **Simple pipeline**. It does not invent agents. The first run mints triage and reviewer and pins that pair. The next simple run reuses them:
 
 | Step | Agent | Prompt |
 | --- | --- | --- |
@@ -156,13 +156,13 @@ Three places show the same idea.
 
 ![Overview — control plane and deleted sessions for look then check](./img/dashboard-runboard.png)
 
-**Overview → Where a plan runs.** Control plane on the left (facts, plan count, Hermes and harness backend). Recent plans in the middle, named `ropex-session:<id>` when container mode is on, with `look → triage` and `check → reviewer` chips. Scale on the right: live workers against `maxReplicas`, and a pip per agent cap. A plan is "session open" only while a step is running, "session deleted" after it finishes, and "not started" while it is still queued.
+**Now → Where a plan runs.** Control plane on the left (facts, plan count, Hermes and harness backend). Recent plans in the middle, named `ropex-session:<id>` when container mode is on, with a `reuse` or `mint` badge and `look → triage` then `check → reviewer`. Scale on the right: live workers against `maxReplicas`, and a pip per agent cap. A plan is "session open" only while a step is running, "session deleted" after it finishes, and "not started" while it is still queued.
 
-![Queue — plans with look to triage and check to reviewer](./img/dashboard-plans.png)
+![Plans — reuse or mint, look to triage and check to reviewer](./img/dashboard-plans.png)
 
-**Queue → Plans.** One row is one plan. Chips are `step → agent`.
+**Plans.** One row is one plan. The badge says whether the fleet was reused or minted. Chips are `step → agent`.
 
-**Services → Follow.** A live strip. The token moves `plan → execute → deliver → learn`. Hermes lights up for plan and learn. DeepSeek harness lights up for execute and deliver. Beats are revealed about twice a second so a container, which emits its log in one burst at the end, is still readable. In-process runs stream as they happen.
+**Run → Follow.** A live strip. The token moves `plan → execute → deliver → learn`. Hermes lights up for plan and learn. DeepSeek harness lights up for execute and deliver. The first beat of a plan says `reuse fleet <name>` or `mint fleet <name>`. Beats are revealed about twice a second so a container, which emits its log in one burst at the end, is still readable. In-process runs stream as they happen.
 
 ## Files
 
@@ -170,13 +170,14 @@ Three places show the same idea.
 | --- | --- |
 | `src/session.ts` | Build, run, copy memory out, delete the session |
 | `src/session-run.ts` | In-container execution of the request snapshot |
+| `src/fleet-bind.ts` | Reuse a pin or mint a working set at submit |
 | `src/executor.ts` | Host drain, then replay of stage events onto SSE |
 | `src/runtime.ts` | plan / thought / tool / observation / deliver / learn progress |
 | `Containerfile` | Control-plane image. Sets `ROPEX_EXECUTOR=container` |
 | `Containerfile.worker` | Base image. Forces in-process execution |
 | `docker-compose.yml`, `podman-compose.yml` | Build the base, then run the control plane |
 | `web/src/components/RunBoard.tsx` | Overview placement board |
-| `web/src/components/FollowLanes.tsx` | Services follow strip |
+| `web/src/components/FollowLanes.tsx` | Run tab follow strip |
 | `web/src/hooks/useStream.ts` | SSE client that classifies each beat |
 
 ## Sessions and sandboxes

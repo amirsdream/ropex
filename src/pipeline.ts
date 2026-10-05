@@ -161,8 +161,8 @@ export const SIMPLE_PIPELINE_PROMPT =
  * Prefers triage → reviewer. Falls back to the first agent, then a second
  * distinct agent when one exists. One stage when the fleet has a single agent.
  */
-export function simplePipelinePlan(state: ClusterState): PipelineStagePlan[] {
-  const agents = state.desired.map((a) => a.metadata.name);
+export function simplePipelinePlan(state: ClusterState, preferred?: string[]): PipelineStagePlan[] {
+  const agents = preferred?.length ? preferred : state.desired.map((a) => a.metadata.name);
   const first = agents.find((a) => a === "triage") ?? agents[0] ?? "default";
   const second =
     agents.find((a) => a === "reviewer" && a !== first) ?? agents.find((a) => a !== first);

@@ -494,8 +494,17 @@ export type ControlPlaneView = {
       doneStages: number;
       updatedAt: string;
       steps: Array<{ id: string; agent: string; status: string }>;
+      fleet?: { name: string; mode: "reuse" | "mint"; pinned: boolean };
     }>;
   };
+  /** Agent sets remembered for a repeatable prompt. */
+  fleetPins: Array<{
+    key: string;
+    fleet: string;
+    agents: string[];
+    prompt: string;
+    at: string;
+  }>;
   /** Where a plan runs, and how many workers the fleet is allowed to create. */
   placement: {
     executor: "container" | "inprocess";
