@@ -4,7 +4,7 @@ import { composeBrief } from "./brief.js";
 import { createHermes, bootHermes } from "./hermes.js";
 import { buildAgentImage, type ImageResolveOptions } from "./image.js";
 import { recordDelivery } from "./journal.js";
-import { SharedMemoryStore } from "./memory.js";
+import { canWrite, SharedMemoryStore } from "./memory.js";
 import { registerSkill, skillsForAgent } from "./skills.js";
 import { maybeExportRememberedFact } from "./gitmemory.js";
 import { isOnDemandAgent } from "./scale.js";
@@ -271,9 +271,10 @@ async function executeTask(
     worker.skills = [...new Set([...worker.skills, learned.name])];
     registerSkill(state, learned, `via ${runtimeAdapter.pack.profile} pack on ${runtimeAdapter.runtime}`);
   }
-  // Prefer durable scopes for on-demand agents — worker ids do not survive destroy.
+  // Prefer a durable scope for on-demand agents — worker ids do not survive destroy.
+  // memory: none only allows worker writes, so keep that scope instead of failing the task.
   let rememberScope: MemoryScope = hermes.port.context.policy.write;
-  if (isOnDemandAgent(agent) && rememberScope === "worker") {
+  if (isOnDemandAgent(agent) && rememberScope === "worker" && canWrite("agent", hermes.port.context)) {
     rememberScope = "agent";
   }
   const remembered = hermes.remember({
