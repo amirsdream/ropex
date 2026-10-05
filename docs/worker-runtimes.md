@@ -66,6 +66,8 @@ spec:
     # command: /usr/local/bin/claude       # override the binary
     # commandArgs: [claude]                # prefix args, e.g. for `npx claude`
     # requireEnv: [GH_TOKEN]               # extra env that must be present
+    # auth: api-key                        # api-key | oauth | oauth-file
+    # baseUrl: https://api.openai.com/v1   # codex api-key only
   harness:
     profile: code
     plugins: [fs, shell, github]
@@ -115,10 +117,35 @@ Three rules:
    restated in the brief as explicit prohibitions. Treating them as hard failures
    would be stricter than `dsh` and would break policies that ship today.
 
-Every CLI runtime also refuses to boot without credentials
-(`ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN`, `OPENAI_API_KEY` /
-`CODEX_API_KEY`, `GITHUB_TOKEN` / `COPILOT_CLI_TOKEN` / `GH_TOKEN`) or a
-resolvable binary.
+Every CLI runtime refuses to boot without a resolvable binary and one auth
+strategy. The fleet names the method in `spec.runtime.auth`. It never carries
+a key, a token, or a host path. When `auth` is omitted and exactly one strategy
+has credentials, that strategy is used. When more than one does, boot fails
+and asks for `spec.runtime.auth`.
+
+| Runtime | `api-key` | `oauth` | `oauth-file` |
+| --- | --- | --- | --- |
+| `claude-code` | `ANTHROPIC_API_KEY` | `CLAUDE_CODE_OAUTH_TOKEN` | — |
+| `codex` | `OPENAI_API_KEY` or `CODEX_API_KEY` | — | `~/.codex/auth.json`, or `ROPEX_AUTH_FILE_CODEX` |
+| `copilot` | `GITHUB_TOKEN`, `COPILOT_CLI_TOKEN`, or `GH_TOKEN` | — | — |
+
+Env strategies forward the selected variable by name. Claude and Copilot read
+those variables themselves, so auth adds no flags. Codex `api-key` also selects
+an HTTPS provider (`env_key` is the variable name, `supports_websockets=false`)
+because the default provider reads `~/.codex/auth.json` and opens a websocket
+that rejects an API key. `spec.runtime.baseUrl` overrides that provider's base
+URL. The default is `https://api.openai.com/v1`. The key stays in the
+environment. It is not written into the container, so a snapshot cannot
+capture it.
+
+Codex `oauth-file` does not rewrite the provider. On the host, Codex reads its
+usual login file. In Docker the credential directory is bind-mounted read-only
+at `/run/ropex/auth/codex` and `CODEX_HOME` points there. The file must be named
+`auth.json`. A bind mount is not part of `docker commit`.
+
+A later CLI, including Cursor, is the same record: declare which of these three
+methods it accepts and what `applyAuth` forwards. Do not put a provider URL or
+an env-var name on the shared boot path.
 
 ## Flag accuracy
 
@@ -138,19 +165,15 @@ interfaces for the others:
 - Inside a Ropex container, Codex uses `--sandbox danger-full-access`. The
   container is created with `no-new-privileges`, so Codex's own `workspace-write`
   namespace cannot be created and both shell and file writes fail. A policy
-  that denies `fs` or `shell` still selects `--sandbox read-only`.
-- Codex's default provider reads `~/.codex/auth.json` and connects to the
-  Responses websocket. A container has no login file, and that websocket
-  rejects an API key. Headless runs instead set a provider whose `env_key` is
-  `OPENAI_API_KEY` or `CODEX_API_KEY`, with `supports_websockets=false`, so the
-  call goes to `https://api.openai.com/v1/responses`. The key stays in the
-  environment. It is not written into the container, so a snapshot cannot
-  capture it.
+  that denies `fs` or `shell` still selects `--sandbox read-only`. A host run
+  stays on `workspace-write`. Claude and Copilot keep their own permission
+  flags; the container hook is per runtime.
 
-The `claude-code` descriptor is verified against a live binary. The `codex` and
-`copilot` descriptors follow the published non-interactive flags (`codex exec`,
-`copilot -p --allow-all-tools`) but have not been exercised against an installed
-binary — check `ropex runtimes` and a single task before trusting them in a fleet.
+The `claude-code` descriptor is verified against a live binary. Codex `api-key`
+inside Docker was exercised against `@openai/codex`. The `copilot` descriptor
+follows the published non-interactive flags (`copilot -p --allow-all-tools`)
+and has not been exercised against an installed binary — check `ropex runtimes`
+and a single task before trusting it in a fleet.
 
 A CLI that reports failure in its payload while exiting 0 (Claude Code's
 `is_error`) is treated as a failed run, not a successful one with odd output.
@@ -158,9 +181,9 @@ A CLI that reports failure in its payload while exiting 0 (Claude Code's
 ## Adding another CLI
 
 Each CLI is one declarative record in `src/cli-runtimes.ts` — `argv`,
-`permissions`, `parse` — plus one member of `WorkerRuntimeKind` in
-`src/types.ts`. No new machinery. Flags move between CLI releases; keeping them
-in one table is what makes that a one-line fix.
+`permissions`, `containerArgs`, `auth`, `applyAuth`, `parse` — plus one member
+of `WorkerRuntimeKind` in `src/types.ts`. No new machinery. Flags move between
+CLI releases; keeping them in one table is what makes that a one-line fix.
 
 ## A note on `command`
 

@@ -9,7 +9,10 @@
  * keeps it unit-testable with no network and no API keys.
  */
 
-import type { WorkerRuntimeKind } from "./types.js";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { basename, dirname, join, resolve } from "node:path";
+import type { RuntimeAuthMethod, WorkerRuntimeKind } from "./types.js";
 
 export type CliRuntimeKind = Exclude<WorkerRuntimeKind, "dsh">;
 
@@ -22,18 +25,13 @@ export type CliArgvInput = {
   cwd: string;
   /** Flags produced by `permissions()` for this run. */
   permissionArgs: string[];
-  /**
-   * Name of the env var that holds the API key (`OPENAI_API_KEY`, …).
-   * Codex's default provider ignores this variable and reads `~/.codex/auth.json`.
-   */
-  apiKeyEnv?: string;
+  /** Flags from the selected auth strategy. Placement is per CLI. */
+  authArgs?: string[];
 };
 
 export type PolicyInput = {
   deny: string[];
   requireApproval: string[];
-  /** Already inside a Ropex container. Codex must not start a nested sandbox. */
-  isolated?: boolean;
 };
 
 export type PermissionPlan = {
@@ -54,12 +52,79 @@ export type PermissionPlan = {
   advisory: string[];
 };
 
+/**
+ * One way this CLI can authenticate.
+ * `env` strategies forward a variable by name. `oauth-file` reads a host file
+ * and, inside Docker, bind-mounts its directory read-only.
+ */
+export type RuntimeAuthStrategy = {
+  method: RuntimeAuthMethod;
+  /** Env vars that satisfy this strategy. The first one set is selected. */
+  env: string[];
+  /** Host credential file. `~` is the home directory. */
+  defaultFile?: string;
+  /** Env var whose value replaces `defaultFile`. */
+  fileEnv?: string;
+  /** Container directory that receives the credential directory. */
+  mountTarget?: string;
+  /** Set to the mount target so the CLI reads that directory. Not a secret. */
+  homeEnv?: string;
+};
+
+export type AuthProbe = {
+  env: NodeJS.ProcessEnv;
+  fileExists: (path: string) => boolean;
+  homedir: () => string;
+};
+
+export type SelectedAuth = {
+  method: RuntimeAuthMethod;
+  /** Chosen env var, for an env strategy. */
+  envName?: string;
+  /** Host credential file, for `oauth-file`. */
+  hostFile?: string;
+};
+
+export type AuthApplyInput = SelectedAuth & {
+  baseUrl?: string;
+  /** Execute is already inside a Ropex container. */
+  container: boolean;
+  /** Home directory for host credential paths. Defaults to the process home. */
+  homeDir?: string;
+};
+
+export type AuthMount = {
+  source: string;
+  target: string;
+};
+
+/** What boot forwards and which argv the strategy adds. */
+export type AuthApply = {
+  args: string[];
+  /** Secret env names to forward into an isolate. Values stay off argv. */
+  env: string[];
+  /** Non-secret env for this run, such as `CODEX_HOME` inside the container. */
+  injectEnv: Record<string, string>;
+  /** Read-only bind for `docker run`. Absent on the host and for env strategies. */
+  mount?: AuthMount;
+};
+
+export type PreparedRuntimeAuth = {
+  method: RuntimeAuthMethod;
+  args: string[];
+  env: string[];
+  injectEnv: Record<string, string>;
+  mount?: AuthMount;
+};
+
 export type CliRuntimeDescriptor = {
   kind: CliRuntimeKind;
   /** Default binary name, resolved on PATH unless `spec.runtime.command` overrides it. */
   bin: string;
-  /** Any one of these env vars present ⇒ the runtime has credentials. */
+  /** Env vars gathered from the auth strategies. First match wins for probes. */
   credentialEnv: string[];
+  /** Auth strategies this CLI accepts, in selection order. */
+  auth: RuntimeAuthStrategy[];
   defaultModel?: string;
   label: string;
   docsUrl: string;
@@ -70,6 +135,13 @@ export type CliRuntimeDescriptor = {
   promptChannel: PromptChannel;
   argv(input: CliArgvInput): string[];
   permissions(policy: PolicyInput): PermissionPlan;
+  /**
+   * Extra argv when execute already runs inside a Ropex container.
+   * Replaces a same-named flag from `permissions()` (Codex `--sandbox`).
+   */
+  containerArgs(policy: PolicyInput): string[];
+  /** Turn the selected strategy into argv, env names, and an optional mount. */
+  applyAuth(input: AuthApplyInput): AuthApply;
   /**
    * `isError` covers CLIs that report failure in their payload while still
    * exiting 0 — the adapter must not read that as a successful run.
@@ -184,21 +256,39 @@ function jsonLines(stdout: string): Array<Record<string, unknown>> {
   return out;
 }
 
+export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
+
+/** Container directory for a Codex login file. Bind-mounted, so a snapshot omits it. */
+export const CODEX_AUTH_MOUNT = "/run/ropex/auth/codex";
+
+export function isHttpsBaseUrl(value: string): boolean {
+  if (value.includes('"') || /\s/.test(value)) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.username === "" && url.password === "";
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Codex's default provider reads `~/.codex/auth.json` and uses the Responses
- * websocket. A sandbox has no login file, and that websocket rejects an API
- * key that HTTPS accepts. These `-c` overrides select a provider that reads
- * the named env var and speaks HTTPS. The value of the key is not in argv.
+ * Codex `api-key` strategy. The default provider reads `~/.codex/auth.json`
+ * and opens the Responses websocket, which rejects an API key. These `-c`
+ * overrides select a provider that reads the named env var and speaks HTTPS.
+ * The value of the key is not in argv.
  */
-export function codexApiKeyConfig(envName: string): string[] {
+export function codexApiKeyConfig(envName: string, baseUrl = DEFAULT_OPENAI_BASE_URL): string[] {
   if (!/^[A-Z][A-Z0-9_]*$/.test(envName)) {
     throw new Error(`codex api key env name is not an environment variable: ${envName}`);
+  }
+  if (!isHttpsBaseUrl(baseUrl)) {
+    throw new Error(`runtime.baseUrl must be an https URL without embedded credentials`);
   }
   const provider = "ropex";
   const pairs: Array<[string, string]> = [
     ["model_provider", `"${provider}"`],
     [`model_providers.${provider}.name`, '"Ropex OpenAI"'],
-    [`model_providers.${provider}.base_url`, '"https://api.openai.com/v1"'],
+    [`model_providers.${provider}.base_url`, `"${baseUrl}"`],
     [`model_providers.${provider}.env_key`, `"${envName}"`],
     [`model_providers.${provider}.wire_api`, '"responses"'],
     [`model_providers.${provider}.requires_openai_auth`, "false"],
@@ -207,11 +297,204 @@ export function codexApiKeyConfig(envName: string): string[] {
   return pairs.flatMap(([key, value]) => ["-c", `${key}=${value}`]);
 }
 
+export function authProbe(
+  env: NodeJS.ProcessEnv,
+  extra: { fileExists?: (path: string) => boolean; homedir?: () => string } = {},
+): AuthProbe {
+  return {
+    env,
+    fileExists: extra.fileExists ?? existsSync,
+    homedir: extra.homedir ?? homedir,
+  };
+}
+
+function expandHome(path: string, home: string): string {
+  if (path === "~") return home;
+  if (path.startsWith("~/")) return join(home, path.slice(2));
+  return path;
+}
+
+function assertCodexAuthFile(path: string): void {
+  if (basename(path) !== "auth.json") {
+    throw new Error(`codex credential file must be named auth.json: ${path}`);
+  }
+}
+
+function strategyHint(strategy: RuntimeAuthStrategy): string {
+  if (strategy.env.length) return `Set one of: ${strategy.env.join(", ")}.`;
+  const file = strategy.defaultFile ?? "a credential file";
+  const override = strategy.fileEnv ? `, or set ${strategy.fileEnv}` : "";
+  return `Provide ${file}${override}.`;
+}
+
+function missingAuthMessage(descriptor: CliRuntimeDescriptor): string {
+  const parts = descriptor.auth.map((strategy) => {
+    if (strategy.method === "oauth-file") {
+      return `${strategy.defaultFile ?? "credential file"} (${strategy.method})`;
+    }
+    return `${strategy.env.join(" or ")} (${strategy.method})`;
+  });
+  return `${descriptor.label} requires one of: ${parts.join("; ")}`;
+}
+
+function strategyMaterial(strategy: RuntimeAuthStrategy, probe: AuthProbe): SelectedAuth | undefined {
+  if (strategy.method === "oauth-file") {
+    const override = strategy.fileEnv ? probe.env[strategy.fileEnv]?.trim() : undefined;
+    if (override) {
+      if (!probe.fileExists(override)) {
+        throw new Error(`${strategy.fileEnv} points at ${override}, which is not a file`);
+      }
+      assertCodexAuthFile(override);
+      return { method: strategy.method, hostFile: override };
+    }
+    if (!strategy.defaultFile) return undefined;
+    const path = expandHome(strategy.defaultFile, probe.homedir());
+    if (!probe.fileExists(path)) return undefined;
+    assertCodexAuthFile(path);
+    return { method: strategy.method, hostFile: path };
+  }
+  const envName = strategy.env.find((name) => probe.env[name]?.trim());
+  if (!envName) return undefined;
+  return { method: strategy.method, envName };
+}
+
+/**
+ * Pick one auth strategy.
+ * An explicit `spec.runtime.auth` must have its material.
+ * With no request, exactly one available strategy is used.
+ * More than one available strategy fails until the fleet names one.
+ */
+export function selectRuntimeAuth(
+  descriptor: CliRuntimeDescriptor,
+  requested: RuntimeAuthMethod | undefined,
+  probe: AuthProbe,
+): SelectedAuth {
+  if (requested) {
+    const strategy = descriptor.auth.find((item) => item.method === requested);
+    if (!strategy) {
+      const supported = descriptor.auth.map((item) => item.method).join(" | ") || "none";
+      throw new Error(
+        `${descriptor.label} does not support auth ${requested} (expected ${supported})`,
+      );
+    }
+    const material = strategyMaterial(strategy, probe);
+    if (!material) {
+      throw new Error(
+        `${descriptor.label} auth ${requested} has no credentials. ${strategyHint(strategy)}`,
+      );
+    }
+    return material;
+  }
+  const ready: SelectedAuth[] = [];
+  for (const strategy of descriptor.auth) {
+    const material = strategyMaterial(strategy, probe);
+    if (material) ready.push(material);
+  }
+  if (ready.length === 1) return ready[0];
+  if (ready.length === 0) throw new Error(missingAuthMessage(descriptor));
+  throw new Error(
+    `${descriptor.label} has more than one auth method available (${ready.map((item) => item.method).join(", ")}). Set spec.runtime.auth.`,
+  );
+}
+
+/** Host Codex reads `~/.codex/auth.json` unless the file lives somewhere else. */
+function hostCodexHome(hostFile: string, homeDir: string): Record<string, string> {
+  const home = dirname(resolve(hostFile));
+  const standard = resolve(join(homeDir, ".codex"));
+  if (home === standard) return {};
+  return { CODEX_HOME: home };
+}
+
+const CODEX_OAUTH_FILE: RuntimeAuthStrategy = {
+  method: "oauth-file",
+  env: [],
+  defaultFile: "~/.codex/auth.json",
+  fileEnv: "ROPEX_AUTH_FILE_CODEX",
+  mountTarget: CODEX_AUTH_MOUNT,
+  homeEnv: "CODEX_HOME",
+};
+
+function codexApplyAuth(input: AuthApplyInput): AuthApply {
+  if (input.method === "api-key") {
+    if (!input.envName) throw new Error("codex api-key auth requires an environment variable");
+    return {
+      args: codexApiKeyConfig(input.envName, input.baseUrl),
+      env: [input.envName],
+      injectEnv: {},
+    };
+  }
+  if (input.method === "oauth-file") {
+    if (input.baseUrl) throw new Error("runtime.baseUrl applies to codex auth api-key");
+    if (!input.hostFile) throw new Error("codex oauth-file auth requires a credential file");
+    const homeEnv = CODEX_OAUTH_FILE.homeEnv ?? "CODEX_HOME";
+    const target = CODEX_OAUTH_FILE.mountTarget ?? CODEX_AUTH_MOUNT;
+    if (!input.container) {
+      return { args: [], env: [], injectEnv: hostCodexHome(input.hostFile, input.homeDir ?? homedir()) };
+    }
+    return {
+      args: [],
+      env: [],
+      injectEnv: { [homeEnv]: target },
+      mount: { source: dirname(input.hostFile), target },
+    };
+  }
+  throw new Error(`codex has no ${input.method} auth`);
+}
+
+function envApplyAuth(label: string, input: AuthApplyInput): AuthApply {
+  if (input.baseUrl) throw new Error("runtime.baseUrl applies to codex auth api-key");
+  if (input.method === "oauth-file") throw new Error(`${label} does not support auth oauth-file`);
+  if (!input.envName) throw new Error(`${label} auth ${input.method} requires an environment variable`);
+  return { args: [], env: [input.envName], injectEnv: {} };
+}
+
+function mergeContainerArgs(args: string[], extra: string[]): string[] {
+  if (!extra.length) return args;
+  const next = [...args];
+  const consumed = new Set<number>();
+  for (let i = 0; i < extra.length; i++) {
+    const flag = extra[i];
+    if (!flag.startsWith("--")) continue;
+    const value = extra[i + 1];
+    const hasValue = value !== undefined && !value.startsWith("-");
+    const idx = next.indexOf(flag);
+    if (idx !== -1 && (!hasValue || idx + 1 < next.length)) {
+      if (hasValue) next[idx + 1] = value;
+      consumed.add(i);
+      if (hasValue) consumed.add(i + 1);
+    }
+    if (hasValue) i += 1;
+  }
+  const tail = extra.filter((_, index) => !consumed.has(index));
+  return tail.length ? [...next, ...tail] : next;
+}
+
+/** Permission flags for a host run, or for a run that is already inside a container. */
+export function permissionPlan(
+  descriptor: CliRuntimeDescriptor,
+  policy: PolicyInput,
+  opts: { container: boolean },
+): PermissionPlan {
+  const plan = descriptor.permissions(policy);
+  if (!opts.container) return plan;
+  return { ...plan, args: mergeContainerArgs(plan.args, descriptor.containerArgs(policy)) };
+}
+
+function cliDescriptor(record: Omit<CliRuntimeDescriptor, "credentialEnv">): CliRuntimeDescriptor {
+  return {
+    ...record,
+    credentialEnv: record.auth.flatMap((strategy) => strategy.env),
+  };
+}
+
 export const CLI_RUNTIMES: Record<CliRuntimeKind, CliRuntimeDescriptor> = {
-  "claude-code": {
+  "claude-code": cliDescriptor({
     kind: "claude-code",
     bin: "claude",
-    credentialEnv: ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"],
+    auth: [
+      { method: "api-key", env: ["ANTHROPIC_API_KEY"] },
+      { method: "oauth", env: ["CLAUDE_CODE_OAUTH_TOKEN"] },
+    ],
     label: "Claude Code CLI",
     docsUrl: "https://docs.claude.com/en/docs/claude-code/cli-reference",
     // `-p` is boolean (--print). The brief goes on stdin so large souls do not
@@ -237,6 +520,12 @@ export const CLI_RUNTIMES: Record<CliRuntimeKind, CliRuntimeDescriptor> = {
       // which would silently enforce no gate at all. Keep it last in argv.
       if (patterns.length) args.push("--disallowedTools", ...patterns);
       return { args, unmappable, advisory };
+    },
+    containerArgs() {
+      return [];
+    },
+    applyAuth(input) {
+      return envApplyAuth("Claude Code CLI", input);
     },
     parse(stdout, stderr) {
       // `--output-format json` emits a single result envelope.
@@ -264,37 +553,37 @@ export const CLI_RUNTIMES: Record<CliRuntimeKind, CliRuntimeDescriptor> = {
       }
       return textFallback(stdout, stderr);
     },
-  },
+  }),
 
-  codex: {
+  codex: cliDescriptor({
     kind: "codex",
     bin: "codex",
-    credentialEnv: ["OPENAI_API_KEY", "CODEX_API_KEY"],
+    auth: [
+      { method: "api-key", env: ["OPENAI_API_KEY", "CODEX_API_KEY"] },
+      CODEX_OAUTH_FILE,
+    ],
     label: "Codex CLI",
     docsUrl: "https://developers.openai.com/codex/cli",
     // `codex exec` reads the prompt from stdin when the positional is omitted.
     promptChannel: "stdin",
-    argv({ model, cwd, permissionArgs, apiKeyEnv }) {
+    argv({ model, cwd, permissionArgs, authArgs }) {
       return [
         "exec",
         "--json",
         "--cd",
         cwd,
         ...(model ? ["--model", model] : []),
-        ...(apiKeyEnv ? codexApiKeyConfig(apiKeyEnv) : []),
+        ...(authArgs ?? []),
         ...permissionArgs,
       ];
     },
     permissions(policy) {
       const { toolDenies, advisory } = classifyPolicy(policy);
-      // Codex gates by sandbox level, not per tool.
+      // Codex gates by sandbox level, not per tool. A host run uses
+      // workspace-write. A container replaces that via containerArgs.
       const blocksWrite = toolDenies.some((t) => t === "fs" || t === "str_replace_editor");
       const blocksShell = toolDenies.some((t) => t === "shell" || t === "bash");
-      // workspace-write uses a user namespace. The container already sets
-      // no-new-privileges, so that namespace cannot be created. The container
-      // is the sandbox; Codex writes directly in it.
-      const sandbox =
-        blocksWrite || blocksShell ? "read-only" : policy.isolated ? "danger-full-access" : "workspace-write";
+      const sandbox = blocksWrite || blocksShell ? "read-only" : "workspace-write";
       const expressible = new Set(["fs", "str_replace_editor", "shell", "bash", "memory"]);
       const unmappable = toolDenies.filter((t) => !expressible.has(t));
       // `approval_policy=never` is required for headless exec — without it a
@@ -305,6 +594,16 @@ export const CLI_RUNTIMES: Record<CliRuntimeKind, CliRuntimeDescriptor> = {
         advisory,
       };
     },
+    containerArgs(policy) {
+      const { toolDenies } = classifyPolicy(policy);
+      const blocksWrite = toolDenies.some((t) => t === "fs" || t === "str_replace_editor");
+      const blocksShell = toolDenies.some((t) => t === "shell" || t === "bash");
+      // workspace-write needs a user namespace. The container sets
+      // no-new-privileges, so that namespace cannot be created.
+      if (blocksWrite || blocksShell) return [];
+      return ["--sandbox", "danger-full-access"];
+    },
+    applyAuth: codexApplyAuth,
     parse(stdout, stderr) {
       const events = jsonLines(stdout);
       const messages: string[] = [];
@@ -317,12 +616,12 @@ export const CLI_RUNTIMES: Record<CliRuntimeKind, CliRuntimeDescriptor> = {
       }
       return textFallback(stdout, stderr);
     },
-  },
+  }),
 
-  copilot: {
+  copilot: cliDescriptor({
     kind: "copilot",
     bin: "copilot",
-    credentialEnv: ["GITHUB_TOKEN", "COPILOT_CLI_TOKEN", "GH_TOKEN"],
+    auth: [{ method: "api-key", env: ["GITHUB_TOKEN", "COPILOT_CLI_TOKEN", "GH_TOKEN"] }],
     label: "GitHub Copilot CLI",
     docsUrl: "https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli",
     // Programmatic mode requires `-p <prompt>` as a flag value (not a boolean).
@@ -349,10 +648,16 @@ export const CLI_RUNTIMES: Record<CliRuntimeKind, CliRuntimeDescriptor> = {
       ];
       return { args, unmappable, advisory };
     },
+    containerArgs() {
+      return [];
+    },
+    applyAuth(input) {
+      return envApplyAuth("GitHub Copilot CLI", input);
+    },
     parse(stdout, stderr) {
       return textFallback(stdout, stderr);
     },
-  },
+  }),
 };
 
 export function cliRuntime(kind: CliRuntimeKind): CliRuntimeDescriptor {

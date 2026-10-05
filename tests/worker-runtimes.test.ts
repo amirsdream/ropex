@@ -7,6 +7,7 @@ import {
   CLI_RUNTIMES,
   classifyPolicy,
   isKnownRopexTool,
+  permissionPlan,
 } from "../src/cli-runtimes.ts";
 import { API_ROUTES } from "../src/contracts.ts";
 import { emptyState, saveState, loadState } from "../src/controller.ts";
@@ -67,11 +68,16 @@ describe("cli runtime descriptors", () => {
     expect(argv).not.toContain("do the thing");
   });
 
-  it("points codex at the API key over HTTPS instead of the login websocket", () => {
+  it("points codex api-key auth at HTTPS and leaves the key off argv", () => {
+    const applied = CLI_RUNTIMES.codex.applyAuth({
+      method: "api-key",
+      envName: "OPENAI_API_KEY",
+      container: true,
+    });
     const argv = CLI_RUNTIMES.codex.argv({
       prompt: "do the thing",
       cwd: "/wt",
-      apiKeyEnv: "OPENAI_API_KEY",
+      authArgs: applied.args,
       permissionArgs: ["--sandbox", "workspace-write", "-c", "approval_policy=never"],
     });
     expect(argv).toContain('model_provider="ropex"');
@@ -79,6 +85,7 @@ describe("cli runtime descriptors", () => {
     expect(argv).toContain('model_providers.ropex.base_url="https://api.openai.com/v1"');
     expect(argv).toContain("model_providers.ropex.supports_websockets=false");
     expect(argv).toContain("model_providers.ropex.requires_openai_auth=false");
+    expect(applied.env).toEqual(["OPENAI_API_KEY"]);
     expect(argv.join(" ")).not.toContain("sk-");
   });
 
@@ -134,13 +141,13 @@ describe("policy translation", () => {
     expect(open.args).toEqual(["--sandbox", "workspace-write", "-c", "approval_policy=never"]);
     const locked = CLI_RUNTIMES.codex.permissions({ deny: ["shell"], requireApproval: [] });
     expect(locked.args).toEqual(["--sandbox", "read-only", "-c", "approval_policy=never"]);
-    const inside = CLI_RUNTIMES.codex.permissions({ deny: [], requireApproval: [], isolated: true });
+    const inside = permissionPlan(CLI_RUNTIMES.codex, { deny: [], requireApproval: [] }, { container: true });
     expect(inside.args).toEqual(["--sandbox", "danger-full-access", "-c", "approval_policy=never"]);
-    const insideLocked = CLI_RUNTIMES.codex.permissions({
-      deny: ["fs"],
-      requireApproval: [],
-      isolated: true,
-    });
+    const insideLocked = permissionPlan(
+      CLI_RUNTIMES.codex,
+      { deny: ["fs"], requireApproval: [] },
+      { container: true },
+    );
     expect(insideLocked.args).toEqual(["--sandbox", "read-only", "-c", "approval_policy=never"]);
   });
 
@@ -276,10 +283,13 @@ describe("runtime scaffold", () => {
     expect(claude?.credentialSource).toBe("ANTHROPIC_API_KEY");
     expect(claude?.ready).toBe(true);
 
-    const noKey = workerRuntimeScaffold({
-      PATH: "",
-      ROPEX_RUNTIME_BIN_CODEX: process.execPath,
-    }).find((s) => s.kind === "codex");
+    const noKey = workerRuntimeScaffold(
+      {
+        PATH: "",
+        ROPEX_RUNTIME_BIN_CODEX: process.execPath,
+      },
+      { fileExists: () => false },
+    ).find((s) => s.kind === "codex");
     expect(noKey?.binPresent).toBe(true);
     expect(noKey?.ready).toBe(false);
     expect(noKey?.hint).toMatch(/OPENAI_API_KEY/);
@@ -305,6 +315,11 @@ describe("image digest", () => {
       spec: { ...agent.spec, runtime: { kind: "codex" } },
     }).digest;
     expect(new Set([dsh, claude, codex]).size).toBe(3);
+    const authed = buildAgentImage({
+      ...agent,
+      spec: { ...agent.spec, runtime: { kind: "codex", auth: "api-key", baseUrl: "https://api.openai.com/v1" } },
+    }).digest;
+    expect(authed).not.toBe(codex);
   });
 });
 
@@ -337,6 +352,24 @@ ${specLines}
     expect(() => parseManifests(agentWith("  runtime:\n    kind: nope"))).toThrow(
       /unsupported runtime.kind "nope"/,
     );
+  });
+
+  it("rejects an auth method the runtime does not support", () => {
+    expect(() => parseManifests(agentWith("  runtime:\n    kind: claude-code\n    auth: oauth-file"))).toThrow(
+      /not supported by claude-code/,
+    );
+    expect(() => parseManifests(agentWith("  runtime:\n    kind: dsh\n    auth: api-key"))).toThrow(
+      /does not apply to dsh/,
+    );
+    expect(() => parseManifests(agentWith("  runtime:\n    kind: codex\n    auth: token"))).toThrow(
+      /unsupported runtime.auth "token"/,
+    );
+    expect(() =>
+      parseManifests(agentWith("  runtime:\n    kind: claude-code\n    baseUrl: https://api.openai.com/v1")),
+    ).toThrow(/runtime.baseUrl applies to codex auth api-key/);
+    expect(() =>
+      parseManifests(agentWith("  runtime:\n    kind: codex\n    auth: oauth-file\n    baseUrl: https://example.com/v1")),
+    ).toThrow(/runtime.baseUrl applies to codex auth api-key/);
   });
 
   it("rejects commandArgs without command", () => {

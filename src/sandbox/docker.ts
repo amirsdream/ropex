@@ -135,6 +135,16 @@ function createArgs(opts: {
     }
     args.push("--mount", `type=bind,source=${opts.mountSource},target=${SANDBOX_WORKDIR}`);
   }
+  for (const mount of ctx.authMounts ?? []) {
+    if (!mount.source || !mount.target) throw new Error("auth mount needs a source and a target");
+    if (mount.source.includes(",") || mount.target.includes(",")) {
+      throw new Error(`auth mount path cannot contain a comma: ${mount.source}`);
+    }
+    if (!mount.target.startsWith("/run/ropex/auth/")) {
+      throw new Error(`auth mount target must be under /run/ropex/auth: ${mount.target}`);
+    }
+    args.push("--mount", `type=bind,source=${mount.source},target=${mount.target},readonly`);
+  }
   args.push(opts.image, "-c", KEEPALIVE);
   return args;
 }

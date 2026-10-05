@@ -68,6 +68,7 @@ spec:
   replicas: 1
   runtime:
     kind: ${kind}
+    auth: api-key
     command: ${JSON.stringify(process.execPath)}
     commandArgs: [${JSON.stringify(FIXTURE)}]
     timeoutMs: 30000

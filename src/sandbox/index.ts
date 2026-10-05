@@ -78,6 +78,11 @@ export type SandboxAcquireContext = {
   docker?: DockerRun;
   /** Snapshot store directory (`ROPEX_SANDBOX_DIR`). */
   storeDir?: string;
+  /**
+   * Read-only credential directories, mounted when the container is created.
+   * Bind mounts are excluded from `docker commit`, so a snapshot cannot capture them.
+   */
+  authMounts?: Array<{ source: string; target: string }>;
 };
 
 export type SandboxProbe = {

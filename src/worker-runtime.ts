@@ -9,16 +9,24 @@
 
 import {
   CLI_RUNTIME_KINDS,
+  authProbe,
   cliRuntime,
+  permissionPlan,
+  selectRuntimeAuth,
+  type AuthProbe,
   type CliRuntimeDescriptor,
   type CliRuntimeKind,
-  type PermissionPlan,
+  type PreparedRuntimeAuth,
 } from "./cli-runtimes.js";
 import type { WorkerExecContext } from "./contracts.js";
 import { bootDsh, profilePack, type BootDshOptions, type DshAdapter, type DshProfilePack } from "./dsh.js";
 import { createHarness, loopModeFor, toolsFor } from "./harness.js";
 import { binOnPath, runProcess } from "./proc.js";
 import type { AgentSpec, RuntimeSpec, TrajectoryStep, WorkerRuntimeKind } from "./types.js";
+
+export type RuntimeAuthProbe = Partial<Pick<AuthProbe, "fileExists" | "homedir">>;
+
+export type { PreparedRuntimeAuth };
 
 export const WORKER_RUNTIME_KINDS: WorkerRuntimeKind[] = ["dsh", ...CLI_RUNTIME_KINDS];
 
@@ -60,7 +68,59 @@ export function credentialPresent(
   descriptor: CliRuntimeDescriptor,
   env: NodeJS.ProcessEnv = process.env,
 ): string | undefined {
-  return descriptor.credentialEnv.find((name) => env[name]?.trim());
+  for (const strategy of descriptor.auth) {
+    const name = strategy.env.find((item) => env[item]?.trim());
+    if (name) return name;
+  }
+  return undefined;
+}
+
+/**
+ * Resolve the auth strategy for a CLI runtime.
+ * `dsh` returns undefined. A CLI with no usable strategy throws before a
+ * container is started.
+ */
+export function prepareRuntimeAuth(
+  spec: AgentSpec,
+  opts: {
+    env?: NodeJS.ProcessEnv;
+    container: boolean;
+    fileExists?: (path: string) => boolean;
+    homedir?: () => string;
+  },
+): PreparedRuntimeAuth | undefined {
+  const kind = resolveRuntimeKind(spec);
+  if (!isCliRuntime(kind)) return undefined;
+  const descriptor = cliRuntime(kind);
+  const probe = authProbe(opts.env ?? process.env, opts);
+  const selected = selectRuntimeAuth(descriptor, spec.runtime?.auth, probe);
+  const applied = descriptor.applyAuth({
+    ...selected,
+    baseUrl: spec.runtime?.baseUrl,
+    container: opts.container,
+    homeDir: probe.homedir(),
+  });
+  return { method: selected.method, ...applied };
+}
+
+function describeAuth(
+  descriptor: CliRuntimeDescriptor,
+  probe: AuthProbe,
+): { present: boolean; source?: string; detail: string; ambiguous?: boolean } {
+  try {
+    const selected = selectRuntimeAuth(descriptor, undefined, probe);
+    return {
+      present: true,
+      source: selected.envName ?? selected.method,
+      detail: "",
+    };
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    if (detail.includes("more than one auth method")) {
+      return { present: true, detail, ambiguous: true };
+    }
+    return { present: false, detail };
+  }
 }
 
 export type WorkerRuntimeStatus = {
@@ -81,7 +141,10 @@ export type WorkerRuntimeStatus = {
  * Probe every runtime without spawning anything — safe to call from the HTTP
  * view on every request.
  */
-export function workerRuntimeScaffold(env: NodeJS.ProcessEnv = process.env): WorkerRuntimeStatus[] {
+export function workerRuntimeScaffold(
+  env: NodeJS.ProcessEnv = process.env,
+  probe: RuntimeAuthProbe = {},
+): WorkerRuntimeStatus[] {
   const statuses: WorkerRuntimeStatus[] = [
     {
       kind: "dsh",
@@ -98,22 +161,24 @@ export function workerRuntimeScaffold(env: NodeJS.ProcessEnv = process.env): Wor
     const descriptor = cliRuntime(kind);
     const bin = resolveRuntimeBin(descriptor, undefined, env);
     const resolved = binOnPath(bin, env);
-    const credentialSource = credentialPresent(descriptor, env);
-    const ready = Boolean(resolved && credentialSource);
+    const auth = describeAuth(descriptor, authProbe(env, probe));
+    const ready = Boolean(resolved && auth.present);
     statuses.push({
       kind,
       label: descriptor.label,
       binPresent: Boolean(resolved),
       bin: resolved,
-      credentialPresent: Boolean(credentialSource),
-      credentialSource,
+      credentialPresent: auth.present,
+      credentialSource: auth.source,
       credentialEnv: [...descriptor.credentialEnv],
       ready,
       hint: ready
-        ? `Ready — ${bin} on PATH, credentials from ${credentialSource}.`
+        ? auth.ambiguous
+          ? auth.detail
+          : `Ready — ${bin} on PATH, credentials from ${auth.source}.`
         : !resolved
           ? `Install ${bin}, or point ${runtimeBinEnvVar(kind)} / spec.runtime.command at it.`
-          : `Set one of ${descriptor.credentialEnv.join(", ")} for ${descriptor.label}.`,
+          : auth.detail,
       docsUrl: descriptor.docsUrl,
     });
   }
@@ -161,11 +226,17 @@ async function bootCliRuntime(
     );
   }
 
-  const credential = credentialPresent(descriptor, env);
-  if (!credential) {
-    throw new Error(
-      `${descriptor.label} runtime requires one of: ${descriptor.credentialEnv.join(", ")}`,
-    );
+  const container = isolated;
+  const prepared =
+    opts.auth ??
+    prepareRuntimeAuth(spec, {
+      env,
+      container,
+      fileExists: opts.authProbe?.fileExists,
+      homedir: opts.authProbe?.homedir,
+    });
+  if (!prepared) {
+    throw new Error(`${descriptor.label} requires auth`);
   }
   for (const name of runtime?.requireEnv ?? []) {
     if (!env[name]?.trim()) {
@@ -173,11 +244,11 @@ async function bootCliRuntime(
     }
   }
 
-  const policy: PermissionPlan = descriptor.permissions({
-    deny: opts.deny ?? [],
-    requireApproval: opts.requireApproval ?? [],
-    isolated,
-  });
+  const policy = permissionPlan(
+    descriptor,
+    { deny: opts.deny ?? [], requireApproval: opts.requireApproval ?? [] },
+    { container },
+  );
   if (policy.unmappable.length) {
     throw new Error(
       `${descriptor.label} cannot enforce denied tools: ${policy.unmappable.join(", ")}. ` +
@@ -199,13 +270,14 @@ async function bootCliRuntime(
   const cwd = sandbox?.cwd ?? opts.cwd ?? process.cwd();
   const timeoutMs = runtime?.timeoutMs ?? DEFAULT_RUNTIME_TIMEOUT_MS;
   // Credentials the CLI needs inside an isolate. Forwarded by name; values stay off argv.
-  const forwardEnv: Record<string, string> = {};
+  const forwardEnv: Record<string, string> = { ...prepared.injectEnv };
   if (isolated) {
-    for (const name of [...descriptor.credentialEnv, ...(runtime?.requireEnv ?? [])]) {
+    for (const name of [...prepared.env, ...(runtime?.requireEnv ?? [])]) {
       const value = env[name]?.trim();
       if (value) forwardEnv[name] = value;
     }
   }
+  const hostEnv = Object.keys(prepared.injectEnv).length ? { ...env, ...prepared.injectEnv } : undefined;
   const model = runtime?.model ?? descriptor.defaultModel;
 
   return {
@@ -224,13 +296,13 @@ async function bootCliRuntime(
           model,
           cwd,
           permissionArgs: policy.args,
-          apiKeyEnv: credential,
+          authArgs: prepared.args,
         }),
       ];
       const stdin = descriptor.promptChannel === "stdin" ? prompt : undefined;
       const res = sandbox
         ? await sandbox.exec(resolvedBin, args, { timeoutMs, stdin, env: forwardEnv })
-        : await runProcess(resolvedBin, args, { cwd, timeoutMs, stdin });
+        : await runProcess(resolvedBin, args, { cwd, timeoutMs, stdin, env: hostEnv });
       if (res.timedOut) {
         throw new Error(`${descriptor.label} timed out after ${timeoutMs}ms`);
       }

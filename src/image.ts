@@ -66,6 +66,8 @@ export function agentImagePayload(agent: DesiredAgent, soulText: string): string
       commandArgs: agent.spec.runtime.commandArgs ?? null,
       timeoutMs: agent.spec.runtime.timeoutMs ?? null,
       requireEnv: agent.spec.runtime.requireEnv ? [...agent.spec.runtime.requireEnv].sort() : null,
+      auth: agent.spec.runtime.auth ?? null,
+      baseUrl: agent.spec.runtime.baseUrl ?? null,
     };
   }
   if (agent.spec.sandbox) {

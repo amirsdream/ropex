@@ -90,8 +90,9 @@ A runnable version is in [`fleets/examples/docker-sandbox.yaml`](../fleets/examp
 - The container is **created with no secrets**.
 - Each `docker exec` forwards secrets by name (`-e NAME`). The value is read from the docker client's own environment, so it never appears on an argv, in `docker inspect`, or in a `docker commit` snapshot.
 - `repo.tokenEnv` also drives git auth. A credential helper reads `$ROPEX_GIT_TOKEN`, so the token is not in the remote URL or `.git/config`. The same token is forwarded under its own name (for example `GITHUB_TOKEN`) so `gh` works inside the container.
-- The runtime's own credentials (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, …) are forwarded the same way.
-- A declared `tokenEnv` or `secrets` entry that is not set on the control plane fails the task before any container starts.
+- The runtime's selected auth env (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, …) is forwarded the same way. Only the strategy that was selected is forwarded.
+- A login file (`spec.runtime.auth: oauth-file`) is bind-mounted read-only under `/run/ropex/auth/` when the container is created. `docker exec` cannot add a mount. The mount is outside `/workspace`, so `git add` does not commit it, and `docker commit` does not include a bind mount.
+- A declared `tokenEnv` or `secrets` entry that is not set on the control plane fails the task before any container starts. Auth is resolved before the container starts too.
 
 ## Snapshots and storage
 
@@ -124,7 +125,7 @@ A restricted `allowBaseImages` also rejects `image.dockerfile`, because the base
 
 ## Runtimes
 
-- **CLI runtimes** (`claude-code`, `codex`, `copilot`) run inside the sandbox and are the harness for that run. The brief lists the plan's calls. A call is a tool invocation. The workspace runs a command when the input has `argv`, and writes a file when it has `path` and `content`. Every other call is the agent's. The binary must exist in the image (add it to `image.npm`, or `setup`). If it does not, the task fails with a message naming `spec.sandbox.image`. Binary resolution happens inside the container, so `PATH` on the host does not matter. Codex inside this container is started with `--sandbox danger-full-access`, because its own `workspace-write` sandbox needs a user namespace and the container sets `no-new-privileges`. A policy that denies `fs` or `shell` still selects `--sandbox read-only`.
+- **CLI runtimes** (`claude-code`, `codex`, `copilot`) run inside the sandbox and are the harness for that run. The brief lists the plan's calls. A call is a tool invocation. The workspace runs a command when the input has `argv`, and writes a file when it has `path` and `content`. Every other call is the agent's. The binary must exist in the image (add it to `image.npm`, or `setup`). If it does not, the task fails with a message naming `spec.sandbox.image`. Binary resolution happens inside the container, so `PATH` on the host does not matter. Auth is a strategy on the runtime (`api-key`, `oauth`, or `oauth-file`), not a Codex-only flag. Codex inside this container is started with `--sandbox danger-full-access`, because its own `workspace-write` sandbox needs a user namespace and the container sets `no-new-privileges`. A policy that denies `fs` or `shell` still selects `--sandbox read-only`. Codex `api-key` speaks HTTPS with the key in the environment. Codex `oauth-file` bind-mounts the login directory and does not rewrite the provider.
 - **`dsh` embedded** is the same harness in-process. Its tool loop runs on the control plane and applies the same effects inside the sandbox, under whatever tool name the plan used. Other inputs stay descriptors until a tool implements them.
 - **`dsh` live** cannot run in a docker sandbox, because the dsh package lives on the control plane. It fails closed with a message saying so.
 
