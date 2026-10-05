@@ -8,7 +8,7 @@ import {
   classifyPolicy,
   isKnownRopexTool,
   permissionPlan,
-} from "../src/cli-runtimes.ts";
+} from "../src/cli-runtimes/index.ts";
 import { API_ROUTES } from "../src/contracts.ts";
 import { emptyState, saveState, loadState } from "../src/controller.ts";
 import { buildAgentImage } from "../src/image.ts";

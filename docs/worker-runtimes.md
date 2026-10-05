@@ -180,10 +180,12 @@ A CLI that reports failure in its payload while exiting 0 (Claude Code's
 
 ## Adding another CLI
 
-Each CLI is one declarative record in `src/cli-runtimes.ts` — `argv`,
+Each CLI is one declarative record in `src/cli-runtimes/index.ts` — `argv`,
 `permissions`, `containerArgs`, `auth`, `applyAuth`, `parse` — plus one member
-of `WorkerRuntimeKind` in `src/types.ts`. No new machinery. Flags move between
-CLI releases; keeping them in one table is what makes that a one-line fix.
+of `WorkerRuntimeKind` in `src/types.ts`. Strategy selection is
+`src/cli-runtimes/auth.ts`. A vendor adapter such as Codex is its own file
+(`src/cli-runtimes/codex.ts`). Flags move between CLI releases; keeping them
+in the record is what makes that a one-line fix.
 
 ## A note on `command`
 

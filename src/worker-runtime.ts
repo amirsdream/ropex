@@ -17,7 +17,7 @@ import {
   type CliRuntimeDescriptor,
   type CliRuntimeKind,
   type PreparedRuntimeAuth,
-} from "./cli-runtimes.js";
+} from "./cli-runtimes/index.js";
 import type { WorkerExecContext } from "./contracts.js";
 import { bootDsh, profilePack, type BootDshOptions, type DshAdapter, type DshProfilePack } from "./dsh.js";
 import { createHarness, loopModeFor, toolsFor } from "./harness.js";

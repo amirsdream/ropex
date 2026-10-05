@@ -12,7 +12,7 @@ import type {
   TaskManifest,
   MemoryManifest,
 } from "./types.js";
-import { cliRuntime, isHttpsBaseUrl, type CliRuntimeKind } from "./cli-runtimes.js";
+import { cliRuntime, isHttpsBaseUrl, type CliRuntimeKind } from "./cli-runtimes/index.js";
 import {
   API_VERSION,
   HARNESS_PROFILES,

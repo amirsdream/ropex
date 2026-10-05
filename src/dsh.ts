@@ -5,7 +5,7 @@
  */
 
 import { createRequire } from "node:module";
-import type { PreparedRuntimeAuth } from "./cli-runtimes.js";
+import type { PreparedRuntimeAuth } from "./cli-runtimes/index.js";
 import type { HermesPlan } from "./contracts.js";
 import { createHarness, loopModeFor, toolsFor, type HarnessLoop } from "./harness.js";
 import { chatEndpoint, completeChat } from "./llm.js";

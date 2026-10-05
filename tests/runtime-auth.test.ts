@@ -7,7 +7,7 @@ import {
   CODEX_AUTH_MOUNT,
   authProbe,
   selectRuntimeAuth,
-} from "../src/cli-runtimes.ts";
+} from "../src/cli-runtimes/index.ts";
 import { prepareRuntimeAuth } from "../src/worker-runtime.ts";
 import type { AgentSpec } from "../src/types.ts";
 
