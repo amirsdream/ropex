@@ -218,7 +218,13 @@ async function bootCliRuntime(
         .join("\n\n");
       const args = [
         ...(runtime?.commandArgs ?? []),
-        ...descriptor.argv({ prompt, model, cwd, permissionArgs: policy.args }),
+        ...descriptor.argv({
+          prompt,
+          model,
+          cwd,
+          permissionArgs: policy.args,
+          apiKeyEnv: credential,
+        }),
       ];
       const stdin = descriptor.promptChannel === "stdin" ? prompt : undefined;
       const res = sandbox

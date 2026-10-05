@@ -67,6 +67,21 @@ describe("cli runtime descriptors", () => {
     expect(argv).not.toContain("do the thing");
   });
 
+  it("points codex at the API key over HTTPS instead of the login websocket", () => {
+    const argv = CLI_RUNTIMES.codex.argv({
+      prompt: "do the thing",
+      cwd: "/wt",
+      apiKeyEnv: "OPENAI_API_KEY",
+      permissionArgs: ["--sandbox", "workspace-write", "-c", "approval_policy=never"],
+    });
+    expect(argv).toContain('model_provider="ropex"');
+    expect(argv).toContain('model_providers.ropex.env_key="OPENAI_API_KEY"');
+    expect(argv).toContain('model_providers.ropex.base_url="https://api.openai.com/v1"');
+    expect(argv).toContain("model_providers.ropex.supports_websockets=false");
+    expect(argv).toContain("model_providers.ropex.requires_openai_auth=false");
+    expect(argv.join(" ")).not.toContain("sk-");
+  });
+
   it("builds copilot argv in programmatic mode with the prompt as -p value", () => {
     expect(CLI_RUNTIMES.copilot.promptChannel).toBe("argv");
     const argv = CLI_RUNTIMES.copilot.argv({

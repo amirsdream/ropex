@@ -22,6 +22,11 @@ export type CliArgvInput = {
   cwd: string;
   /** Flags produced by `permissions()` for this run. */
   permissionArgs: string[];
+  /**
+   * Name of the env var that holds the API key (`OPENAI_API_KEY`, …).
+   * Codex's default provider ignores this variable and reads `~/.codex/auth.json`.
+   */
+  apiKeyEnv?: string;
 };
 
 export type PolicyInput = {
@@ -177,6 +182,29 @@ function jsonLines(stdout: string): Array<Record<string, unknown>> {
   return out;
 }
 
+/**
+ * Codex's default provider reads `~/.codex/auth.json` and uses the Responses
+ * websocket. A sandbox has no login file, and that websocket rejects an API
+ * key that HTTPS accepts. These `-c` overrides select a provider that reads
+ * the named env var and speaks HTTPS. The value of the key is not in argv.
+ */
+export function codexApiKeyConfig(envName: string): string[] {
+  if (!/^[A-Z][A-Z0-9_]*$/.test(envName)) {
+    throw new Error(`codex api key env name is not an environment variable: ${envName}`);
+  }
+  const provider = "ropex";
+  const pairs: Array<[string, string]> = [
+    ["model_provider", `"${provider}"`],
+    [`model_providers.${provider}.name`, '"Ropex OpenAI"'],
+    [`model_providers.${provider}.base_url`, '"https://api.openai.com/v1"'],
+    [`model_providers.${provider}.env_key`, `"${envName}"`],
+    [`model_providers.${provider}.wire_api`, '"responses"'],
+    [`model_providers.${provider}.requires_openai_auth`, "false"],
+    [`model_providers.${provider}.supports_websockets`, "false"],
+  ];
+  return pairs.flatMap(([key, value]) => ["-c", `${key}=${value}`]);
+}
+
 export const CLI_RUNTIMES: Record<CliRuntimeKind, CliRuntimeDescriptor> = {
   "claude-code": {
     kind: "claude-code",
@@ -244,13 +272,14 @@ export const CLI_RUNTIMES: Record<CliRuntimeKind, CliRuntimeDescriptor> = {
     docsUrl: "https://developers.openai.com/codex/cli",
     // `codex exec` reads the prompt from stdin when the positional is omitted.
     promptChannel: "stdin",
-    argv({ model, cwd, permissionArgs }) {
+    argv({ model, cwd, permissionArgs, apiKeyEnv }) {
       return [
         "exec",
         "--json",
         "--cd",
         cwd,
         ...(model ? ["--model", model] : []),
+        ...(apiKeyEnv ? codexApiKeyConfig(apiKeyEnv) : []),
         ...permissionArgs,
       ];
     },

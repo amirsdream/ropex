@@ -135,6 +135,13 @@ interfaces for the others:
 - Codex `exec` is non-interactive but a sandbox escalation still prompts unless
   `-c approval_policy=never` is set. Copilot `-p` prompts on every tool unless
   `--allow-all-tools` is set; `--deny-tool` still wins over allow-all.
+- Codex's default provider reads `~/.codex/auth.json` and connects to the
+  Responses websocket. A container has no login file, and that websocket
+  rejects an API key. Headless runs instead set a provider whose `env_key` is
+  `OPENAI_API_KEY` or `CODEX_API_KEY`, with `supports_websockets=false`, so the
+  call goes to `https://api.openai.com/v1/responses`. The key stays in the
+  environment. It is not written into the container, so a snapshot cannot
+  capture it.
 
 The `claude-code` descriptor is verified against a live binary. The `codex` and
 `copilot` descriptors follow the published non-interactive flags (`codex exec`,
