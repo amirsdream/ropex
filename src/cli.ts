@@ -121,7 +121,7 @@ Usage:
                                      Clone + sync declared GitRepos (Flux-style)
   ropex metrics [--prometheus]    Export cluster metrics
   ropex health                    Worker probes + backlog SLO
-  ropex runtimes                  Worker runtimes (dsh, claude-code, codex, copilot)
+  ropex runtimes                  Worker runtimes (dsh, claude-code, codex, copilot, cursor)
   ropex sandboxes [--json]        Sandbox providers, agents, snapshots, live containers
   ropex sandbox build <agent>     Build (or reuse) the agent's environment image
   ropex sandbox prune [--keep N] [--ttl-ms N]

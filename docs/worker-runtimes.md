@@ -10,6 +10,7 @@ policy, memory, skills, delivery, trajectories — is unchanged.
 | `claude-code` | `claude -p` — Claude Code CLI, autonomous loop | `npm i -g @anthropic-ai/claude-code` |
 | `codex` | `codex exec` — Codex CLI, autonomous loop | `npm i -g @openai/codex` |
 | `copilot` | `copilot -p` — GitHub Copilot CLI, autonomous loop | `npm i -g @github/copilot` |
+| `cursor` | `agent -p` — Cursor Agent CLI, autonomous loop | [Cursor CLI install](https://cursor.com/docs/cli/overview) (`agent` on `PATH`) |
 
 Check what is usable on this machine:
 
@@ -24,7 +25,7 @@ Hermes still owns three of the five stages. Only `execute` moves:
 ```
 compose (hermes)  soul + memory + skills
 plan    (hermes)  thoughts + intended actions
-execute (runtime) dsh loop  │  or  `claude -p` / `codex exec` / `copilot -p`
+execute (runtime) dsh loop  │  or  `claude -p` / `codex exec` / `copilot -p` / `agent -p`
 deliver (harness) comment · check · pull_request
 learn   (hermes)  distil a skill from the trajectory
 ```
@@ -34,16 +35,19 @@ plugin, and policy, memory, skills and trajectories are untouched.
 
 The difference is what `execute` is handed. `dsh` receives the Hermes plan as a
 tool program and applies each call in the workspace. A CLI runtime is the same
-harness with a different loop: `claude -p`, `codex exec`, or `copilot -p`
-receives a **brief** (`src/brief.ts`) — the same inputs rendered as a prompt —
-and carries out those intended actions itself. A call is one tool invocation,
+harness with a different loop: `claude -p`, `codex exec`, `copilot -p`, or
+`agent -p` receives a **brief** (`src/brief.ts`) — the same inputs rendered as a
+prompt — and carries out those intended actions itself. A call is one tool invocation,
 `{ name, input }`. The name is the agent's tool. The workspace only applies an
 input that asks for a command (`argv`) or a file (`path` and `content`); every
 other call stays with the agent, so a new tool does not need a new call shape.
 The brief carries
-identity, prior knowledge, skills, plan, intended actions, and the task. Claude Code and
-Codex take that brief on **stdin** so a large soul cannot blow `ARG_MAX`. Copilot
-still needs `-p <prompt>` for programmatic mode, so its brief stays on argv. The
+identity, prior knowledge, skills, plan, intended actions, and the task. Claude Code,
+Codex, and Cursor take that brief on **stdin** so a large soul cannot blow `ARG_MAX`. Copilot
+still needs `-p <prompt>` for programmatic mode, so its brief stays on argv. On the host,
+the CLI process gets `GIT_AUTHOR_*` and `GIT_COMMITTER_*` set to `Ropex <ropex@localhost>`,
+the same identity every container exec already sets, so a commit is not the operator's.
+The
 CLI runs in the worker's git worktree and its output becomes the trajectory
 observation.
 
@@ -93,15 +97,15 @@ for three agents on three runtimes sharing one queue and one policy.
 An autonomous CLI enforces its own tool permissions, so Ropex policy is pushed
 down into the CLI's gate at boot:
 
-| Ropex deny | claude-code | codex | copilot |
-| --- | --- | --- | --- |
-| `fs`, `str_replace_editor` | `--disallowedTools Edit Write …` | `--sandbox read-only` | `--deny-tool write` |
-| `shell`, `bash` | `--disallowedTools Bash` | `--sandbox read-only` | `--deny-tool shell` |
-| `web` | `--disallowedTools WebFetch WebSearch` | **unmappable** | **unmappable** |
-| `github` | `--disallowedTools Bash(gh:*)` | **unmappable** | `--deny-tool github` |
-| `subagent` | `--disallowedTools Task` | **unmappable** | **unmappable** |
-| `inspect` | **unmappable** | **unmappable** | **unmappable** |
-| `memory` | already unavailable | already unavailable | already unavailable |
+| Ropex deny | claude-code | codex | copilot | cursor |
+| --- | --- | --- | --- | --- |
+| `fs`, `str_replace_editor` | `--disallowedTools Edit Write …` | `--sandbox read-only` | `--deny-tool write` | **unmappable** |
+| `shell`, `bash` | `--disallowedTools Bash` | `--sandbox read-only` | `--deny-tool shell` | **unmappable** |
+| `web` | `--disallowedTools WebFetch WebSearch` | **unmappable** | **unmappable** | **unmappable** |
+| `github` | `--disallowedTools Bash(gh:*)` | **unmappable** | `--deny-tool github` | **unmappable** |
+| `subagent` | `--disallowedTools Task` | **unmappable** | **unmappable** | **unmappable** |
+| `inspect` | **unmappable** | **unmappable** | **unmappable** | **unmappable** |
+| `memory` | already unavailable | already unavailable | already unavailable | already unavailable |
 
 Three rules:
 
@@ -128,6 +132,7 @@ and asks for `spec.runtime.auth`.
 | `claude-code` | `ANTHROPIC_API_KEY` | `CLAUDE_CODE_OAUTH_TOKEN` | — |
 | `codex` | `OPENAI_API_KEY` or `CODEX_API_KEY` | — | `~/.codex/auth.json`, or `ROPEX_AUTH_FILE_CODEX` |
 | `copilot` | `GITHUB_TOKEN`, `COPILOT_CLI_TOKEN`, or `GH_TOKEN` | — | — |
+| `cursor` | `CURSOR_API_KEY` | — | `~/.config/cursor/auth.json`, or `ROPEX_AUTH_FILE_CURSOR` |
 
 Env strategies forward the selected variable by name. Claude and Copilot read
 those variables themselves, so auth adds no flags. Codex `api-key` also selects
@@ -143,9 +148,15 @@ usual login file. In Docker the credential directory is bind-mounted read-only
 at `/run/ropex/auth/codex` and `CODEX_HOME` points there. The file must be named
 `auth.json`. A bind mount is not part of `docker commit`.
 
-A later CLI, including Cursor, is the same record: declare which of these three
-methods it accepts and what `applyAuth` forwards. Do not put a provider URL or
-an env-var name on the shared boot path.
+Cursor is that record. `api-key` forwards `CURSOR_API_KEY` and adds no flags
+(the CLI also accepts `--api-key`, which would put the secret on argv, so Ropex
+does not). `oauth-file` is the login from `agent login`. On the host the CLI
+reads `~/.config/cursor/auth.json`. A file elsewhere must still be named
+`auth.json` and sit in a directory named `cursor`; `XDG_CONFIG_HOME` is then
+that directory's parent. In Docker the credential directory is bind-mounted
+read-only at `/run/ropex/auth/cursor` and `XDG_CONFIG_HOME` is `/run/ropex/auth`.
+There is no Cursor env-token `oauth` strategy. A provider URL or an env-var
+name stays off the shared boot path.
 
 ## Flag accuracy
 
@@ -168,12 +179,22 @@ interfaces for the others:
   that denies `fs` or `shell` still selects `--sandbox read-only`. A host run
   stays on `workspace-write`. Claude and Copilot keep their own permission
   flags; the container hook is per runtime.
+- Headless Cursor uses `--force` and `--trust` so a print-mode run can edit
+  and run commands without a prompt. It has no per-tool deny flag, so a policy
+  that denies `fs`, `shell`, `web`, `github`, `subagent`, or `inspect` refuses
+  the run. Inside a Ropex container, Cursor adds `--sandbox disabled`. The
+  container is created with `no-new-privileges`, and Cursor's own sandbox is
+  the same class of nested sandbox that Codex cannot create there. A host run
+  does not pass `--sandbox`, so the CLI keeps its own sandbox. This container
+  flag follows the published `--sandbox` option and has not been exercised
+  against a live `agent` binary in Docker.
 
 The `claude-code` descriptor is verified against a live binary. Codex `api-key`
-inside Docker was exercised against `@openai/codex`. The `copilot` descriptor
-follows the published non-interactive flags (`copilot -p --allow-all-tools`)
-and has not been exercised against an installed binary — check `ropex runtimes`
-and a single task before trusting it in a fleet.
+inside Docker was exercised against `@openai/codex`. The `copilot` and `cursor`
+descriptors follow the published non-interactive flags (`copilot -p
+--allow-all-tools`, `agent -p --force --trust --output-format json`) and have
+not been exercised against an installed binary — check `ropex runtimes` and a
+single task before trusting them in a fleet.
 
 A CLI that reports failure in its payload while exiting 0 (Claude Code's
 `is_error`) is treated as a failed run, not a successful one with odd output.
@@ -184,7 +205,7 @@ Each CLI is one declarative record in `src/cli-runtimes/index.ts` — `argv`,
 `permissions`, `containerArgs`, `auth`, `applyAuth`, `parse` — plus one member
 of `WorkerRuntimeKind` in `src/types.ts`. Strategy selection is
 `src/cli-runtimes/auth.ts`. A vendor adapter such as Codex is its own file
-(`src/cli-runtimes/codex.ts`). Flags move between CLI releases; keeping them
+(`src/cli-runtimes/codex.ts`, `src/cli-runtimes/cursor.ts`). Flags move between CLI releases; keeping them
 in the record is what makes that a one-line fix.
 
 ## A note on `command`

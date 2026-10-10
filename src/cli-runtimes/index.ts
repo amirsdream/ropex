@@ -3,7 +3,7 @@
  *
  * Every CLI is one record — argv shape, policy translation, output parsing — so
  * flag drift between releases is a one-line fix here rather than a refactor, and
- * adding a fourth CLI is a new record plus a `WorkerRuntimeKind` member.
+ * adding another CLI is a new record plus a `WorkerRuntimeKind` member.
  *
  * Auth selection is `auth.ts`. The Codex provider and login file are `codex.ts`.
  * Nothing here spawns a process.
@@ -11,6 +11,14 @@
 
 import { envApplyAuth } from "./auth.js";
 import { CODEX_API_KEY, CODEX_OAUTH_FILE, codexApplyAuth, codexContainerArgs, codexPermissions } from "./codex.js";
+import {
+  CURSOR_API_KEY,
+  CURSOR_OAUTH_FILE,
+  cursorApplyAuth,
+  cursorContainerArgs,
+  cursorParse,
+  cursorPermissions,
+} from "./cursor.js";
 import { classifyPolicy, mapDenies } from "./policy.js";
 import type { CliArgvInput, CliRuntimeDescriptor, CliRuntimeKind, PermissionPlan, PolicyInput } from "./types.js";
 
@@ -21,6 +29,7 @@ export {
   codexApiKeyConfig,
   isHttpsBaseUrl,
 } from "./codex.js";
+export { CURSOR_AUTH_MOUNT, CURSOR_CONFIG_HOME } from "./cursor.js";
 export { KNOWN_ROPEX_TOOLS, classifyPolicy, isKnownRopexTool } from "./policy.js";
 export type {
   AuthApply,
@@ -265,6 +274,33 @@ export const CLI_RUNTIMES: Record<CliRuntimeKind, CliRuntimeDescriptor> = {
     parse(stdout, stderr) {
       return textFallback(stdout, stderr);
     },
+  }),
+
+  cursor: cliDescriptor({
+    kind: "cursor",
+    bin: "agent",
+    auth: [CURSOR_API_KEY, CURSOR_OAUTH_FILE],
+    label: "Cursor CLI",
+    docsUrl: "https://cursor.com/docs/cli/overview",
+    // `-p` is boolean (--print). The brief goes on stdin so large souls do not
+    // hit ARG_MAX. `--output-format json` is a single result envelope.
+    promptChannel: "stdin",
+    argv({ model, cwd, permissionArgs, authArgs }) {
+      return [
+        "-p",
+        "--output-format",
+        "json",
+        "--workspace",
+        cwd,
+        ...(model ? ["--model", model] : []),
+        ...(authArgs ?? []),
+        ...permissionArgs,
+      ];
+    },
+    permissions: cursorPermissions,
+    containerArgs: cursorContainerArgs,
+    applyAuth: cursorApplyAuth,
+    parse: cursorParse,
   }),
 };
 

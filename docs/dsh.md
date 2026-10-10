@@ -1,5 +1,5 @@
 > **dsh is the default worker runtime, not the only one.** Agents can declare
-> `spec.runtime.kind: claude-code | codex | copilot` to run an external headless
+> `spec.runtime.kind: claude-code | codex | copilot | cursor` to run an external headless
 > coding agent instead — see [worker-runtimes.md](./worker-runtimes.md).
 
 # Live DeepSeek Harness (dsh) wiring

@@ -89,6 +89,60 @@ describe("cli runtime descriptors", () => {
     expect(argv.join(" ")).not.toContain("sk-");
   });
 
+  it("builds cursor argv in print mode with the brief on stdin and the key off argv", () => {
+    expect(CLI_RUNTIMES.cursor.promptChannel).toBe("stdin");
+    const applied = CLI_RUNTIMES.cursor.applyAuth({
+      method: "api-key",
+      envName: "CURSOR_API_KEY",
+      container: true,
+    });
+    const argv = CLI_RUNTIMES.cursor.argv({
+      prompt: "do the thing",
+      model: "composer-2.5",
+      cwd: "/wt",
+      authArgs: applied.args,
+      permissionArgs: ["--force", "--trust"],
+    });
+    expect(argv.slice(0, 3)).toEqual(["-p", "--output-format", "json"]);
+    expect(argv[argv.indexOf("--workspace") + 1]).toBe("/wt");
+    expect(argv).toContain("--model");
+    expect(argv).toContain("composer-2.5");
+    expect(argv).toContain("--force");
+    expect(argv).toContain("--trust");
+    expect(argv).not.toContain("do the thing");
+    expect(argv).not.toContain("--api-key");
+    expect(applied.env).toEqual(["CURSOR_API_KEY"]);
+    expect(applied.args).toEqual([]);
+    expect(argv.join(" ")).not.toContain("sk-");
+  });
+
+  it("refuses a Cursor tool deny it cannot express, and disables the nested sandbox in a container", () => {
+    const open = CLI_RUNTIMES.cursor.permissions({ deny: [], requireApproval: [] });
+    expect(open.unmappable).toEqual([]);
+    expect(open.args).toEqual(["--force", "--trust"]);
+    const denied = CLI_RUNTIMES.cursor.permissions({ deny: ["fs"], requireApproval: [] });
+    expect(denied.unmappable).toEqual(["fs"]);
+    const container = permissionPlan(CLI_RUNTIMES.cursor, { deny: [], requireApproval: [] }, { container: true });
+    expect(container.args).toContain("--sandbox");
+    expect(container.args[container.args.indexOf("--sandbox") + 1]).toBe("disabled");
+    const host = permissionPlan(CLI_RUNTIMES.cursor, { deny: [], requireApproval: [] }, { container: false });
+    expect(host.args).not.toContain("--sandbox");
+  });
+
+  it("reads the Cursor json result and a payload error", () => {
+    const ok = CLI_RUNTIMES.cursor.parse(
+      JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "committed abc" }),
+      "",
+    );
+    expect(ok.observations).toEqual(["committed abc"]);
+    expect(ok.isError).toBe(false);
+    const failed = CLI_RUNTIMES.cursor.parse(
+      JSON.stringify({ type: "result", is_error: true, result: "not authenticated" }),
+      "",
+    );
+    expect(failed.isError).toBe(true);
+  });
+
   it("builds copilot argv in programmatic mode with the prompt as -p value", () => {
     expect(CLI_RUNTIMES.copilot.promptChannel).toBe("argv");
     const argv = CLI_RUNTIMES.copilot.argv({
@@ -358,6 +412,11 @@ ${specLines}
     expect(() => parseManifests(agentWith("  runtime:\n    kind: claude-code\n    auth: oauth-file"))).toThrow(
       /not supported by claude-code/,
     );
+    expect(() => parseManifests(agentWith("  runtime:\n    kind: cursor\n    auth: oauth"))).toThrow(
+      /not supported by cursor/,
+    );
+    expect(() => parseManifests(agentWith("  runtime:\n    kind: cursor\n    auth: api-key"))).not.toThrow();
+    expect(() => parseManifests(agentWith("  runtime:\n    kind: cursor\n    auth: oauth-file"))).not.toThrow();
     expect(() => parseManifests(agentWith("  runtime:\n    kind: dsh\n    auth: api-key"))).toThrow(
       /does not apply to dsh/,
     );

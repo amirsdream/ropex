@@ -14,7 +14,7 @@ export type LabelSelector = {
 };
 
 /** Which executor runs the `execute` stage for an agent. */
-export const WORKER_RUNTIME_KINDS_LIST = ["dsh", "claude-code", "codex", "copilot"] as const;
+export const WORKER_RUNTIME_KINDS_LIST = ["dsh", "claude-code", "codex", "copilot", "cursor"] as const;
 
 export type WorkerRuntimeKind = (typeof WORKER_RUNTIME_KINDS_LIST)[number];
 

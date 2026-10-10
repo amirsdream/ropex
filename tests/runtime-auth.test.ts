@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   CLI_RUNTIMES,
   CODEX_AUTH_MOUNT,
+  CURSOR_AUTH_MOUNT,
   authProbe,
   selectRuntimeAuth,
 } from "../src/cli-runtimes/index.ts";
@@ -151,6 +152,51 @@ describe("runtime auth selection", () => {
         CLI_RUNTIMES.codex,
         "oauth-file",
         authProbe({ ROPEX_AUTH_FILE_CODEX: path }),
+      ),
+    ).toThrow(/must be named auth.json/);
+  });
+
+  it("mounts a Cursor login file and points XDG_CONFIG_HOME at its parent", () => {
+    const file = authFile();
+    const selected = selectRuntimeAuth(
+      CLI_RUNTIMES.cursor,
+      "oauth-file",
+      authProbe({ ROPEX_AUTH_FILE_CURSOR: file, CURSOR_API_KEY: "key-test" }),
+    );
+    expect(selected).toEqual({ method: "oauth-file", hostFile: file });
+    const applied = CLI_RUNTIMES.cursor.applyAuth({ ...selected, container: true });
+    expect(applied.args).toEqual([]);
+    expect(applied.env).toEqual([]);
+    expect(applied.injectEnv).toEqual({ XDG_CONFIG_HOME: "/run/ropex/auth" });
+    expect(applied.mount).toEqual({ source: dirname(file), target: CURSOR_AUTH_MOUNT });
+    expect(JSON.stringify(applied)).not.toContain("key-test");
+  });
+
+  it("uses the default Cursor login path and leaves XDG_CONFIG_HOME unset on the host", () => {
+    const home = "/home/tester";
+    const path = `${home}/.config/cursor/auth.json`;
+    const selected = selectRuntimeAuth(
+      CLI_RUNTIMES.cursor,
+      undefined,
+      authProbe({}, { homedir: () => home, fileExists: (candidate) => candidate === path }),
+    );
+    expect(selected).toEqual({ method: "oauth-file", hostFile: path });
+    const applied = CLI_RUNTIMES.cursor.applyAuth({ ...selected, container: false, homeDir: home });
+    expect(applied.injectEnv).toEqual({});
+    expect(applied.mount).toBeUndefined();
+  });
+
+  it("rejects Cursor auth oauth and a login file that is not auth.json", () => {
+    expect(() => selectRuntimeAuth(CLI_RUNTIMES.cursor, "oauth", none)).toThrow(/does not support auth oauth/);
+    const dir = mkdtempSync(join(tmpdir(), "ropex-cursor-auth-"));
+    temps.push(dir);
+    const path = join(dir, "token.json");
+    writeFileSync(path, "{}\n");
+    expect(() =>
+      selectRuntimeAuth(
+        CLI_RUNTIMES.cursor,
+        "oauth-file",
+        authProbe({ ROPEX_AUTH_FILE_CURSOR: path }),
       ),
     ).toThrow(/must be named auth.json/);
   });
