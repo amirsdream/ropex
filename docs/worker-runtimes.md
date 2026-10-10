@@ -12,7 +12,7 @@ policy, memory, skills, delivery, trajectories — is unchanged.
 | `copilot` | `copilot -p` — GitHub Copilot CLI, autonomous loop | `npm i -g @github/copilot` |
 | `cursor` | `agent -p` — Cursor Agent CLI, autonomous loop | [Cursor CLI install](https://cursor.com/docs/cli/overview) (`agent` on `PATH`) |
 
-Manual steps, starting from a clean checkout and a throwaway repo, are in [manual-runtime-checks.md](./manual-runtime-checks.md).
+Manual steps, starting from a clean checkout and a throwaway repo, are in [manual-runtime-checks.md](./manual-runtime-checks.md). Extra Cursor and Codex tasks are in [manual-runtime-tasks.md](./manual-runtime-tasks.md).
 
 Check what is usable on this machine:
 

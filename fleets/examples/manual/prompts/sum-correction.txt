@@ -1,0 +1,5 @@
+src/sum.ts exports add, and the body returns a - b. That is the wrong result.
+Change add so it returns a + b.
+Add src/sum.check.ts. It imports add from "./sum.js" and throws an Error when add(2, 3) is not 5.
+Commit every change in this worktree with the subject "correct add".
+Do not open a pull request. Do not clone or switch repositories.

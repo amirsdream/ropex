@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { emptyState } from "../src/controller.ts";
+import { plannedEdits } from "../src/hermes.ts";
 import { expandWorkers, runTask } from "../src/runtime.ts";
 import { expandDesired, parseManifests } from "../src/spec.ts";
 import type { ClusterState, Worker } from "../src/types.ts";
@@ -122,5 +123,30 @@ describe("harness writes and commits", () => {
     );
     expect(git(repo, ["rev-list", "--count", "main"])).toBe("1");
     expect(git(repo, ["branch", "--list", "ropex/*"])).toBe("");
+  });
+});
+
+describe("manual runtime task prompts", () => {
+  const prompt = (name: string) =>
+    readFileSync(join(process.cwd(), "fleets/examples/manual/prompts", name), "utf8");
+
+  it("turns the scripted prompts into a subject and files", () => {
+    const version = plannedEdits(prompt("version-stamp.txt"));
+    expect(version?.message).toBe("record the build version");
+    expect(version?.files.map((file) => file.path)).toEqual(["src/version.ts"]);
+    expect(version?.files[0]?.content).toContain('export const version = "0.1.0"');
+
+    const note = plannedEdits(prompt("haiku.txt"));
+    expect(note?.message).toBe("leave a note");
+    expect(note?.files.map((file) => file.path)).toEqual(["docs/note.txt"]);
+    expect(note?.files[0]?.content).toContain("a frog jumps in");
+  });
+
+  it("leaves the open prompts for the runtime to edit", () => {
+    for (const name of ["sum-correction.txt", "clamp.txt", "notes.txt"]) {
+      const text = prompt(name);
+      expect(plannedEdits(text), name).toBeUndefined();
+      expect(text, name).not.toMatch(/test|fix|implement/i);
+    }
   });
 });

@@ -4,7 +4,7 @@ Repeatable checks for the execute-stage changes: the harness commits inside the 
 
 Run this in **bash** on Linux, macOS, or [WSL](./wsl.md). The control plane’s root is the current directory, so the fixture repo and the Ropex source stay separate.
 
-Automated coverage of the same behavior is `npm test`. This page is the manual path.
+Automated coverage of the same behavior is `npm test`. This page is the manual path. Extra Cursor and Codex tasks, scripted and open, are in [manual-runtime-tasks.md](./manual-runtime-tasks.md).
 
 ## 0. Clean Ropex setup
 
