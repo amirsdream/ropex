@@ -106,38 +106,38 @@ function validateAgentSpec(spec: Record<string, unknown> | undefined, where: str
       }
     | undefined;
   if (runtime !== undefined) {
-  if (!WORKER_RUNTIME_KINDS_LIST.includes(runtime.kind as never)) {
-    throw new Error(
-      `${where}: unsupported runtime.kind "${String(runtime.kind)}" (expected ${WORKER_RUNTIME_KINDS_LIST.join(" | ")})`,
-    );
-  }
-  if (runtime.commandArgs !== undefined && runtime.command === undefined) {
-    throw new Error(`${where}: runtime.commandArgs requires runtime.command`);
-  }
-  if (runtime.auth !== undefined && !RUNTIME_AUTH_METHODS.includes(runtime.auth as RuntimeAuthMethod)) {
-    throw new Error(
-      `${where}: unsupported runtime.auth "${String(runtime.auth)}" (expected ${RUNTIME_AUTH_METHODS.join(" | ")})`,
-    );
-  }
-  if (runtime.kind === "dsh" && runtime.auth !== undefined) {
-    throw new Error(`${where}: runtime.auth does not apply to dsh`);
-  }
-  if (runtime.kind !== "dsh" && runtime.auth !== undefined) {
-    const methods = cliRuntime(runtime.kind as CliRuntimeKind).auth.map((item) => item.method);
-    if (!methods.includes(runtime.auth as RuntimeAuthMethod)) {
+    if (!WORKER_RUNTIME_KINDS_LIST.includes(runtime.kind as never)) {
       throw new Error(
-        `${where}: runtime.auth "${String(runtime.auth)}" is not supported by ${String(runtime.kind)} (expected ${methods.join(" | ")})`,
+        `${where}: unsupported runtime.kind "${String(runtime.kind)}" (expected ${WORKER_RUNTIME_KINDS_LIST.join(" | ")})`,
       );
     }
-  }
-  if (runtime.baseUrl !== undefined) {
-    if (typeof runtime.baseUrl !== "string" || !isHttpsBaseUrl(runtime.baseUrl)) {
-      throw new Error(`${where}: runtime.baseUrl must be an https URL without embedded credentials`);
+    if (runtime.commandArgs !== undefined && runtime.command === undefined) {
+      throw new Error(`${where}: runtime.commandArgs requires runtime.command`);
     }
-    if (runtime.kind !== "codex" || (runtime.auth !== undefined && runtime.auth !== "api-key")) {
-      throw new Error(`${where}: runtime.baseUrl applies to codex auth api-key`);
+    if (runtime.auth !== undefined && !RUNTIME_AUTH_METHODS.includes(runtime.auth as RuntimeAuthMethod)) {
+      throw new Error(
+        `${where}: unsupported runtime.auth "${String(runtime.auth)}" (expected ${RUNTIME_AUTH_METHODS.join(" | ")})`,
+      );
     }
-  }
+    if (runtime.kind === "dsh" && runtime.auth !== undefined) {
+      throw new Error(`${where}: runtime.auth does not apply to dsh`);
+    }
+    if (runtime.kind !== "dsh" && runtime.auth !== undefined) {
+      const methods = cliRuntime(runtime.kind as CliRuntimeKind).auth.map((item) => item.method);
+      if (!methods.includes(runtime.auth as RuntimeAuthMethod)) {
+        throw new Error(
+          `${where}: runtime.auth "${String(runtime.auth)}" is not supported by ${String(runtime.kind)} (expected ${methods.join(" | ")})`,
+        );
+      }
+    }
+    if (runtime.baseUrl !== undefined) {
+      if (typeof runtime.baseUrl !== "string" || !isHttpsBaseUrl(runtime.baseUrl)) {
+        throw new Error(`${where}: runtime.baseUrl must be an https URL without embedded credentials`);
+      }
+      if (runtime.kind !== "codex" || (runtime.auth !== undefined && runtime.auth !== "api-key")) {
+        throw new Error(`${where}: runtime.baseUrl applies to codex auth api-key`);
+      }
+    }
   }
   const workspace = spec?.workspace as { path?: unknown } | undefined;
   if (workspace !== undefined) {
