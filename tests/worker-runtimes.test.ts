@@ -589,28 +589,32 @@ describe("ropex runtimes text", () => {
       }),
     ]);
 
-    expect(text).toBe(`ready       dsh           DeepSeek Harness (default)
-            binary       embedded
-            credentials  built in
-            Embedded Cordis kernel — always available. Set
-            ROPEX_DSH_BACKEND=live for the headless dsh CLI.
+    expect(text).toBe(`dsh            status: ready
+               DeepSeek Harness (default)
+               binary       embedded
+               credentials  built in
+               Embedded Cordis kernel — always available. Set
+               ROPEX_DSH_BACKEND=live for the headless dsh CLI.
 
-not ready   claude-code   Claude Code CLI
-            binary       not on PATH
-            credentials  missing
-            needs one of:
-              ANTHROPIC_API_KEY (api-key)
-              CLAUDE_CODE_OAUTH_TOKEN (oauth)
+claude-code    status: not ready
+               Claude Code CLI
+               binary       not on PATH
+               credentials  missing
+               needs one of:
+                 ANTHROPIC_API_KEY (api-key)
+                 CLAUDE_CODE_OAUTH_TOKEN (oauth)
 
-not ready   codex         Codex CLI
-            binary       /usr/bin/codex
-            credentials  ambiguous
-            Codex CLI has more than one auth method available (api-key,
-            oauth-file). Set spec.runtime.auth.
+codex          status: not ready
+               Codex CLI
+               binary       /usr/bin/codex
+               credentials  ambiguous
+               Codex CLI has more than one auth method available (api-key,
+               oauth-file). Set spec.runtime.auth.
 
-ready       cursor        Cursor CLI
-            binary       /home/kovi/.local/bin/agent
-            credentials  oauth-file
+cursor         status: ready
+               Cursor CLI
+               binary       /home/kovi/.local/bin/agent
+               credentials  oauth-file
 `);
   });
 });

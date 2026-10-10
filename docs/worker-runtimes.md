@@ -21,10 +21,10 @@ ropex runtimes          # one block per runtime
 ropex runtimes --json   # same objects as GET /api/v1/runtimes
 ```
 
-Each block leads with `ready` or `not ready`, then the kind and label. The
-following lines name the binary and the credential source. A missing
-credential lists each accepted strategy on its own line. `dsh` is embedded
-and always ready.
+Each block starts with the runtime kind, then `status: ready` or
+`status: not ready`. The following lines name the product, the binary, and
+the credential source. A missing credential lists each accepted strategy on
+its own line. `dsh` is embedded and always ready.
 
 ## The spine is unchanged
 

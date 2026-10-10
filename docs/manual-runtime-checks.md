@@ -143,7 +143,7 @@ reset
 ropex runtimes
 ```
 
-The list includes `dsh`, `claude-code`, `codex`, `copilot`, and `cursor`. Each runtime is its own block, starting with `ready` or `not ready`. `cursor` is `not ready` until `agent` is on `PATH` and one auth strategy has credentials. A missing binary names `agent` or `ROPEX_RUNTIME_BIN_CURSOR`. Missing credentials list each strategy on its own line.
+The list includes `dsh`, `claude-code`, `codex`, `copilot`, and `cursor`. Each runtime is its own block. The first line is the kind, then `status: ready` or `status: not ready`. `cursor` shows `status: not ready` until `agent` is on `PATH` and one auth strategy has credentials. A missing binary names `agent` or `ROPEX_RUNTIME_BIN_CURSOR`. Missing credentials list each strategy on its own line.
 
 ```bash
 ropex apply "$ROPEX/fleets/examples/manual/cursor-rejected.yaml"
@@ -269,7 +269,7 @@ test -n "$OPENAI_API_KEY$CODEX_API_KEY" -o -f "$HOME/.codex/auth.json"
 ropex runtimes
 ```
 
-The `codex` block must start with `ready`. If it says `more than one auth method`, uncomment exactly one `auth:` line in `fleets/examples/manual/codex-host.yaml` and save it. If credentials name a single strategy, leave both lines commented.
+The `codex` block must show `status: ready`. If it says `more than one auth method`, uncomment exactly one `auth:` line in `fleets/examples/manual/codex-host.yaml` and save it. If credentials name a single strategy, leave both lines commented.
 
 ```bash
 ropex apply "$ROPEX/fleets/examples/manual/codex-host.yaml"
@@ -305,7 +305,7 @@ test -n "$CURSOR_API_KEY" -o -f "$HOME/.config/cursor/auth.json"
 ropex runtimes
 ```
 
-The `cursor` block must start with `ready`. If it says `more than one auth method`, uncomment exactly one `auth:` line in `fleets/examples/manual/cursor-host.yaml`. The key stays in the environment. Ropex does not pass `--api-key`.
+The `cursor` block must show `status: ready`. If it says `more than one auth method`, uncomment exactly one `auth:` line in `fleets/examples/manual/cursor-host.yaml`. The key stays in the environment. Ropex does not pass `--api-key`.
 
 ```bash
 ropex apply "$ROPEX/fleets/examples/manual/cursor-host.yaml"

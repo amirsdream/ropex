@@ -197,8 +197,7 @@ export function workerRuntimeScaffold(
   return statuses;
 }
 
-const RUNTIME_STATUS_WIDTH = 12;
-const RUNTIME_KIND_WIDTH = 14;
+const RUNTIME_KIND_WIDTH = 15;
 const RUNTIME_FIELD_WIDTH = 13;
 const RUNTIME_TEXT_WIDTH = 68;
 
@@ -233,14 +232,15 @@ function credentialSummary(status: WorkerRuntimeStatus): string {
 }
 
 /**
- * Human layout for `ropex runtimes`. One block per runtime: status, kind,
- * label, then binary, credentials, and the next step. `--json` keeps the
- * scaffold objects.
+ * Human layout for `ropex runtimes`. One block per runtime. The first line is
+ * the kind, then `status: ready` or `status: not ready`. Later lines are the
+ * label, binary, credentials, and the next step. `--json` keeps the scaffold
+ * objects.
  */
 export function formatRuntimeReport(statuses: WorkerRuntimeStatus[]): string {
   const blocks = statuses.map((status) => {
-    const mark = (status.ready ? "ready" : "not ready").padEnd(RUNTIME_STATUS_WIDTH);
-    const lines = [`${mark}${status.kind.padEnd(RUNTIME_KIND_WIDTH)}${status.label}`];
+    const mark = status.ready ? "ready" : "not ready";
+    const lines = [`${status.kind.padEnd(RUNTIME_KIND_WIDTH)}status: ${mark}`, status.label];
     if (status.kind === "dsh") {
       lines.push(runtimeField("binary", "embedded"));
       lines.push(runtimeField("credentials", "built in"));
@@ -255,7 +255,7 @@ export function formatRuntimeReport(statuses: WorkerRuntimeStatus[]): string {
     } else if (!(status.ready && status.hint.startsWith("Ready — "))) {
       lines.push(...wrapRuntimeText(status.hint, RUNTIME_TEXT_WIDTH));
     }
-    const pad = " ".repeat(RUNTIME_STATUS_WIDTH);
+    const pad = " ".repeat(RUNTIME_KIND_WIDTH);
     return [lines[0], ...lines.slice(1).map((line) => `${pad}${line}`)].join("\n");
   });
   return `${blocks.join("\n\n")}\n`;
