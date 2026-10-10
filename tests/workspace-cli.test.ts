@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { workspaceCheck } from "../src/cli.ts";
+import { workspaceCheck } from "../src/workspace-check.ts";
 import { emptyState, saveState } from "../src/controller.ts";
 import type { GitRunner } from "../src/workspace.ts";
 

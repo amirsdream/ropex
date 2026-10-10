@@ -2,9 +2,10 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as proc from "../src/proc.ts";
 import { expandDesired, parseManifests } from "../src/spec.ts";
-import { cleanupWorkspace, prepareWorkspace, publishWorkspace } from "../src/workspace.ts";
+import { cleanupWorkspace, defaultGitRunner, prepareWorkspace, publishWorkspace } from "../src/workspace.ts";
 
 const temps: string[] = [];
 afterEach(() => {
@@ -14,6 +15,40 @@ afterEach(() => {
 function git(cwd: string, args: string[]): string {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 }
+
+describe("defaultGitRunner", () => {
+  it("disables prompts and keeps caller commit identity", () => {
+    const spy = vi.spyOn(proc, "runProcessSync").mockReturnValue({
+      code: 0,
+      stdout: "",
+      stderr: "",
+      timedOut: false,
+    });
+    try {
+      defaultGitRunner()(["status"], {
+        cwd: "/tmp",
+        env: {
+          GIT_AUTHOR_NAME: "Ropex",
+          GIT_AUTHOR_EMAIL: "ropex@localhost",
+          GIT_COMMITTER_NAME: "Ropex",
+          GIT_COMMITTER_EMAIL: "ropex@localhost",
+          GIT_TERMINAL_PROMPT: "1",
+        },
+      });
+      const env = spy.mock.calls[0]?.[2]?.env ?? {};
+      expect(env.GIT_TERMINAL_PROMPT).toBe("0");
+      expect(env.GCM_INTERACTIVE).toBe("never");
+      expect(env.GIT_AUTHOR_NAME).toBe("Ropex");
+      expect(env.GIT_AUTHOR_EMAIL).toBe("ropex@localhost");
+      expect(env.GIT_COMMITTER_NAME).toBe("Ropex");
+      expect(env.GIT_COMMITTER_EMAIL).toBe("ropex@localhost");
+      expect(spy.mock.calls[0]?.[0]).toBe("git");
+      expect(spy.mock.calls[0]?.[1]).toEqual(["status"]);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
 
 describe("workspace git", () => {
   it("pushes a committed worktree to a local bare remote", () => {

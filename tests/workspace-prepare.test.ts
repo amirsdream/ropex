@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { expandDesired, parseManifests } from "../src/spec.ts";
 import type { DesiredAgent } from "../src/types.ts";
 import {
+  assertWorkspaceRuntime,
   prepareWorkspace,
   sandboxSpecForWorkspace,
   workspaceBranch,
@@ -219,6 +220,45 @@ spec:
       }),
     ).toThrow(/runtime codex binary not found/);
     expect(fake.calls).toEqual([]);
+  });
+
+  it("does not require a host binary for a docker CLI runtime", () => {
+    const cli = expandDesired(
+      parseManifests(`
+apiVersion: ropex.dev/v1
+kind: Agent
+metadata:
+  name: builder
+spec:
+  replicas: 1
+  runtime:
+    kind: codex
+    auth: api-key
+  sandbox:
+    provider: docker
+  harness:
+    profile: minimal
+    plugins: []
+  hermes:
+    memory: shared
+    learning: false
+    skills: []
+  workspace:
+    path: /tmp/app
+`),
+    )[0];
+    expect(() =>
+      assertWorkspaceRuntime(cli, {
+        env: { OPENAI_API_KEY: "test-key" },
+        binExists: () => false,
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertWorkspaceRuntime(cli, {
+        env: {},
+        binExists: () => false,
+      }),
+    ).toThrow(/OPENAI_API_KEY/);
   });
 
   it("forces a docker sandbox to mount the prepared worktree", () => {

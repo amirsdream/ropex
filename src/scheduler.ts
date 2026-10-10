@@ -14,7 +14,7 @@ import {
   reclaimExpiredLeases,
 } from "./queue.js";
 import { deliverTaskOutcome, markNativeTaskRunning } from "./connectors.js";
-import { runTask, type RunTaskOptions } from "./runtime.js";
+import { KeptBranchError, runTask, type RunTaskOptions } from "./runtime.js";
 import { sweepIdleWorkers } from "./scale.js";
 import type { ClusterState, RunResult } from "./types.js";
 
@@ -132,11 +132,20 @@ export async function drainQueue(
             });
           return result;
         } catch (err) {
-          const updated = completeQueued(state, c.queueId, false, err instanceof Error ? err.message : String(err), {
+          const kept = err instanceof KeptBranchError ? err : undefined;
+          const message = kept?.workspaceError ?? (err instanceof Error ? err.message : String(err));
+          const updated = completeQueued(state, c.queueId, false, message, {
             maxAttempts: opts.maxAttempts,
             root: opts.root,
+            terminal: Boolean(kept),
           });
-          if (updated) deliverTaskOutcome(state, updated);
+          if (updated) {
+            deliverTaskOutcome(
+              state,
+              updated,
+              kept ? { workspace: kept.workspaceResult, error: kept.workspaceError } : undefined,
+            );
+          }
           return undefined;
         }
       }),

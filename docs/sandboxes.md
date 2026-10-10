@@ -87,6 +87,8 @@ A runnable version is in [`fleets/examples/docker-sandbox.yaml`](../fleets/examp
 
 When the agent also sets `spec.workspace`, the prepared task worktree is the directory a Docker sandbox mounts. The container does not clone `sandbox.repo`. Publish runs on the host, in that worktree, and uses the checkout's existing remote.
 
+A workspace worktree's git directory stays on the host. `git commit` inside the container can fail because that directory is not in the mount. Publish on the host still commits and pushes.
+
 ## Tokens and secrets
 
 - The container is **created with no secrets**.

@@ -54,7 +54,12 @@ export function defaultGitRunner(): GitRunner {
   return (args, opts) => {
     const result = runProcessSync("git", args, {
       cwd: opts?.cwd,
-      env: opts?.env,
+      env: {
+        ...process.env,
+        ...opts?.env,
+        GIT_TERMINAL_PROMPT: "0",
+        GCM_INTERACTIVE: "never",
+      },
       timeoutMs: 300_000,
     });
     return { code: result.code ?? 1, stdout: result.stdout, stderr: result.stderr };
@@ -152,9 +157,23 @@ export function cleanupWorkspace(
   opts: { deleteBranch: boolean; git?: GitRunner },
 ): void {
   const git = opts.git ?? defaultGitRunner();
-  const removed = git(["worktree", "remove", "--force", prepared.worktree], { cwd: prepared.checkout });
-  if (removed.code !== 0) rmSync(prepared.worktree, { recursive: true, force: true });
-  if (opts.deleteBranch) git(["branch", "-D", prepared.branch], { cwd: prepared.checkout });
+  const run = (args: string[]): boolean => {
+    try {
+      return git(args, { cwd: prepared.checkout }).code === 0;
+    } catch {
+      return false;
+    }
+  };
+  const removed = run(["worktree", "remove", "--force", prepared.worktree]);
+  if (!removed) {
+    try {
+      rmSync(prepared.worktree, { recursive: true, force: true });
+    } catch {
+      // The directory can already be gone.
+    }
+    run(["worktree", "prune"]);
+  }
+  if (opts.deleteBranch) run(["branch", "-D", prepared.branch]);
 }
 
 export function assertWorkspaceRuntime(
@@ -187,6 +206,8 @@ export function assertWorkspaceRuntime(
     fileExists: opts.fileExists,
     homedir: opts.homedir,
   });
+  // claude-code, codex, and copilot are resolved inside the container by bootWorker.
+  if (provider === "docker") return;
   const bin = resolveRuntimeBin(descriptor, agent.spec.runtime, env);
   const exists = opts.binExists ?? ((file: string) => binOnPath(file, env) !== undefined);
   if (!exists(bin)) throw new WorkspaceError(`runtime ${kind} binary not found: ${bin}`);

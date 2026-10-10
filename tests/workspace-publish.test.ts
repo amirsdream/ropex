@@ -150,4 +150,33 @@ describe("cleanupWorkspace", () => {
     cleanupWorkspace(prepared, { deleteBranch: false, git: fake.git });
     expect(fake.calls.some((call) => call.args[0] === "branch")).toBe(false);
   });
+
+  it("prunes and deletes the branch when worktree remove fails", () => {
+    const fake = scripted({
+      "worktree remove --force /ctrl/.ropex/workspace/builder/greeting": { code: 1, stderr: "remove failed\n" },
+      "worktree prune": { stdout: "" },
+      "branch -D ropex/greeting": { stdout: "" },
+    });
+    expect(() => cleanupWorkspace(prepared, { deleteBranch: true, git: fake.git })).not.toThrow();
+    expect(fake.calls.map((call) => call.args.join(" "))).toEqual([
+      "worktree remove --force /ctrl/.ropex/workspace/builder/greeting",
+      "worktree prune",
+      "branch -D ropex/greeting",
+    ]);
+    expect(fake.calls.every((call) => call.cwd === prepared.checkout)).toBe(true);
+  });
+
+  it("does not throw when cleanup git commands throw", () => {
+    const calls: string[] = [];
+    const git: GitRunner = (args) => {
+      calls.push(args.join(" "));
+      throw new Error(`boom ${args.join(" ")}`);
+    };
+    expect(() => cleanupWorkspace(prepared, { deleteBranch: true, git })).not.toThrow();
+    expect(calls).toEqual([
+      "worktree remove --force /ctrl/.ropex/workspace/builder/greeting",
+      "worktree prune",
+      "branch -D ropex/greeting",
+    ]);
+  });
 });

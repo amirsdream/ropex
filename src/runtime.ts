@@ -58,6 +58,29 @@ export type TaskProgress = {
   message: string;
 };
 
+type WorkspaceSettlement = {
+  published: boolean;
+  keepBranch: boolean;
+  workspaceResult?: RunResult["workspaceResult"];
+};
+
+/** Publish kept the branch, then a later step threw. The scheduler must not retry. */
+export class KeptBranchError extends Error {
+  readonly workspaceResult?: RunResult["workspaceResult"];
+  readonly workspaceError: string;
+
+  constructor(
+    message: string,
+    workspaceResult?: RunResult["workspaceResult"],
+    options?: { cause?: unknown },
+  ) {
+    super(message, options);
+    this.name = "KeptBranchError";
+    this.workspaceResult = workspaceResult;
+    this.workspaceError = message;
+  }
+}
+
 export async function runTask(
   state: ClusterState,
   worker: Worker,
@@ -78,7 +101,7 @@ export async function runTask(
 
   const root = opts.worktreeRoot ?? opts.root ?? process.cwd();
   let prepared: PreparedWorkspace | undefined;
-  const settlement = { published: false, keepBranch: false };
+  const settlement: WorkspaceSettlement = { published: false, keepBranch: false };
   let sandbox: Sandbox | undefined;
   try {
     if (agent.spec.workspace) {
@@ -122,6 +145,12 @@ export async function runTask(
       { agent, workflow, root, sandbox, auth, prepared, settlement },
       opts,
     );
+  } catch (err) {
+    if (settlement.published && settlement.keepBranch) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new KeptBranchError(message, settlement.workspaceResult, { cause: err });
+    }
+    throw err;
   } finally {
     if (sandbox) await releaseSandbox(state, worker, task, agent, sandbox);
     if (prepared) {
@@ -180,7 +209,7 @@ async function executeTask(
     sandbox: Sandbox;
     auth?: PreparedRuntimeAuth;
     prepared?: PreparedWorkspace;
-    settlement: { published: boolean; keepBranch: boolean };
+    settlement: WorkspaceSettlement;
   },
   opts: RunTaskOptions,
 ): Promise<RunResult> {
@@ -314,6 +343,7 @@ async function executeTask(
     const outcome = publishWorkspace({ prepared: run.prepared, taskId: task.id, git: opts.git });
     run.settlement.published = true;
     run.settlement.keepBranch = outcome.keepBranch;
+    run.settlement.workspaceResult = outcome.result;
     workspaceResult = outcome.result;
     workspaceError = outcome.error;
   }
