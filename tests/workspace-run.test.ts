@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { emptyState } from "../src/controller.ts";
 import { expandWorkers, runTask } from "../src/runtime.ts";
 import { expandDesired, parseManifests } from "../src/spec.ts";
-import type { GitRunner } from "../src/workspace.ts";
+import { defaultGitRunner, type GitRunner } from "../src/workspace.ts";
 
 const temps: string[] = [];
 afterEach(() => {
@@ -160,9 +160,33 @@ spec:
     const state = emptyState();
     state.desired = desired;
     state.workers = [worker];
+    const recorded: string[][] = [];
+    const realGit = defaultGitRunner();
+    const gitRunner: GitRunner = (args, opts) => {
+      recorded.push(args);
+      return realGit(args, opts);
+    };
     await expect(
-      runTask(state, worker, { id: "look", agent: "builder", prompt: "look around" }, { root }),
+      runTask(
+        state,
+        worker,
+        { id: "look", agent: "builder", prompt: "look around" },
+        { root, git: gitRunner },
+      ),
     ).rejects.toThrow(/ROPEX_IN_SESSION/);
+    expect(
+      recorded.some(
+        (args) =>
+          args[0] === "worktree" &&
+          args[1] === "add" &&
+          args.includes("-b") &&
+          args.includes("ropex/look"),
+      ),
+    ).toBe(true);
+    expect(recorded.some((args) => args[0] === "branch" && args[1] === "-D" && args[2] === "ropex/look")).toBe(
+      true,
+    );
+    expect(recorded.some((args) => args[0] === "push")).toBe(false);
     expect(git(repo, ["branch", "--list", "ropex/look"])).toBe("");
     expect(() => git(bare, ["rev-parse", "--verify", "refs/heads/ropex/look"])).toThrow();
   });
