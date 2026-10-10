@@ -1,3 +1,6 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { expandDesired, parseManifests } from "../src/spec.ts";
 import type { DesiredAgent } from "../src/types.ts";
@@ -51,13 +54,16 @@ function scripted(map: Record<string, { code?: number; stdout?: string; stderr?:
   return { git, calls };
 }
 
-const ok = {
-  "rev-parse --is-inside-work-tree": { stdout: "true\n" },
-  "remote get-url origin": { stdout: "https://example.test/app.git\n" },
-  "rev-parse --verify main^{commit}": { stdout: "abc\n" },
-  "show-ref --verify --quiet refs/heads/ropex/greeting": { code: 1 },
-  "worktree add -b ropex/greeting /ctrl/.ropex/workspace/builder/greeting main": { stdout: "" },
-};
+function okScript(root: string) {
+  const worktree = join(root, ".ropex", "workspace", "builder", "greeting");
+  return {
+    "rev-parse --is-inside-work-tree": { stdout: "true\n" },
+    "remote get-url origin": { stdout: "https://example.test/app.git\n" },
+    "rev-parse --verify main^{commit}": { stdout: "abc\n" },
+    "show-ref --verify --quiet refs/heads/ropex/greeting": { code: 1 },
+    [`worktree add -b ropex/greeting ${worktree} main`]: { stdout: "" },
+  };
+}
 
 describe("prepareWorkspace", () => {
   it("slug-formats the branch", () => {
@@ -68,9 +74,10 @@ describe("prepareWorkspace", () => {
   });
 
   it("creates the worktree after the checks pass", () => {
-    const fake = scripted(ok);
+    const root = mkdtempSync(join(tmpdir(), "ropex-ctrl-"));
+    const fake = scripted(okScript(root));
     const prepared = prepareWorkspace({
-      root: "/ctrl",
+      root,
       agent: agent(),
       taskId: "greeting",
       git: fake.git,
@@ -79,7 +86,7 @@ describe("prepareWorkspace", () => {
     });
     expect(prepared).toMatchObject({
       checkout: "/tmp/app",
-      worktree: "/ctrl/.ropex/workspace/builder/greeting",
+      worktree: join(root, ".ropex", "workspace", "builder", "greeting"),
       branch: "ropex/greeting",
       base: "main",
       remote: "origin",
@@ -89,7 +96,7 @@ describe("prepareWorkspace", () => {
   });
 
   it("does not create a branch on dry run", () => {
-    const fake = scripted(ok);
+    const fake = scripted(okScript("/ctrl"));
     prepareWorkspace({
       root: "/ctrl",
       agent: agent(),
@@ -107,7 +114,7 @@ describe("prepareWorkspace", () => {
     ["rev-parse --verify main^{commit}", { code: 1 }, /base main does not exist/],
     ["show-ref --verify --quiet refs/heads/ropex/greeting", { code: 0 }, /branch ropex\/greeting already exists/],
   ] as const)("stops before worktree add when %s fails", (key, result, message) => {
-    const fake = scripted({ ...ok, [key]: result });
+    const fake = scripted({ ...okScript("/ctrl"), [key]: result });
     expect(() =>
       prepareWorkspace({
         root: "/ctrl",
@@ -121,7 +128,7 @@ describe("prepareWorkspace", () => {
   });
 
   it("rejects a missing checkout path before git", () => {
-    const fake = scripted(ok);
+    const fake = scripted(okScript("/ctrl"));
     expect(() =>
       prepareWorkspace({
         root: "/ctrl",
@@ -159,7 +166,7 @@ describe("prepareWorkspace", () => {
     process.env.ROPEX_DSH_BACKEND = "live";
     try {
       const docker = agent("  sandbox:\n    provider: docker\n");
-      const fake = scripted(ok);
+      const fake = scripted(okScript("/ctrl"));
       expect(() =>
         prepareWorkspace({
           root: "/ctrl",
@@ -199,7 +206,7 @@ spec:
     path: /tmp/app
 `),
     )[0];
-    const fake = scripted(ok);
+    const fake = scripted(okScript("/ctrl"));
     expect(() =>
       prepareWorkspace({
         root: "/ctrl",
