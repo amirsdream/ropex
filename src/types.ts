@@ -181,6 +181,15 @@ export type PlacementSpec = {
 /** How agent capacity is materialised. */
 export type ScaleMode = "onDemand" | "static";
 
+export type WorkspaceSpec = {
+  /** Existing local git checkout. */
+  path: string;
+  /** Remote to push to. Default `origin`. */
+  remote?: string;
+  /** Branch new work is cut from. Default: the checkout's current branch. */
+  base?: string;
+};
+
 export type AgentSpec = {
   harness: HarnessSpec;
   /** Executor for the `execute` stage. Defaults to `{ kind: "dsh" }`. */
@@ -211,6 +220,8 @@ export type AgentSpec = {
   selector?: LabelSelector;
   /** Scheduling constraints for claim / placement. */
   placement?: PlacementSpec;
+  /** Local checkout this agent edits. Omitted from the image digest. */
+  workspace?: WorkspaceSpec;
 };
 
 export type Agent = {
@@ -287,6 +298,9 @@ export type TaskManifest = {
       workerId?: string;
       completedAt?: string;
       error?: string;
+      branch?: string;
+      commit?: string;
+      remote?: string;
     };
   };
 };
@@ -796,4 +810,13 @@ export type RunResult = {
   output: string;
   /** Worktree cwd used for fs/shell isolation. */
   worktree?: string;
+  /** Set when this run prepared a workspace branch. */
+  workspaceResult?: {
+    branch: string;
+    commit?: string;
+    remote: string;
+    pushed: boolean;
+  };
+  /** Set when the spine finished but the workspace result must fail the task. */
+  workspaceError?: string;
 };

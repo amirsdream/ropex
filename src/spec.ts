@@ -105,7 +105,7 @@ function validateAgentSpec(spec: Record<string, unknown> | undefined, where: str
         baseUrl?: unknown;
       }
     | undefined;
-  if (runtime === undefined) return;
+  if (runtime !== undefined) {
   if (!WORKER_RUNTIME_KINDS_LIST.includes(runtime.kind as never)) {
     throw new Error(
       `${where}: unsupported runtime.kind "${String(runtime.kind)}" (expected ${WORKER_RUNTIME_KINDS_LIST.join(" | ")})`,
@@ -136,6 +136,16 @@ function validateAgentSpec(spec: Record<string, unknown> | undefined, where: str
     }
     if (runtime.kind !== "codex" || (runtime.auth !== undefined && runtime.auth !== "api-key")) {
       throw new Error(`${where}: runtime.baseUrl applies to codex auth api-key`);
+    }
+  }
+  }
+  const workspace = spec?.workspace as { path?: unknown } | undefined;
+  if (workspace !== undefined) {
+    if (!workspace || typeof workspace !== "object" || Array.isArray(workspace)) {
+      throw new Error(`${where}: workspace must be an object`);
+    }
+    if (typeof workspace.path !== "string" || !workspace.path.trim()) {
+      throw new Error(`${where}: workspace.path is required`);
     }
   }
 }
@@ -193,10 +203,22 @@ function cloneAgentSpec(tpl: Omit<AgentSpec, "replicas"> & { replicas?: number }
           tolerations: tpl.placement.tolerations?.map((t) => ({ ...t })),
         }
       : undefined,
+    workspace: tpl.workspace ? { ...tpl.workspace } : undefined,
+  };
+}
+
+function withWorkspace(spec: AgentSpec): AgentSpec {
+  if (!spec.workspace) return spec;
+  const remote = spec.workspace.remote?.trim() || "origin";
+  const base = spec.workspace.base?.trim() || undefined;
+  return {
+    ...spec,
+    workspace: { path: spec.workspace.path.trim(), remote, ...(base ? { base } : {}) },
   };
 }
 
 function normalizeAgentSpec(spec: AgentSpec): AgentSpec {
+  spec = withWorkspace(spec);
   const scale = resolveScaleMode(spec);
   const maxConcurrent = resolveMaxConcurrent({ ...spec, scale });
   if (scale === "onDemand") {
