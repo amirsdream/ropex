@@ -1,0 +1,32 @@
+# Real Codex on the host. The binary is `codex` on PATH.
+# Leave auth unset when exactly one strategy has credentials.
+# When both an API key and ~/.codex/auth.json exist, set one auth line.
+apiVersion: ropex.dev/v1
+kind: Policy
+metadata:
+  name: manual-guardrails
+spec:
+  maxReplicas: 2
+  permissions:
+    deny: []
+    requireApproval: []
+---
+apiVersion: ropex.dev/v1
+kind: Agent
+metadata:
+  name: codex-host
+spec:
+  scale: static
+  replicas: 1
+  runtime:
+    kind: codex
+    # auth: api-key
+    # auth: oauth-file
+    timeoutMs: 900000
+  harness:
+    profile: code
+    plugins: [fs, shell]
+  hermes:
+    memory: none
+    learning: false
+    skills: []

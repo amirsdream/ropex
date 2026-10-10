@@ -1,6 +1,6 @@
 # Manual checks — harness commits and CLI runtimes
 
-Repeatable checks for the execute-stage changes: the harness commits inside the task, auth is a named strategy, and Cursor is a runtime. You run every step yourself. Nothing here calls a model unless you choose the optional Codex section.
+Repeatable checks for the execute-stage changes: the harness commits inside the task, auth is a named strategy, and Cursor is a runtime. You run every step yourself. Sections 2–5 stay on this machine and do not call a model. Sections 6–8 call a real Codex or Cursor account.
 
 Run this in **bash** on Linux, macOS, or [WSL](./wsl.md). The control plane’s root is the current directory, so the fixture repo and the Ropex source stay separate.
 
@@ -25,7 +25,7 @@ Leave this checkout as the source. Do not enqueue tasks while your shell is insi
 export ROPEX="$HOME/ropex-src"
 ```
 
-`npm install` does not install Claude, Codex, Copilot, or Cursor. Parts 1–4 need only Node and git.
+`npm install` does not install Claude, Codex, Copilot, or Cursor. Sections 1–5 need only Node and git. Sections 7 and 8 need the real CLI already authorized on this machine.
 
 ## 1. Fresh fixture repo
 
@@ -66,6 +66,20 @@ reset() {
 
 `git rev-parse main` must print the same hash as `BASE` after every check.
 
+```bash
+show_greeting() {
+  local wt="$1"
+  echo "---- $wt ----"
+  git -C "$wt" log -1 --format='%s%n%an <%ae>%n%cn <%ce>'
+  echo "---- src/hello.ts ----"
+  git -C "$wt" show HEAD:src/hello.ts
+  echo "---- src/hello.test.ts ----"
+  git -C "$wt" show HEAD:src/hello.test.ts
+  echo "---- main ----"
+  git -C "$WORK" rev-parse main
+}
+```
+
 ## 2. Embedded harness commits a fenced prompt
 
 **reset**, then:
@@ -84,11 +98,7 @@ Pass when all of these are true:
 ropex queue
 # the writer line is [done], and err= is absent
 
-WT="$WORK/sandbox/worktrees/writer_0"
-git -C "$WT" log -1 --format='%s%n%an <%ae>%n%cn <%ce>'
-git -C "$WT" show HEAD:src/hello.ts
-git -C "$WT" show HEAD:src/hello.test.ts
-git -C "$WORK" rev-parse main
+show_greeting "$WORK/sandbox/worktrees/writer_0"
 ```
 
 | Check | Expected |
@@ -144,7 +154,7 @@ Pass when apply exits non-zero and the message contains `not supported by cursor
 
 ## 5. Two credentials fail until `auth` is set
 
-This uses `node` as a stand-in binary so you do not install Claude. The task is supposed to fail at boot. Unset any real keys first so the shell values are the only ones.
+This uses `node` as a stand-in binary so you do not install Claude. The task is supposed to fail at boot. Unset keys in this shell first so the placeholders are the only values. Section 5 does not delete `~/.codex/auth.json` or `~/.config/cursor/auth.json`. If you use an API key for section 7 or 8, export that real key again after this section.
 
 ```bash
 reset
@@ -232,19 +242,85 @@ The container is removed when the task ends. The snapshot is what you inspect. `
 
 If `~/.codex/auth.json` also exists, this fleet still uses the API key because it sets `auth: api-key`.
 
-Codex `oauth-file`, Claude, Copilot, and Cursor have the same boot path and fixture tests. This Docker section is the one live run already exercised for Codex `api-key`. The other CLIs are not required for this pass.
+A failed Codex run is retried up to three times. Watch the first `err=` before leaving it to retry.
 
-## 7. Optional — a real Cursor binary
+## 7. Real Codex on the host
 
-When `agent` is on `PATH` and `CURSOR_API_KEY` is set:
+Uses the `codex` already logged in on this machine. The edit happens in the fixture worktree, not in Docker. Pick this or section 6. Doing both is fine. Each one spends API usage.
+
+Install once if `codex` is missing:
 
 ```bash
+npm install -g @openai/codex
+codex --version
+```
+
+Authorize with one strategy:
+
+| Strategy | What you set | Fleet line |
+| --- | --- | --- |
+| API key | `export OPENAI_API_KEY=...` or `export CODEX_API_KEY=...` | `auth: api-key` |
+| Login file | `codex login`, which writes `~/.codex/auth.json` | `auth: oauth-file` |
+
+```bash
+reset
+command -v codex
+test -n "$OPENAI_API_KEY$CODEX_API_KEY" -o -f "$HOME/.codex/auth.json"
 ropex runtimes
 ```
 
-Pass when the `cursor` line says `ready` and the hint names `CURSOR_API_KEY`. This page does not start a Cursor edit. Section 4 already checked that `auth: oauth` is rejected.
+The `codex` line must say `ready`. If the hint says `more than one auth method`, uncomment exactly one `auth:` line in `fleets/examples/manual/codex-host.yaml` and save it. If the hint names a single strategy, leave both lines commented.
 
-## 8. Put the fixture away
+```bash
+ropex apply "$ROPEX/fleets/examples/manual/codex-host.yaml"
+ropex tasks submit --agent codex-host "$(cat "$ROPEX/fleets/examples/manual/prompts/greeting.txt")"
+ropex drain --limit 1
+ropex queue
+show_greeting "$WORK/sandbox/worktrees/codex-host_0"
+ropex trajectories --jsonl
+```
+
+`drain` can sit for several minutes. Pass when `ropex queue` shows `codex-host` as `[done]` with no `err=`, and `show_greeting` matches the table in section 2. The jsonl line contains `"plugin":"runtime:codex"`. `main` is still `$BASE`.
+
+The brief tells Codex to write the two files and run `git commit -m "add a greeting argument"`. The host process sets the Ropex git identity, so the commit is not your `Dev` config.
+
+## 8. Real Cursor on the host
+
+Same greeting, carried out by the Cursor CLI (`agent`) with your Cursor account. This spends Cursor usage. A policy that denies `fs` or `shell` refuses to boot, which is why this fleet denies nothing.
+
+Install once if `agent` is missing: [Cursor CLI install](https://cursor.com/docs/cli/overview).
+
+Authorize with one strategy:
+
+| Strategy | What you set | Fleet line |
+| --- | --- | --- |
+| API key | `export CURSOR_API_KEY=...` from the Cursor dashboard | `auth: api-key` |
+| Login file | `agent login`, which stores `~/.config/cursor/auth.json` | `auth: oauth-file` |
+
+```bash
+reset
+command -v agent
+agent --version
+test -n "$CURSOR_API_KEY" -o -f "$HOME/.config/cursor/auth.json"
+ropex runtimes
+```
+
+The `cursor` line must say `ready`. If the hint says `more than one auth method`, uncomment exactly one `auth:` line in `fleets/examples/manual/cursor-host.yaml`. The key stays in the environment. Ropex does not pass `--api-key`.
+
+```bash
+ropex apply "$ROPEX/fleets/examples/manual/cursor-host.yaml"
+ropex tasks submit --agent cursor-host "$(cat "$ROPEX/fleets/examples/manual/prompts/greeting.txt")"
+ropex drain --limit 1
+ropex queue
+show_greeting "$WORK/sandbox/worktrees/cursor-host_0"
+ropex trajectories --jsonl
+```
+
+Pass when `cursor-host` is `[done]`, `show_greeting` matches section 2, and the jsonl line contains `"plugin":"runtime:cursor"`. `main` is still `$BASE`.
+
+On the host, Cursor is started with `--force` and `--trust` so the print run can write files and commit without a prompt. A failed run is retried up to three times.
+
+## 9. Put the fixture away
 
 ```bash
 unset ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN
