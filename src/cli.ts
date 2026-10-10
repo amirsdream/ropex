@@ -61,6 +61,7 @@ import { parseManifests } from "./spec.js";
 import { ingestGithubWebhook, signGithubPayload } from "./webhook.js";
 import { parseInterval, watchLoop, watchOnce, watchDeclaredRepos, watchReposLoop } from "./watch.js";
 import type { AuditKind, GithubEvent, ReconcilePlan } from "./types.js";
+import { prepareWorkspace, type GitRunner } from "./workspace.js";
 
 loadDotEnv();
 
@@ -123,6 +124,7 @@ Usage:
   ropex health                    Worker probes + backlog SLO
   ropex runtimes                  Worker runtimes (dsh, claude-code, codex, copilot)
   ropex sandboxes [--json]        Sandbox providers, agents, snapshots, live containers
+  ropex workspace check <agent>   Check runtime, checkout, remote, and base. Creates no branch.
   ropex sandbox build <agent>     Build (or reuse) the agent's environment image
   ropex sandbox prune [--keep N] [--ttl-ms N]
                                      Evict snapshots (default: all)
@@ -152,6 +154,48 @@ Usage:
   ropex ui [--port N]             Serve control-plane UI + /api/v1/*
   ropex help
 `;
+
+export function workspaceCheck(
+  root: string,
+  args: string[],
+  io: {
+    git?: GitRunner;
+    fileExists?: (file: string) => boolean;
+    log?: (line: string) => void;
+    error?: (line: string) => void;
+  } = {},
+): number {
+  const log = io.log ?? ((line) => console.log(line));
+  const error = io.error ?? ((line) => console.error(line));
+  if (args[0] !== "check" || !args[1]) {
+    error("usage: ropex workspace check <agent>");
+    return 1;
+  }
+  const agent = loadState(root).desired.find((item) => item.metadata.name === args[1]);
+  if (!agent) {
+    error(`unknown agent: ${args[1]}`);
+    return 1;
+  }
+  if (!agent.spec.workspace) {
+    error(`agent ${args[1]} has no spec.workspace`);
+    return 1;
+  }
+  try {
+    prepareWorkspace({
+      root,
+      agent,
+      taskId: "check",
+      dryRun: true,
+      git: io.git,
+      fileExists: io.fileExists,
+    });
+    log(`workspace ok ${agent.spec.workspace.path}`);
+    return 0;
+  } catch (err) {
+    error(err instanceof Error ? err.message : String(err));
+    return 1;
+  }
+}
 
 async function main(argv: string[]): Promise<number> {
   const [cmd = "help", ...rest] = argv;
@@ -914,6 +958,8 @@ async function main(argv: string[]): Promise<number> {
       for (const c of report.containers) console.log(`  ${c.name} worker=${c.worker || "-"}`);
       return 0;
     }
+    case "workspace":
+      return workspaceCheck(root, rest);
     case "sandbox": {
       const [sub, ...args] = rest;
       if (sub === "build") {
@@ -1327,5 +1373,7 @@ function fail(msg: string): number {
   return 1;
 }
 
-const code = await main(process.argv.slice(2));
-process.exit(code);
+if (!process.env.VITEST) {
+  const code = await main(process.argv.slice(2));
+  process.exit(code);
+}
