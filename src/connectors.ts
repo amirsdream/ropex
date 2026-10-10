@@ -123,6 +123,8 @@ export type DeliverOutcome = {
   delivery?: { kind: string; body: string };
   worker?: Worker;
   imageDigest?: string;
+  error?: string;
+  workspace?: { branch: string; commit?: string; remote: string; pushed: boolean };
 };
 
 /**
@@ -144,7 +146,7 @@ export function deliverTaskOutcome(
     modes.push(mode);
 
     if (mode === "git" && item.task.manifestPath) {
-      deliverGitTaskFromQueueItem(item, outcome.output);
+      deliverGitTaskFromQueueItem(item, { output: outcome.output, workspace: outcome.workspace });
       const rec = findNativeTask(state, item.id);
       if (rec) rec.manifestPath = item.task.manifestPath;
       return;

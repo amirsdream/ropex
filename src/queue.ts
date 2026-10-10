@@ -370,6 +370,8 @@ export type CompleteQueuedOptions = {
   releaseWorker?: boolean;
   /** Repo root for worktree teardown on on-demand destroy. */
   root?: string;
+  /** When true and ok is false, dead-letter immediately (no pending retry). */
+  terminal?: boolean;
 };
 
 /**
@@ -416,7 +418,7 @@ export function completeQueued(
   if (error) item.error = error;
 
   const isLease = error === "lease expired";
-  if (item.attempts > 0 && item.attempts < maxAttempts) {
+  if (!opts.terminal && item.attempts > 0 && item.attempts < maxAttempts) {
     item.status = "pending";
     item.workerId = undefined;
     item.claimedAt = undefined;
