@@ -1,0 +1,7 @@
+leave a note
+
+```docs/note.txt
+old pond
+a frog jumps in
+the sound of water
+```

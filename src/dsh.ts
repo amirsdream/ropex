@@ -5,6 +5,7 @@
  */
 
 import { createRequire } from "node:module";
+import type { PreparedRuntimeAuth } from "./cli-runtimes/index.js";
 import type { HermesPlan } from "./contracts.js";
 import { createHarness, loopModeFor, toolsFor, type HarnessLoop } from "./harness.js";
 import { chatEndpoint, completeChat } from "./llm.js";
@@ -134,6 +135,10 @@ export type BootDshOptions = {
   backend?: DshBackend;
   /** Isolate the executor runs in. Defaults to running on the host in `cwd`. */
   sandbox?: Sandbox;
+  /** Auth already resolved for this run. Boot selects one when omitted. */
+  auth?: PreparedRuntimeAuth;
+  /** File probe for auth selection. Tests pass a fake so a login file on the host is ignored. */
+  authProbe?: { fileExists?: (path: string) => boolean; homedir?: () => string };
 };
 
 /** Checklist returned by `liveDshScaffold` — docs + UI surface this. */
@@ -295,7 +300,10 @@ async function bootEmbeddedDsh(
     requireApproval: opts.requireApproval,
     hermes: opts.hermes,
     memory: opts.memory,
-    cwd: opts.cwd,
+    cwd: opts.sandbox?.cwd ?? opts.cwd,
+    exec: opts.sandbox
+      ? (bin, args, o) => opts.sandbox!.exec(bin, args, { stdin: o?.stdin, env: o?.env })
+      : undefined,
   });
 
   return {

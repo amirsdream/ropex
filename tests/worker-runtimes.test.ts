@@ -7,18 +7,21 @@ import {
   CLI_RUNTIMES,
   classifyPolicy,
   isKnownRopexTool,
-} from "../src/cli-runtimes.ts";
+  permissionPlan,
+} from "../src/cli-runtimes/index.ts";
 import { API_ROUTES } from "../src/contracts.ts";
 import { emptyState, saveState, loadState } from "../src/controller.ts";
 import { buildAgentImage } from "../src/image.ts";
 import { expandDesired, parseManifests } from "../src/spec.ts";
 import {
   credentialPresent,
+  formatRuntimeReport,
   resolveRuntimeBin,
   resolveRuntimeKind,
   runtimeBinEnvVar,
   workerRuntimeScaffold,
   WORKER_RUNTIME_KINDS,
+  type WorkerRuntimeStatus,
 } from "../src/worker-runtime.ts";
 import { composeWorkflow } from "../src/workflow.ts";
 
@@ -65,6 +68,81 @@ describe("cli runtime descriptors", () => {
     expect(argv).toContain("--json");
     expect(argv[argv.indexOf("--cd") + 1]).toBe("/wt");
     expect(argv).not.toContain("do the thing");
+  });
+
+  it("points codex api-key auth at HTTPS and leaves the key off argv", () => {
+    const applied = CLI_RUNTIMES.codex.applyAuth({
+      method: "api-key",
+      envName: "OPENAI_API_KEY",
+      container: true,
+    });
+    const argv = CLI_RUNTIMES.codex.argv({
+      prompt: "do the thing",
+      cwd: "/wt",
+      authArgs: applied.args,
+      permissionArgs: ["--sandbox", "workspace-write", "-c", "approval_policy=never"],
+    });
+    expect(argv).toContain('model_provider="ropex"');
+    expect(argv).toContain('model_providers.ropex.env_key="OPENAI_API_KEY"');
+    expect(argv).toContain('model_providers.ropex.base_url="https://api.openai.com/v1"');
+    expect(argv).toContain("model_providers.ropex.supports_websockets=false");
+    expect(argv).toContain("model_providers.ropex.requires_openai_auth=false");
+    expect(applied.env).toEqual(["OPENAI_API_KEY"]);
+    expect(argv.join(" ")).not.toContain("sk-");
+  });
+
+  it("builds cursor argv in print mode with the brief on stdin and the key off argv", () => {
+    expect(CLI_RUNTIMES.cursor.promptChannel).toBe("stdin");
+    const applied = CLI_RUNTIMES.cursor.applyAuth({
+      method: "api-key",
+      envName: "CURSOR_API_KEY",
+      container: true,
+    });
+    const argv = CLI_RUNTIMES.cursor.argv({
+      prompt: "do the thing",
+      model: "composer-2.5",
+      cwd: "/wt",
+      authArgs: applied.args,
+      permissionArgs: ["--force", "--trust"],
+    });
+    expect(argv.slice(0, 3)).toEqual(["-p", "--output-format", "json"]);
+    expect(argv[argv.indexOf("--workspace") + 1]).toBe("/wt");
+    expect(argv).toContain("--model");
+    expect(argv).toContain("composer-2.5");
+    expect(argv).toContain("--force");
+    expect(argv).toContain("--trust");
+    expect(argv).not.toContain("do the thing");
+    expect(argv).not.toContain("--api-key");
+    expect(applied.env).toEqual(["CURSOR_API_KEY"]);
+    expect(applied.args).toEqual([]);
+    expect(argv.join(" ")).not.toContain("sk-");
+  });
+
+  it("refuses a Cursor tool deny it cannot express, and disables the nested sandbox in a container", () => {
+    const open = CLI_RUNTIMES.cursor.permissions({ deny: [], requireApproval: [] });
+    expect(open.unmappable).toEqual([]);
+    expect(open.args).toEqual(["--force", "--trust"]);
+    const denied = CLI_RUNTIMES.cursor.permissions({ deny: ["fs"], requireApproval: [] });
+    expect(denied.unmappable).toEqual(["fs"]);
+    const container = permissionPlan(CLI_RUNTIMES.cursor, { deny: [], requireApproval: [] }, { container: true });
+    expect(container.args).toContain("--sandbox");
+    expect(container.args[container.args.indexOf("--sandbox") + 1]).toBe("disabled");
+    const host = permissionPlan(CLI_RUNTIMES.cursor, { deny: [], requireApproval: [] }, { container: false });
+    expect(host.args).not.toContain("--sandbox");
+  });
+
+  it("reads the Cursor json result and a payload error", () => {
+    const ok = CLI_RUNTIMES.cursor.parse(
+      JSON.stringify({ type: "result", subtype: "success", is_error: false, result: "committed abc" }),
+      "",
+    );
+    expect(ok.observations).toEqual(["committed abc"]);
+    expect(ok.isError).toBe(false);
+    const failed = CLI_RUNTIMES.cursor.parse(
+      JSON.stringify({ type: "result", is_error: true, result: "not authenticated" }),
+      "",
+    );
+    expect(failed.isError).toBe(true);
   });
 
   it("builds copilot argv in programmatic mode with the prompt as -p value", () => {
@@ -119,6 +197,14 @@ describe("policy translation", () => {
     expect(open.args).toEqual(["--sandbox", "workspace-write", "-c", "approval_policy=never"]);
     const locked = CLI_RUNTIMES.codex.permissions({ deny: ["shell"], requireApproval: [] });
     expect(locked.args).toEqual(["--sandbox", "read-only", "-c", "approval_policy=never"]);
+    const inside = permissionPlan(CLI_RUNTIMES.codex, { deny: [], requireApproval: [] }, { container: true });
+    expect(inside.args).toEqual(["--sandbox", "danger-full-access", "-c", "approval_policy=never"]);
+    const insideLocked = permissionPlan(
+      CLI_RUNTIMES.codex,
+      { deny: ["fs"], requireApproval: [] },
+      { container: true },
+    );
+    expect(insideLocked.args).toEqual(["--sandbox", "read-only", "-c", "approval_policy=never"]);
   });
 
   it("reports denies a runtime cannot express so boot can fail closed", () => {
@@ -253,10 +339,13 @@ describe("runtime scaffold", () => {
     expect(claude?.credentialSource).toBe("ANTHROPIC_API_KEY");
     expect(claude?.ready).toBe(true);
 
-    const noKey = workerRuntimeScaffold({
-      PATH: "",
-      ROPEX_RUNTIME_BIN_CODEX: process.execPath,
-    }).find((s) => s.kind === "codex");
+    const noKey = workerRuntimeScaffold(
+      {
+        PATH: "",
+        ROPEX_RUNTIME_BIN_CODEX: process.execPath,
+      },
+      { fileExists: () => false },
+    ).find((s) => s.kind === "codex");
     expect(noKey?.binPresent).toBe(true);
     expect(noKey?.ready).toBe(false);
     expect(noKey?.hint).toMatch(/OPENAI_API_KEY/);
@@ -282,6 +371,11 @@ describe("image digest", () => {
       spec: { ...agent.spec, runtime: { kind: "codex" } },
     }).digest;
     expect(new Set([dsh, claude, codex]).size).toBe(3);
+    const authed = buildAgentImage({
+      ...agent,
+      spec: { ...agent.spec, runtime: { kind: "codex", auth: "api-key", baseUrl: "https://api.openai.com/v1" } },
+    }).digest;
+    expect(authed).not.toBe(codex);
   });
 });
 
@@ -314,6 +408,29 @@ ${specLines}
     expect(() => parseManifests(agentWith("  runtime:\n    kind: nope"))).toThrow(
       /unsupported runtime.kind "nope"/,
     );
+  });
+
+  it("rejects an auth method the runtime does not support", () => {
+    expect(() => parseManifests(agentWith("  runtime:\n    kind: claude-code\n    auth: oauth-file"))).toThrow(
+      /not supported by claude-code/,
+    );
+    expect(() => parseManifests(agentWith("  runtime:\n    kind: cursor\n    auth: oauth"))).toThrow(
+      /not supported by cursor/,
+    );
+    expect(() => parseManifests(agentWith("  runtime:\n    kind: cursor\n    auth: api-key"))).not.toThrow();
+    expect(() => parseManifests(agentWith("  runtime:\n    kind: cursor\n    auth: oauth-file"))).not.toThrow();
+    expect(() => parseManifests(agentWith("  runtime:\n    kind: dsh\n    auth: api-key"))).toThrow(
+      /does not apply to dsh/,
+    );
+    expect(() => parseManifests(agentWith("  runtime:\n    kind: codex\n    auth: token"))).toThrow(
+      /unsupported runtime.auth "token"/,
+    );
+    expect(() =>
+      parseManifests(agentWith("  runtime:\n    kind: claude-code\n    baseUrl: https://api.openai.com/v1")),
+    ).toThrow(/runtime.baseUrl applies to codex auth api-key/);
+    expect(() =>
+      parseManifests(agentWith("  runtime:\n    kind: codex\n    auth: oauth-file\n    baseUrl: https://example.com/v1")),
+    ).toThrow(/runtime.baseUrl applies to codex auth api-key/);
   });
 
   it("rejects commandArgs without command", () => {
@@ -423,6 +540,110 @@ describe("workflow execute stage", () => {
       owner: "worker",
       purpose: "Run claude-code in the worker worktree",
     });
+  });
+});
+
+describe("ropex runtimes text", () => {
+  const status = (patch: Partial<WorkerRuntimeStatus> & Pick<WorkerRuntimeStatus, "kind" | "label" | "hint">): WorkerRuntimeStatus => ({
+    binPresent: false,
+    credentialPresent: false,
+    credentialEnv: [],
+    ready: false,
+    docsUrl: "https://example.test",
+    ...patch,
+  });
+
+  it("prints one block per runtime with an explicit status", () => {
+    const text = formatRuntimeReport([
+      status({
+        kind: "dsh",
+        label: "DeepSeek Harness (default)",
+        binPresent: true,
+        credentialPresent: true,
+        ready: true,
+        hint: "Embedded Cordis kernel — always available. Set ROPEX_DSH_BACKEND=live for the headless dsh CLI.",
+      }),
+      status({
+        kind: "claude-code",
+        label: "Claude Code CLI",
+        credentialEnv: ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"],
+        hint: "Claude Code CLI requires one of: ANTHROPIC_API_KEY (api-key); CLAUDE_CODE_OAUTH_TOKEN (oauth)",
+      }),
+      status({
+        kind: "codex",
+        label: "Codex CLI",
+        binPresent: true,
+        bin: "/usr/bin/codex",
+        credentialPresent: true,
+        hint: "Codex CLI has more than one auth method available (api-key, oauth-file). Set spec.runtime.auth.",
+      }),
+      status({
+        kind: "cursor",
+        label: "Cursor CLI",
+        binPresent: true,
+        bin: "/home/kovi/.local/bin/agent",
+        credentialPresent: true,
+        credentialSource: "oauth-file",
+        ready: true,
+        hint: "Ready — agent on PATH, credentials from oauth-file.",
+      }),
+    ]);
+
+    expect(text).toBe(`dsh            status: ready
+               DeepSeek Harness (default)
+               binary       embedded
+               credentials  built in
+               Embedded Cordis kernel — always available. Set
+               ROPEX_DSH_BACKEND=live for the headless dsh CLI.
+
+claude-code    status: not ready
+               Claude Code CLI
+               binary       not on PATH
+               credentials  missing
+               needs one of:
+                 ANTHROPIC_API_KEY (api-key)
+                 CLAUDE_CODE_OAUTH_TOKEN (oauth)
+
+codex          status: not ready
+               Codex CLI
+               binary       /usr/bin/codex
+               credentials  ambiguous
+               Codex CLI has more than one auth method available (api-key,
+               oauth-file). Set spec.runtime.auth.
+
+cursor         status: ready
+               Cursor CLI
+               binary       /home/kovi/.local/bin/agent
+               credentials  oauth-file
+`);
+  });
+
+  it("colors the kind and the status without moving the columns", () => {
+    const sample = [
+      status({
+        kind: "dsh",
+        label: "DeepSeek Harness (default)",
+        binPresent: true,
+        credentialPresent: true,
+        ready: true,
+        hint: "Embedded Cordis kernel — always available.",
+      }),
+      status({
+        kind: "cursor",
+        label: "Cursor CLI",
+        credentialEnv: ["CURSOR_API_KEY"],
+        hint: "Cursor CLI requires one of: CURSOR_API_KEY (api-key); ~/.config/cursor/auth.json (oauth-file)",
+      }),
+    ];
+    const plain = formatRuntimeReport(sample);
+    const colored = formatRuntimeReport(sample, { color: true });
+    expect(colored.replace(/\x1b\[[0-9;]*m/g, "")).toBe(plain);
+    expect(colored).toContain("\x1b[1;36mcursor");
+    expect(colored).toContain("\x1b[1;32mready");
+    expect(colored).toContain("\x1b[1;33mnot ready");
+    expect(colored).toContain("\x1b[33mmissing");
+    expect(colored).toContain("\x1b[36mCURSOR_API_KEY (api-key)");
+    expect(plain).not.toContain("\x1b[");
   });
 });
 

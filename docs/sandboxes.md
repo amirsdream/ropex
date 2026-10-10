@@ -14,7 +14,7 @@ spec.sandbox ──► acquireSandbox ──► provider
                     │ policy gate         ├─ local   worktree on the host
                     │ (fails closed)      └─ docker  env image ─► (warm snapshot) ─► container
                                                                      │
-                                          exec ◄── runtime CLI (codex, claude -p, copilot -p)
+                                          exec ◄── harness applies the plan in the workspace
                                                                      │
                                        dispose  or  snapshot ─► dispose      store: .ropex/sandboxes
 ```
@@ -80,7 +80,7 @@ A runnable version is in [`fleets/examples/docker-sandbox.yaml`](../fleets/examp
 2. **Warm snapshot** (`lifecycle.warmSnapshot`). The first run checks the repo out into the container and commits it as `ropex-snap:warm-<key>`. The key is the environment digest, repo URL, ref and depth. Later runs start from that snapshot and only run `git fetch`, `checkout` and `clean`.
 3. **Container.** `docker run -d` with `--init`, `--security-opt no-new-privileges`, a pids limit (default 512), your cpus, memory and network limits, and labels `ropex.sandbox=1`, `ropex.worker`, `ropex.agent`, `ropex.task`. The working directory is `/workspace`.
 4. **Checkout.** `git init`, `remote add`, `fetch`, `checkout --detach FETCH_HEAD`. This works for branches, tags and commit SHAs.
-5. **Execute.** The runtime CLI runs through `docker exec -i -w /workspace`. The brief goes in over stdin. Timeout and kill escalation are the same as every other subprocess.
+5. **Execute.** The runtime CLI runs through `docker exec -i -w /workspace`. The brief goes in over stdin. Timeout and kill escalation are the same as every other subprocess. The embedded harness applies the same plan in that workspace. A call is a tool invocation (`name` + `input`); the workspace runs it when the input asks for a command (`argv`) or a file (`path` and `content`). Any other call stays with the agent. There is no control-plane step that commits afterwards. Every exec sets `GIT_AUTHOR_*` and `GIT_COMMITTER_*` to `Ropex <ropex@localhost>`, so `git commit` works in a container that has no user config. Those values travel with the exec environment and are not written into the image.
 6. **Finish.** With `after: snapshot` the container is committed as a task snapshot first. The container is then always removed, including when the task failed or timed out. A killed `docker exec` client does not stop the process inside, but removing the container does.
 
 `workspace: mount` skips the clone and bind-mounts the worker's host worktree at `/workspace`. Use it when the control plane runs on the host. Do not use it when the control plane itself runs in a container, because the path would be wrong. Files the container writes are owned by the container user.
@@ -90,8 +90,9 @@ A runnable version is in [`fleets/examples/docker-sandbox.yaml`](../fleets/examp
 - The container is **created with no secrets**.
 - Each `docker exec` forwards secrets by name (`-e NAME`). The value is read from the docker client's own environment, so it never appears on an argv, in `docker inspect`, or in a `docker commit` snapshot.
 - `repo.tokenEnv` also drives git auth. A credential helper reads `$ROPEX_GIT_TOKEN`, so the token is not in the remote URL or `.git/config`. The same token is forwarded under its own name (for example `GITHUB_TOKEN`) so `gh` works inside the container.
-- The runtime's own credentials (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, …) are forwarded the same way.
-- A declared `tokenEnv` or `secrets` entry that is not set on the control plane fails the task before any container starts.
+- The runtime's selected auth env (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`, …) is forwarded the same way. Only the strategy that was selected is forwarded.
+- A login file (`spec.runtime.auth: oauth-file`) is bind-mounted read-only under `/run/ropex/auth/` when the container is created. `docker exec` cannot add a mount. The mount is outside `/workspace`, so `git add` does not commit it, and `docker commit` does not include a bind mount.
+- A declared `tokenEnv` or `secrets` entry that is not set on the control plane fails the task before any container starts. Auth is resolved before the container starts too.
 
 ## Snapshots and storage
 
@@ -124,8 +125,8 @@ A restricted `allowBaseImages` also rejects `image.dockerfile`, because the base
 
 ## Runtimes
 
-- **CLI runtimes** (`claude-code`, `codex`, `copilot`) run inside the sandbox. The binary must exist in the image (add it to `image.npm`, or `setup`). If it does not, the task fails with a message naming `spec.sandbox.image`. Binary resolution happens inside the container, so `PATH` on the host does not matter.
-- **`dsh` embedded** has stub fs and shell tools, so it only receives the sandbox's host directory.
+- **CLI runtimes** (`claude-code`, `codex`, `copilot`, `cursor`) run inside the sandbox and are the harness for that run. The brief lists the plan's calls. A call is a tool invocation. The workspace runs a command when the input has `argv`, and writes a file when it has `path` and `content`. Every other call is the agent's. The binary must exist in the image (add it to `image.npm`, or `setup`). If it does not, the task fails with a message naming `spec.sandbox.image`. Binary resolution happens inside the container, so `PATH` on the host does not matter. Auth is a strategy on the runtime (`api-key`, `oauth`, or `oauth-file`), not a Codex-only flag. Codex inside this container is started with `--sandbox danger-full-access`, because its own `workspace-write` sandbox needs a user namespace and the container sets `no-new-privileges`. A policy that denies `fs` or `shell` still selects `--sandbox read-only`. Codex `api-key` speaks HTTPS with the key in the environment. Codex `oauth-file` bind-mounts the login directory and does not rewrite the provider. Cursor inside this container adds `--sandbox disabled` for the same reason, and Cursor `oauth-file` bind-mounts `~/.config/cursor` at `/run/ropex/auth/cursor` with `XDG_CONFIG_HOME=/run/ropex/auth`.
+- **`dsh` embedded** is the same harness in-process. Its tool loop runs on the control plane and applies the same effects inside the sandbox, under whatever tool name the plan used. Other inputs stay descriptors until a tool implements them.
 - **`dsh` live** cannot run in a docker sandbox, because the dsh package lives on the control plane. It fails closed with a message saying so.
 
 ## Operations

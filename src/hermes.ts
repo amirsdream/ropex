@@ -184,10 +184,59 @@ export function createHermes(spec: AgentSpec, options: HermesCreateOptions = {})
   };
 }
 
+/**
+ * File blocks in a task prompt become ordinary harness calls.
+ * The embedded planner uses the `fs` and `shell` tools it has. The workspace
+ * applies whatever the input asks for, and does not special-case those names.
+ *
+ *     add a greeting argument
+ *
+ *     ```src/hello.ts
+ *     export function hello(name: string): string {
+ *       return `hello, ${name}`;
+ *     }
+ *     ```
+ */
+export function plannedEdits(
+  prompt: string,
+): { message: string; files: Array<{ path: string; content: string }> } | undefined {
+  const files: Array<{ path: string; content: string }> = [];
+  const re = /```([^\n`]*)\n([\s\S]*?)```/g;
+  for (const match of prompt.matchAll(re)) {
+    const path = match[1].trim();
+    if (!path || path.includes(" ") || (!path.includes("/") && !path.includes("."))) continue;
+    const body = match[2].endsWith("\n") ? match[2] : `${match[2]}\n`;
+    files.push({ path, content: body });
+  }
+  if (!files.length) return undefined;
+  const message =
+    prompt
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => line && !line.startsWith("```")) ?? "task";
+  return { message: message.slice(0, 72), files };
+}
+
 function planCalls(
   task: Task,
   skills: string[],
 ): Array<{ name: string; input: Record<string, unknown> }> {
+  const edits = plannedEdits(task.prompt);
+  if (edits) {
+    return [
+      ...edits.files.map((file) => ({
+        name: "fs",
+        input: { path: file.path, content: file.content },
+      })),
+      {
+        name: "shell",
+        input: {
+          argv: ["git", "add", "-A", "--", ".", ":(exclude).ropex-worker.json", ":(exclude)README.ropex"],
+        },
+      },
+      { name: "shell", input: { argv: ["git", "commit", "-m", edits.message] } },
+    ];
+  }
   const event = task.event?.type ?? "";
   if (event.startsWith("issues.")) {
     return [

@@ -146,7 +146,7 @@ Example fleets: `fleets/examples/github-control-plane.yaml`, `forge-local.yaml`.
 
 **DeepSeek Harness** (`src/dsh.ts`, `src/plugins.ts`) — Cordis-shaped kernel: loop mode, tools, permissions, delivery plugin. The default worker runtime.
 
-**Pluggable executors** (`src/worker-runtime.ts`, `src/cli-runtimes.ts`) — `spec.runtime.kind` swaps the `execute` stage for an external headless coding agent (`claude -p`, `codex exec`, `copilot -p`) running in the worker worktree. Hermes still composes, plans, and learns; Ropex policy is translated into each CLI's own permission flags and fails closed when a runtime cannot express a denial. `ropex runtimes` reports what is usable. See [worker-runtimes.md](./docs/worker-runtimes.md).
+**Pluggable executors** (`src/worker-runtime.ts`, `src/cli-runtimes/`) — `spec.runtime.kind` swaps the `execute` stage for an external headless coding agent (`claude -p`, `codex exec`, `copilot -p`, `agent -p`) running in the worker worktree. Hermes still composes, plans, and learns; Ropex policy is translated into each CLI's own permission flags and fails closed when a runtime cannot express a denial. `ropex runtimes` reports what is usable. See [worker-runtimes.md](./docs/worker-runtimes.md).
 
 **Sandboxes** (`src/sandbox/`) — `spec.sandbox` picks where `execute` runs: the local git worktree (default) or one Docker container per task, built from a recipe (base image, apt/npm/pip, tools), with the repo checked out by token, warm snapshots kept on disk, and the container disposed afterwards. See [sandboxes.md](./docs/sandboxes.md).
 

@@ -1,4 +1,4 @@
-# Mixed-runtime fleet: three agents, one queue, one policy.
+# Mixed-runtime fleet: four agents, one queue, one policy.
 #
 # The control plane does not care which binary does the work — Hermes composes
 # the brief, plans, and learns for all three; only the `execute` stage differs.
@@ -96,3 +96,29 @@ spec:
   github:
     events: [pull_request.opened]
     deliver: comment
+---
+# Cursor Agent CLI. Auth is api-key (CURSOR_API_KEY) or oauth-file
+# (~/.config/cursor/auth.json from `agent login`). Cursor cannot deny a single
+# tool, so a policy that denies fs, shell, web, or github refuses this agent.
+apiVersion: ropex.dev/v1
+kind: Agent
+metadata:
+  name: cursor-builder
+spec:
+  scale: onDemand
+  maxConcurrent: 2
+  idleTTLMs: 0
+  runtime:
+    kind: cursor
+    auth: api-key
+  harness:
+    profile: code
+    plugins: [fs, shell, github]
+  hermes:
+    soul: souls/builder.md
+    memory: shared
+    learning: true
+    skills: []
+  github:
+    events: [issues.opened]
+    deliver: pull_request

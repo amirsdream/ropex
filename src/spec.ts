@@ -12,11 +12,14 @@ import type {
   TaskManifest,
   MemoryManifest,
 } from "./types.js";
+import { cliRuntime, isHttpsBaseUrl, type CliRuntimeKind } from "./cli-runtimes/index.js";
 import {
   API_VERSION,
   HARNESS_PROFILES,
+  RUNTIME_AUTH_METHODS,
   SANDBOX_PROVIDER_KINDS_LIST,
   WORKER_RUNTIME_KINDS_LIST,
+  type RuntimeAuthMethod,
 } from "./types.js";
 import { resolveMaxConcurrent, resolveScaleMode } from "./scale.js";
 import { cloneSandboxSpec, validateSandboxSpec } from "./sandbox/spec.js";
@@ -94,7 +97,13 @@ function validateAgentSpec(spec: Record<string, unknown> | undefined, where: str
   }
   validateSandboxSpec(spec?.sandbox, where);
   const runtime = spec?.runtime as
-    | { kind?: unknown; command?: unknown; commandArgs?: unknown }
+    | {
+        kind?: unknown;
+        command?: unknown;
+        commandArgs?: unknown;
+        auth?: unknown;
+        baseUrl?: unknown;
+      }
     | undefined;
   if (runtime === undefined) return;
   if (!WORKER_RUNTIME_KINDS_LIST.includes(runtime.kind as never)) {
@@ -104,6 +113,30 @@ function validateAgentSpec(spec: Record<string, unknown> | undefined, where: str
   }
   if (runtime.commandArgs !== undefined && runtime.command === undefined) {
     throw new Error(`${where}: runtime.commandArgs requires runtime.command`);
+  }
+  if (runtime.auth !== undefined && !RUNTIME_AUTH_METHODS.includes(runtime.auth as RuntimeAuthMethod)) {
+    throw new Error(
+      `${where}: unsupported runtime.auth "${String(runtime.auth)}" (expected ${RUNTIME_AUTH_METHODS.join(" | ")})`,
+    );
+  }
+  if (runtime.kind === "dsh" && runtime.auth !== undefined) {
+    throw new Error(`${where}: runtime.auth does not apply to dsh`);
+  }
+  if (runtime.kind !== "dsh" && runtime.auth !== undefined) {
+    const methods = cliRuntime(runtime.kind as CliRuntimeKind).auth.map((item) => item.method);
+    if (!methods.includes(runtime.auth as RuntimeAuthMethod)) {
+      throw new Error(
+        `${where}: runtime.auth "${String(runtime.auth)}" is not supported by ${String(runtime.kind)} (expected ${methods.join(" | ")})`,
+      );
+    }
+  }
+  if (runtime.baseUrl !== undefined) {
+    if (typeof runtime.baseUrl !== "string" || !isHttpsBaseUrl(runtime.baseUrl)) {
+      throw new Error(`${where}: runtime.baseUrl must be an https URL without embedded credentials`);
+    }
+    if (runtime.kind !== "codex" || (runtime.auth !== undefined && runtime.auth !== "api-key")) {
+      throw new Error(`${where}: runtime.baseUrl applies to codex auth api-key`);
+    }
   }
 }
 

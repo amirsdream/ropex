@@ -42,7 +42,7 @@ describe("view pause + affinity + dsh scaffold", () => {
     expect(view.dsh.liveReady).toBe(false);
     expect(view.dsh.profiles.length).toBe(4);
     expect(view.dsh.scaffoldHint).toMatch(/@deepseek-ai\/dsh/i);
-    expect(view.runtimes.map((r) => r.kind)).toEqual(["dsh", "claude-code", "codex", "copilot"]);
+    expect(view.runtimes.map((r) => r.kind)).toEqual(["dsh", "claude-code", "codex", "copilot", "cursor"]);
     expect(view.runtimes[0].ready).toBe(true);
     expect(view.harness[0].runtime).toBe("dsh");
   });

@@ -1,0 +1,5 @@
+record the build version
+
+```src/version.ts
+export const version = "0.1.0";
+```

@@ -14,9 +14,14 @@ export type LabelSelector = {
 };
 
 /** Which executor runs the `execute` stage for an agent. */
-export const WORKER_RUNTIME_KINDS_LIST = ["dsh", "claude-code", "codex", "copilot"] as const;
+export const WORKER_RUNTIME_KINDS_LIST = ["dsh", "claude-code", "codex", "copilot", "cursor"] as const;
 
 export type WorkerRuntimeKind = (typeof WORKER_RUNTIME_KINDS_LIST)[number];
+
+/** How a CLI runtime authenticates. The fleet names the method, never the secret. */
+export const RUNTIME_AUTH_METHODS = ["api-key", "oauth", "oauth-file"] as const;
+
+export type RuntimeAuthMethod = (typeof RUNTIME_AUTH_METHODS)[number];
 
 /**
  * Worker runtime selection. Omit for the default DeepSeek Harness (`dsh`).
@@ -35,6 +40,16 @@ export type RuntimeSpec = {
   timeoutMs?: number;
   /** Extra env var names that must be present for this runtime to boot. */
   requireEnv?: string[];
+  /**
+   * Auth strategy. Omit when exactly one of the runtime's strategies has
+   * credentials. Required when more than one does.
+   */
+  auth?: RuntimeAuthMethod;
+  /**
+   * HTTPS base URL for `auth: api-key` on Codex. Defaults to
+   * `https://api.openai.com/v1`.
+   */
+  baseUrl?: string;
 };
 
 /** Where an agent's `execute` stage runs. `local` is the per-worker git worktree. */

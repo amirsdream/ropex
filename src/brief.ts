@@ -50,7 +50,12 @@ export function composeBrief(
     section("Task", task.prompt),
     section(
       "Working directory",
-      "You are already in the worker worktree. Make the change here; do not clone or switch repositories.",
+      [
+        "You are already in the worker worktree. Act here; do not clone or switch repositories.",
+        "Carry out the intended actions in order. Each one is a tool call: a name and its input.",
+        "When the input has argv, run that command. When it has path and content, write that file.",
+        "Every other call is yours to perform with the tools you have.",
+      ].join(" "),
     ),
   ]
     .filter(Boolean)

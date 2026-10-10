@@ -1,0 +1,15 @@
+add a greeting argument
+
+```src/hello.ts
+export function hello(name: string): string {
+  return `hello, ${name}`;
+}
+```
+
+```src/hello.test.ts
+import { hello } from "./hello.js";
+
+if (hello("world") !== "hello, world") {
+  throw new Error("hello() mismatch");
+}
+```

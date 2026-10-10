@@ -2,7 +2,8 @@ node_modules/
 dist/
 .ropex/
 .fleetops/
-sandbox/
+# Worker worktrees and scratch (not src/sandbox or tests/sandbox).
+/sandbox/
 *.log
 .DS_Store
 .env

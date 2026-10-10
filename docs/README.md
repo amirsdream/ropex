@@ -18,7 +18,9 @@ GitOps control plane for agent fleets — **Hermes plans, DeepSeek executes by d
 | [Forge-neutral tasks](./forge-neutral.md) | Task YAML inbox without GitHub |
 | [Hermes wiring](./hermes.md) | Embedded brain vs live `hermes-agent` |
 | [DeepSeek (dsh) wiring](./dsh.md) | Embedded harness vs live `@deepseek-ai/dsh` |
-| [Worker runtimes](./worker-runtimes.md) | Swap the execute stage: dsh, Claude Code, Codex, Copilot |
+| [Worker runtimes](./worker-runtimes.md) | Swap the execute stage: dsh, Claude Code, Codex, Copilot, Cursor |
+| [Manual runtime checks](./manual-runtime-checks.md) | Repeatable local steps for harness commits, auth, and Cursor |
+| [More runtime tasks](./manual-runtime-tasks.md) | Extra Cursor and Codex tasks, scripted and open |
 | [Sandboxes](./sandboxes.md) | Run the execute stage in a local worktree or a Docker container: image recipe, repo checkout, tokens, snapshots |
 | [Magentic integration](../integrations/magentic/README.md) | External UI → Ropex executor |
 | [Ideas log](./ideas.md) | Shipped features and open seams |

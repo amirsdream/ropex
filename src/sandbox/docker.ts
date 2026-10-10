@@ -62,9 +62,21 @@ function requireEnvValue(env: NodeJS.ProcessEnv, name: string, what: string): st
   return value;
 }
 
+/**
+ * A container has no git identity. These match the author the embedded harness
+ * passes on `git` argv, so a CLI harness can commit without writing config
+ * into the snapshot.
+ */
+const GIT_IDENTITY_ENV: Record<string, string> = {
+  GIT_AUTHOR_NAME: "Ropex",
+  GIT_AUTHOR_EMAIL: "ropex@localhost",
+  GIT_COMMITTER_NAME: "Ropex",
+  GIT_COMMITTER_EMAIL: "ropex@localhost",
+};
+
 /** Values forwarded into every exec, by name. Keys are env names, values stay out of argv. */
 function buildExecEnv(spec: SandboxSpec, env: NodeJS.ProcessEnv): Record<string, string> {
-  const out: Record<string, string> = {};
+  const out: Record<string, string> = { ...GIT_IDENTITY_ENV };
   for (const name of spec.secrets ?? []) out[name] = requireEnvValue(env, name, "secrets");
   const tokenEnv = spec.repo?.tokenEnv;
   if (tokenEnv) {
@@ -122,6 +134,16 @@ function createArgs(opts: {
       throw new Error(`sandbox mount source cannot contain a comma: ${opts.mountSource}`);
     }
     args.push("--mount", `type=bind,source=${opts.mountSource},target=${SANDBOX_WORKDIR}`);
+  }
+  for (const mount of ctx.authMounts ?? []) {
+    if (!mount.source || !mount.target) throw new Error("auth mount needs a source and a target");
+    if (mount.source.includes(",") || mount.target.includes(",")) {
+      throw new Error(`auth mount path cannot contain a comma: ${mount.source}`);
+    }
+    if (!mount.target.startsWith("/run/ropex/auth/")) {
+      throw new Error(`auth mount target must be under /run/ropex/auth: ${mount.target}`);
+    }
+    args.push("--mount", `type=bind,source=${mount.source},target=${mount.target},readonly`);
   }
   args.push(opts.image, "-c", KEEPALIVE);
   return args;

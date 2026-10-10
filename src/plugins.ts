@@ -3,6 +3,8 @@
  * Everything — model, tools, loop, permissions, session — is a plugin.
  */
 
+import { runProcess, type RunProcessResult } from "./proc.js";
+
 export type PluginKind =
   | "model"
   | "tools"
@@ -27,6 +29,13 @@ export type Plugin = {
 };
 
 export type ToolFn = (input: Record<string, unknown>, ctx: PluginContext) => Promise<string> | string;
+
+/** Run a command in the harness workspace (the sandbox, or the host worktree). */
+export type WorkspaceExec = (
+  bin: string,
+  args: string[],
+  opts?: { stdin?: string; env?: Record<string, string> },
+) => Promise<RunProcessResult>;
 
 export class Kernel {
   private readonly services = new Map<string, unknown>();
@@ -111,7 +120,13 @@ export function permissionsPlugin(deny: string[], requireApproval: string[]): Pl
   };
 }
 
-export function toolsPlugin(names: string[], opts: { cwd?: string } = {}): Plugin {
+export function toolsPlugin(
+  names: string[],
+  opts: { cwd?: string; exec?: WorkspaceExec } = {},
+): Plugin {
+  const exec: WorkspaceExec =
+    opts.exec ??
+    ((bin, args, o) => runProcess(bin, args, { cwd: opts.cwd, stdin: o?.stdin, env: o?.env }));
   return {
     name: `tools:${names.join("+")}`,
     kind: "tools",
@@ -119,7 +134,7 @@ export function toolsPlugin(names: string[], opts: { cwd?: string } = {}): Plugi
       const kernel = ctx.get<Kernel>("kernel");
       if (opts.cwd) ctx.set("cwd", opts.cwd);
       for (const name of names) {
-        kernel.registerTool(name, (input) => {
+        kernel.registerTool(name, async (input) => {
           const perms = ctx.get<{ deny: string[] }>("permissions");
           if (perms.deny.includes(name)) {
             return `denied: ${name}`;
@@ -132,7 +147,12 @@ export function toolsPlugin(names: string[], opts: { cwd?: string } = {}): Plugi
               cwd = undefined;
             }
           }
-          // fs/shell are chrooted to the worker worktree when present.
+          // Tool name is the agent's. Effects run only when the input asks.
+          const applied = await applyHarnessCall(exec, name, input);
+          if (applied !== undefined) {
+            return JSON.stringify({ ...applied, ...(cwd ? { cwd } : {}) });
+          }
+          // Calls with no workspace effect stay descriptors.
           if ((name === "fs" || name === "shell" || name === "bash") && cwd) {
             return JSON.stringify({ ok: true, tool: name, cwd, input });
           }
@@ -245,4 +265,106 @@ export function soulPlugin(soul: string): Plugin {
       ctx.set("soul", soul);
     },
   };
+}
+
+const AUTHOR_ENV = {
+  GIT_AUTHOR_NAME: "Ropex",
+  GIT_AUTHOR_EMAIL: "ropex@localhost",
+  GIT_COMMITTER_NAME: "Ropex",
+  GIT_COMMITTER_EMAIL: "ropex@localhost",
+};
+
+function workspacePath(value: unknown): string {
+  const path = String(value ?? "").trim();
+  if (!path || path.startsWith("/") || /^[A-Za-z]:/.test(path) || path.split(/[\\/]/).includes("..")) {
+    throw new Error(`fs path escapes the workspace: ${path || "(empty)"}`);
+  }
+  return path;
+}
+
+async function writeWorkspaceFile(exec: WorkspaceExec, path: string, content: string): Promise<void> {
+  const res = await exec(
+    "sh",
+    ["-c", 'mkdir -p -- "$(dirname -- "$1")" && cat > "$1"', "sh", path],
+    { stdin: content },
+  );
+  if (res.code !== 0) {
+    throw new Error(`harness file write ${path} failed: ${(res.stderr || res.stdout).trim() || `exit ${res.code}`}`);
+  }
+}
+
+/**
+ * One thing the workspace can do for any tool. A call stays `{ name, input }`:
+ * `name` is whichever tool the agent invoked. An effect runs only when `input`
+ * asks for it. Append an effect to teach the workspace a new capability;
+ * every other call stays a descriptor for that tool.
+ */
+export type WorkspaceEffect = (
+  exec: WorkspaceExec,
+  name: string,
+  input: Record<string, unknown>,
+) => Promise<Record<string, unknown> | undefined>;
+
+/** Workspace capabilities. Order is first match. Tool names are not listed here. */
+export const workspaceEffects: WorkspaceEffect[] = [commandEffect, fileEffect];
+
+/** Apply one plan call. Returns undefined when no workspace effect claims it. */
+export async function applyHarnessCall(
+  exec: WorkspaceExec,
+  name: string,
+  input: Record<string, unknown>,
+): Promise<Record<string, unknown> | undefined> {
+  for (const effect of workspaceEffects) {
+    const applied = await effect(exec, name, input);
+    if (applied !== undefined) return applied;
+  }
+  return undefined;
+}
+
+/** `input.argv` runs a command, whatever tool asked for it. */
+async function commandEffect(
+  exec: WorkspaceExec,
+  name: string,
+  input: Record<string, unknown>,
+): Promise<Record<string, unknown> | undefined> {
+  const argv = stringList(input.argv);
+  if (!argv?.length) return undefined;
+  const ran = await runArgv(exec, argv, typeof input.stdin === "string" ? input.stdin : undefined);
+  return { ok: true, tool: name, argv, code: ran.code, stdout: ran.stdout.trim() };
+}
+
+/** `input.path` + `input.content` writes a file, whatever tool asked for it. */
+async function fileEffect(
+  exec: WorkspaceExec,
+  name: string,
+  input: Record<string, unknown>,
+): Promise<Record<string, unknown> | undefined> {
+  if (typeof input.path !== "string" || typeof input.content !== "string") return undefined;
+  const path = workspacePath(input.path);
+  await writeWorkspaceFile(exec, path, input.content);
+  return { ok: true, tool: name, path };
+}
+
+function stringList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value) || value.length === 0 || value.some((item) => typeof item !== "string")) {
+    return undefined;
+  }
+  return value as string[];
+}
+
+/** Run a command. Git gets a harness identity and signing turned off so a commit cannot wait on gpg. */
+async function runArgv(exec: WorkspaceExec, argv: string[], stdin?: string): Promise<RunProcessResult> {
+  const [bin, ...args] = argv;
+  const git = bin === "git";
+  const res = await exec(
+    bin,
+    git ? ["-c", "user.name=Ropex", "-c", "user.email=ropex@localhost", "-c", "commit.gpgsign=false", ...args] : args,
+    { stdin, env: git ? AUTHOR_ENV : undefined },
+  );
+  if (res.code !== 0) {
+    throw new Error(
+      `harness ${argv.join(" ")} failed: ${(res.stderr || res.stdout).trim() || `exit ${res.code}`}`,
+    );
+  }
+  return res;
 }

@@ -10,12 +10,25 @@ policy, memory, skills, delivery, trajectories — is unchanged.
 | `claude-code` | `claude -p` — Claude Code CLI, autonomous loop | `npm i -g @anthropic-ai/claude-code` |
 | `codex` | `codex exec` — Codex CLI, autonomous loop | `npm i -g @openai/codex` |
 | `copilot` | `copilot -p` — GitHub Copilot CLI, autonomous loop | `npm i -g @github/copilot` |
+| `cursor` | `agent -p` — Cursor Agent CLI, autonomous loop | [Cursor CLI install](https://cursor.com/docs/cli/overview) (`agent` on `PATH`) |
+
+Manual steps, starting from a clean checkout and a throwaway repo, are in [manual-runtime-checks.md](./manual-runtime-checks.md). Extra Cursor and Codex tasks are in [manual-runtime-tasks.md](./manual-runtime-tasks.md).
 
 Check what is usable on this machine:
 
 ```bash
-ropex runtimes          # or: curl -s :7780/api/v1/runtimes | jq
+ropex runtimes          # one block per runtime
+ropex runtimes --json   # same objects as GET /api/v1/runtimes
 ```
+
+Each block starts with the runtime kind, then `status: ready` or
+`status: not ready`. The following lines name the product, the binary, and
+the credential source. A missing credential lists each accepted strategy on
+its own line. `dsh` is embedded and always ready.
+
+In a terminal the kind is cyan, `ready` is green, and `not ready` is yellow.
+A missing credential is yellow. Each accepted strategy is cyan. Set `NO_COLOR`,
+or pipe the command, to print plain text.
 
 ## The spine is unchanged
 
@@ -24,7 +37,7 @@ Hermes still owns three of the five stages. Only `execute` moves:
 ```
 compose (hermes)  soul + memory + skills
 plan    (hermes)  thoughts + intended actions
-execute (runtime) dsh loop  │  or  `claude -p` / `codex exec` / `copilot -p`
+execute (runtime) dsh loop  │  or  `claude -p` / `codex exec` / `copilot -p` / `agent -p`
 deliver (harness) comment · check · pull_request
 learn   (hermes)  distil a skill from the trajectory
 ```
@@ -33,11 +46,20 @@ Only `execute` changes owner. Delivery still goes through the harness delivery
 plugin, and policy, memory, skills and trajectories are untouched.
 
 The difference is what `execute` is handed. `dsh` receives the Hermes plan as a
-tool program. A CLI runtime drives its own agentic loop, so it receives a
-**brief** instead (`src/brief.ts`) — the same inputs rendered as a prompt:
-identity, prior knowledge, skills, plan, intended actions, task. Claude Code and
-Codex take that brief on **stdin** so a large soul cannot blow `ARG_MAX`. Copilot
-still needs `-p <prompt>` for programmatic mode, so its brief stays on argv. The
+tool program and applies each call in the workspace. A CLI runtime is the same
+harness with a different loop: `claude -p`, `codex exec`, `copilot -p`, or
+`agent -p` receives a **brief** (`src/brief.ts`) — the same inputs rendered as a
+prompt — and carries out those intended actions itself. A call is one tool invocation,
+`{ name, input }`. The name is the agent's tool. The workspace only applies an
+input that asks for a command (`argv`) or a file (`path` and `content`); every
+other call stays with the agent, so a new tool does not need a new call shape.
+The brief carries
+identity, prior knowledge, skills, plan, intended actions, and the task. Claude Code,
+Codex, and Cursor take that brief on **stdin** so a large soul cannot blow `ARG_MAX`. Copilot
+still needs `-p <prompt>` for programmatic mode, so its brief stays on argv. On the host,
+the CLI process gets `GIT_AUTHOR_*` and `GIT_COMMITTER_*` set to `Ropex <ropex@localhost>`,
+the same identity every container exec already sets, so a commit is not the operator's.
+The
 CLI runs in the worker's git worktree and its output becomes the trajectory
 observation.
 
@@ -60,6 +82,8 @@ spec:
     # command: /usr/local/bin/claude       # override the binary
     # commandArgs: [claude]                # prefix args, e.g. for `npx claude`
     # requireEnv: [GH_TOKEN]               # extra env that must be present
+    # auth: api-key                        # api-key | oauth | oauth-file
+    # baseUrl: https://api.openai.com/v1   # codex api-key only
   harness:
     profile: code
     plugins: [fs, shell, github]
@@ -85,15 +109,15 @@ for three agents on three runtimes sharing one queue and one policy.
 An autonomous CLI enforces its own tool permissions, so Ropex policy is pushed
 down into the CLI's gate at boot:
 
-| Ropex deny | claude-code | codex | copilot |
-| --- | --- | --- | --- |
-| `fs`, `str_replace_editor` | `--disallowedTools Edit Write …` | `--sandbox read-only` | `--deny-tool write` |
-| `shell`, `bash` | `--disallowedTools Bash` | `--sandbox read-only` | `--deny-tool shell` |
-| `web` | `--disallowedTools WebFetch WebSearch` | **unmappable** | **unmappable** |
-| `github` | `--disallowedTools Bash(gh:*)` | **unmappable** | `--deny-tool github` |
-| `subagent` | `--disallowedTools Task` | **unmappable** | **unmappable** |
-| `inspect` | **unmappable** | **unmappable** | **unmappable** |
-| `memory` | already unavailable | already unavailable | already unavailable |
+| Ropex deny | claude-code | codex | copilot | cursor |
+| --- | --- | --- | --- | --- |
+| `fs`, `str_replace_editor` | `--disallowedTools Edit Write …` | `--sandbox read-only` | `--deny-tool write` | **unmappable** |
+| `shell`, `bash` | `--disallowedTools Bash` | `--sandbox read-only` | `--deny-tool shell` | **unmappable** |
+| `web` | `--disallowedTools WebFetch WebSearch` | **unmappable** | **unmappable** | **unmappable** |
+| `github` | `--disallowedTools Bash(gh:*)` | **unmappable** | `--deny-tool github` | **unmappable** |
+| `subagent` | `--disallowedTools Task` | **unmappable** | **unmappable** | **unmappable** |
+| `inspect` | **unmappable** | **unmappable** | **unmappable** | **unmappable** |
+| `memory` | already unavailable | already unavailable | already unavailable | already unavailable |
 
 Three rules:
 
@@ -109,10 +133,42 @@ Three rules:
    restated in the brief as explicit prohibitions. Treating them as hard failures
    would be stricter than `dsh` and would break policies that ship today.
 
-Every CLI runtime also refuses to boot without credentials
-(`ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN`, `OPENAI_API_KEY` /
-`CODEX_API_KEY`, `GITHUB_TOKEN` / `COPILOT_CLI_TOKEN` / `GH_TOKEN`) or a
-resolvable binary.
+Every CLI runtime refuses to boot without a resolvable binary and one auth
+strategy. The fleet names the method in `spec.runtime.auth`. It never carries
+a key, a token, or a host path. When `auth` is omitted and exactly one strategy
+has credentials, that strategy is used. When more than one does, boot fails
+and asks for `spec.runtime.auth`.
+
+| Runtime | `api-key` | `oauth` | `oauth-file` |
+| --- | --- | --- | --- |
+| `claude-code` | `ANTHROPIC_API_KEY` | `CLAUDE_CODE_OAUTH_TOKEN` | — |
+| `codex` | `OPENAI_API_KEY` or `CODEX_API_KEY` | — | `~/.codex/auth.json`, or `ROPEX_AUTH_FILE_CODEX` |
+| `copilot` | `GITHUB_TOKEN`, `COPILOT_CLI_TOKEN`, or `GH_TOKEN` | — | — |
+| `cursor` | `CURSOR_API_KEY` | — | `~/.config/cursor/auth.json`, or `ROPEX_AUTH_FILE_CURSOR` |
+
+Env strategies forward the selected variable by name. Claude and Copilot read
+those variables themselves, so auth adds no flags. Codex `api-key` also selects
+an HTTPS provider (`env_key` is the variable name, `supports_websockets=false`)
+because the default provider reads `~/.codex/auth.json` and opens a websocket
+that rejects an API key. `spec.runtime.baseUrl` overrides that provider's base
+URL. The default is `https://api.openai.com/v1`. The key stays in the
+environment. It is not written into the container, so a snapshot cannot
+capture it.
+
+Codex `oauth-file` does not rewrite the provider. On the host, Codex reads its
+usual login file. In Docker the credential directory is bind-mounted read-only
+at `/run/ropex/auth/codex` and `CODEX_HOME` points there. The file must be named
+`auth.json`. A bind mount is not part of `docker commit`.
+
+Cursor is that record. `api-key` forwards `CURSOR_API_KEY` and adds no flags
+(the CLI also accepts `--api-key`, which would put the secret on argv, so Ropex
+does not). `oauth-file` is the login from `agent login`. On the host the CLI
+reads `~/.config/cursor/auth.json`. A file elsewhere must still be named
+`auth.json` and sit in a directory named `cursor`; `XDG_CONFIG_HOME` is then
+that directory's parent. In Docker the credential directory is bind-mounted
+read-only at `/run/ropex/auth/cursor` and `XDG_CONFIG_HOME` is `/run/ropex/auth`.
+There is no Cursor env-token `oauth` strategy. A provider URL or an env-var
+name stays off the shared boot path.
 
 ## Flag accuracy
 
@@ -129,21 +185,40 @@ interfaces for the others:
 - Codex `exec` is non-interactive but a sandbox escalation still prompts unless
   `-c approval_policy=never` is set. Copilot `-p` prompts on every tool unless
   `--allow-all-tools` is set; `--deny-tool` still wins over allow-all.
+- Inside a Ropex container, Codex uses `--sandbox danger-full-access`. The
+  container is created with `no-new-privileges`, so Codex's own `workspace-write`
+  namespace cannot be created and both shell and file writes fail. A policy
+  that denies `fs` or `shell` still selects `--sandbox read-only`. A host run
+  stays on `workspace-write`. Claude and Copilot keep their own permission
+  flags; the container hook is per runtime.
+- Headless Cursor uses `--force` and `--trust` so a print-mode run can edit
+  and run commands without a prompt. It has no per-tool deny flag, so a policy
+  that denies `fs`, `shell`, `web`, `github`, `subagent`, or `inspect` refuses
+  the run. Inside a Ropex container, Cursor adds `--sandbox disabled`. The
+  container is created with `no-new-privileges`, and Cursor's own sandbox is
+  the same class of nested sandbox that Codex cannot create there. A host run
+  does not pass `--sandbox`, so the CLI keeps its own sandbox. This container
+  flag follows the published `--sandbox` option and has not been exercised
+  against a live `agent` binary in Docker.
 
-The `claude-code` descriptor is verified against a live binary. The `codex` and
-`copilot` descriptors follow the published non-interactive flags (`codex exec`,
-`copilot -p --allow-all-tools`) but have not been exercised against an installed
-binary — check `ropex runtimes` and a single task before trusting them in a fleet.
+The `claude-code` descriptor is verified against a live binary. Codex `api-key`
+inside Docker was exercised against `@openai/codex`. The `copilot` and `cursor`
+descriptors follow the published non-interactive flags (`copilot -p
+--allow-all-tools`, `agent -p --force --trust --output-format json`) and have
+not been exercised against an installed binary — check `ropex runtimes` and a
+single task before trusting them in a fleet.
 
 A CLI that reports failure in its payload while exiting 0 (Claude Code's
 `is_error`) is treated as a failed run, not a successful one with odd output.
 
 ## Adding another CLI
 
-Each CLI is one declarative record in `src/cli-runtimes.ts` — `argv`,
-`permissions`, `parse` — plus one member of `WorkerRuntimeKind` in
-`src/types.ts`. No new machinery. Flags move between CLI releases; keeping them
-in one table is what makes that a one-line fix.
+Each CLI is one declarative record in `src/cli-runtimes/index.ts` — `argv`,
+`permissions`, `containerArgs`, `auth`, `applyAuth`, `parse` — plus one member
+of `WorkerRuntimeKind` in `src/types.ts`. Strategy selection is
+`src/cli-runtimes/auth.ts`. A vendor adapter such as Codex is its own file
+(`src/cli-runtimes/codex.ts`, `src/cli-runtimes/cursor.ts`). Flags move between CLI releases; keeping them
+in the record is what makes that a one-line fix.
 
 ## A note on `command`
 

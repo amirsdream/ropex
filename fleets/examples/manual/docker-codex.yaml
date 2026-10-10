@@ -1,0 +1,51 @@
+# Live Codex in Docker. Needs Docker and OPENAI_API_KEY in the environment.
+# The key is named here. The value stays in the environment.
+apiVersion: ropex.dev/v1
+kind: Policy
+metadata:
+  name: manual-guardrails
+spec:
+  maxReplicas: 2
+  permissions:
+    deny: []
+    requireApproval: []
+  sandbox:
+    allowProviders: [local, docker]
+    allowBaseImages: ["node:*"]
+---
+apiVersion: ropex.dev/v1
+kind: Agent
+metadata:
+  name: codex-writer
+spec:
+  scale: onDemand
+  maxConcurrent: 1
+  idleTTLMs: 0
+  runtime:
+    kind: codex
+    auth: api-key
+    timeoutMs: 900000
+  sandbox:
+    provider: docker
+    image:
+      base: node:22-bookworm
+      tools: [git, curl]
+      npm: ["@openai/codex"]
+    repo:
+      url: https://github.com/octocat/Hello-World.git
+      ref: master
+      depth: 1
+    secrets: [OPENAI_API_KEY]
+    resources:
+      memory: 2g
+      network: bridge
+    lifecycle:
+      after: snapshot
+      keep: 2
+  harness:
+    profile: code
+    plugins: [fs, shell]
+  hermes:
+    memory: none
+    learning: false
+    skills: []

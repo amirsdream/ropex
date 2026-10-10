@@ -4,14 +4,20 @@ import { composeBrief } from "./brief.js";
 import { createHermes, bootHermes } from "./hermes.js";
 import { buildAgentImage, type ImageResolveOptions } from "./image.js";
 import { recordDelivery } from "./journal.js";
-import { SharedMemoryStore } from "./memory.js";
+import { canWrite, SharedMemoryStore } from "./memory.js";
 import { registerSkill, skillsForAgent } from "./skills.js";
 import { maybeExportRememberedFact } from "./gitmemory.js";
 import { isOnDemandAgent } from "./scale.js";
 import { recordTrajectory } from "./trajectory.js";
 import { composeWorkflow } from "./workflow.js";
-import { bootWorker } from "./worker-runtime.js";
+import {
+  bootWorker,
+  prepareRuntimeAuth,
+  type PreparedRuntimeAuth,
+  type RuntimeAuthProbe,
+} from "./worker-runtime.js";
 import { acquireSandbox, needsHostWorktree, type Sandbox } from "./sandbox/index.js";
+import { sandboxProvider } from "./sandbox/spec.js";
 import { recordAudit } from "./audit.js";
 import type { DockerRun } from "./sandbox/client.js";
 import type {
@@ -32,6 +38,8 @@ export type RunTaskOptions = ImageResolveOptions & {
   onProgress?: (progress: TaskProgress) => void;
   /** Docker client for the sandbox layer. Tests inject a fake; defaults to the host CLI. */
   sandboxDocker?: DockerRun;
+  /** Credential-file probe. Tests pass a fake so a host login file is not selected. */
+  authProbe?: RuntimeAuthProbe;
 };
 
 export type TaskProgress = {
@@ -60,12 +68,20 @@ export async function runTask(
   }
 
   const root = opts.worktreeRoot ?? opts.root ?? process.cwd();
+  const container = sandboxProvider(agent.spec.sandbox) !== "local";
+  const auth = prepareRuntimeAuth(agent.spec, {
+    env: process.env,
+    container,
+    fileExists: opts.authProbe?.fileExists,
+    homedir: opts.authProbe?.homedir,
+  });
   const sandbox = await acquireSandbox(agent.spec.sandbox, {
     root,
     worker,
     taskId: task.id,
     policies: state.policies,
     docker: opts.sandboxDocker,
+    authMounts: auth?.mount ? [auth.mount] : undefined,
   });
   worker.sandbox =
     sandbox.kind === "local"
@@ -74,7 +90,7 @@ export async function runTask(
   if (needsHostWorktree(agent.spec.sandbox)) worker.worktree = sandbox.hostCwd;
 
   try {
-    return await executeTask(state, worker, task, { agent, workflow, root, sandbox }, opts);
+    return await executeTask(state, worker, task, { agent, workflow, root, sandbox, auth }, opts);
   } finally {
     await releaseSandbox(state, worker, task, agent, sandbox);
   }
@@ -125,10 +141,11 @@ async function executeTask(
     workflow: ReturnType<typeof composeWorkflow>;
     root: string;
     sandbox: Sandbox;
+    auth?: PreparedRuntimeAuth;
   },
   opts: RunTaskOptions,
 ): Promise<RunResult> {
-  const { agent, workflow, root, sandbox } = run;
+  const { agent, workflow, root, sandbox, auth } = run;
   const worktree = sandbox.hostCwd;
 
   const policy = effectivePolicy(state.policies);
@@ -154,6 +171,8 @@ async function executeTask(
     memory: hermes.port,
     cwd: worktree,
     sandbox,
+    auth,
+    authProbe: opts.authProbe,
   });
 
   if (!hermes.port || !runtimeAdapter.kernel) {
@@ -271,9 +290,10 @@ async function executeTask(
     worker.skills = [...new Set([...worker.skills, learned.name])];
     registerSkill(state, learned, `via ${runtimeAdapter.pack.profile} pack on ${runtimeAdapter.runtime}`);
   }
-  // Prefer durable scopes for on-demand agents — worker ids do not survive destroy.
+  // Prefer a durable scope for on-demand agents — worker ids do not survive destroy.
+  // memory: none only allows worker writes, so keep that scope instead of failing the task.
   let rememberScope: MemoryScope = hermes.port.context.policy.write;
-  if (isOnDemandAgent(agent) && rememberScope === "worker") {
+  if (isOnDemandAgent(agent) && rememberScope === "worker" && canWrite("agent", hermes.port.context)) {
     rememberScope = "agent";
   }
   const remembered = hermes.remember({

@@ -1,0 +1,10 @@
+Add a small notes module to this TypeScript repo.
+
+src/notes.ts exports createNotes(). The return value has two methods:
+- add(text: string): void. Ignore text that is empty or only spaces.
+- list(): string[]. Return the kept notes in the order they were added.
+
+src/notes.check.ts imports createNotes from "./notes.js". It throws an Error unless a fresh store lists [], and unless add("a"), add("  "), and add("b") then list as ["a", "b"].
+
+Commit every change in this worktree with the subject "add a notes module".
+Do not open a pull request. Do not clone or switch repositories.

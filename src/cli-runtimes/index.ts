@@ -3,131 +3,49 @@
  *
  * Every CLI is one record — argv shape, policy translation, output parsing — so
  * flag drift between releases is a one-line fix here rather than a refactor, and
- * adding a fourth CLI is a new record plus a `WorkerRuntimeKind` member.
+ * adding another CLI is a new record plus a `WorkerRuntimeKind` member.
  *
- * Pure functions only: nothing in this module spawns a process, which is what
- * keeps it unit-testable with no network and no API keys.
+ * Auth selection is `auth.ts`. The Codex provider and login file are `codex.ts`.
+ * Nothing here spawns a process.
  */
 
-import type { WorkerRuntimeKind } from "./types.js";
+import { envApplyAuth } from "./auth.js";
+import { CODEX_API_KEY, CODEX_OAUTH_FILE, codexApplyAuth, codexContainerArgs, codexPermissions } from "./codex.js";
+import {
+  CURSOR_API_KEY,
+  CURSOR_OAUTH_FILE,
+  cursorApplyAuth,
+  cursorContainerArgs,
+  cursorParse,
+  cursorPermissions,
+} from "./cursor.js";
+import { classifyPolicy, mapDenies } from "./policy.js";
+import type { CliArgvInput, CliRuntimeDescriptor, CliRuntimeKind, PermissionPlan, PolicyInput } from "./types.js";
 
-export type CliRuntimeKind = Exclude<WorkerRuntimeKind, "dsh">;
-
-export type PromptChannel = "stdin" | "argv";
-
-export type CliArgvInput = {
-  /** The composed brief — soul, memory, skills, plan, task. */
-  prompt: string;
-  model?: string;
-  cwd: string;
-  /** Flags produced by `permissions()` for this run. */
-  permissionArgs: string[];
-};
-
-export type PolicyInput = {
-  deny: string[];
-  requireApproval: string[];
-};
-
-export type PermissionPlan = {
-  /** Flags to append to argv. */
-  args: string[];
-  /**
-   * Declared tool denials this CLI cannot express. Non-empty ⇒ the runtime
-   * refuses to boot rather than running a weaker gate than the policy declares.
-   */
-  unmappable: string[];
-  /**
-   * Deny entries that name no known Ropex tool (`prod-write`, `exfiltrate`, …).
-   * Nothing registers a tool under these names, so the embedded harness does not
-   * gate them either. They are injected into the brief as prohibitions instead
-   * of failing the boot — being stricter than `dsh` here would break policies
-   * that ship today.
-   */
-  advisory: string[];
-};
-
-export type CliRuntimeDescriptor = {
-  kind: CliRuntimeKind;
-  /** Default binary name, resolved on PATH unless `spec.runtime.command` overrides it. */
-  bin: string;
-  /** Any one of these env vars present ⇒ the runtime has credentials. */
-  credentialEnv: string[];
-  defaultModel?: string;
-  label: string;
-  docsUrl: string;
-  /**
-   * How the composed brief is delivered. `stdin` avoids ARG_MAX; `argv` is for
-   * CLIs whose programmatic mode requires `-p <prompt>` as a flag value.
-   */
-  promptChannel: PromptChannel;
-  argv(input: CliArgvInput): string[];
-  permissions(policy: PolicyInput): PermissionPlan;
-  /**
-   * `isError` covers CLIs that report failure in their payload while still
-   * exiting 0 — the adapter must not read that as a successful run.
-   */
-  parse(stdout: string, stderr: string): { observations: string[]; raw: string; isError?: boolean };
-};
-
-/**
- * Tool names the Ropex harness actually registers (`PROFILE_TOOLS` in
- * `harness.ts`, plus the memory port). A deny entry outside this set gates
- * nothing today and is treated as advisory.
- */
-export const KNOWN_ROPEX_TOOLS = [
-  "fs",
-  "shell",
-  "bash",
-  "web",
-  "github",
-  "subagent",
-  "inspect",
-  "str_replace_editor",
-  "memory",
-] as const;
-
-export function isKnownRopexTool(name: string): boolean {
-  return (KNOWN_ROPEX_TOOLS as readonly string[]).includes(name);
-}
-
-/**
- * Split declared denials into ones this CLI must translate and ones that are
- * advisory. `requireApproval` folds into deny: a headless CLI cannot pause for
- * a Ropex approval mid-run, so the conservative reading is to forbid outright.
- */
-export function classifyPolicy(policy: PolicyInput): {
-  toolDenies: string[];
-  advisory: string[];
-} {
-  const all = [...new Set([...policy.deny, ...policy.requireApproval])];
-  return {
-    toolDenies: all.filter(isKnownRopexTool),
-    advisory: all.filter((name) => !isKnownRopexTool(name)),
-  };
-}
-
-/**
- * Translate tool denials through a lookup table.
- * `[]` means the CLI never exposes that capability (deny trivially satisfied);
- * `undefined` means it cannot be expressed → unmappable → fail closed.
- */
-function mapDenies(
-  toolDenies: string[],
-  table: Record<string, string[] | undefined>,
-): { patterns: string[]; unmappable: string[] } {
-  const patterns: string[] = [];
-  const unmappable: string[] = [];
-  for (const tool of toolDenies) {
-    const mapped = table[tool];
-    if (mapped === undefined) {
-      unmappable.push(tool);
-      continue;
-    }
-    patterns.push(...mapped);
-  }
-  return { patterns: [...new Set(patterns)], unmappable };
-}
+export { authProbe, envApplyAuth, selectRuntimeAuth } from "./auth.js";
+export {
+  CODEX_AUTH_MOUNT,
+  DEFAULT_OPENAI_BASE_URL,
+  codexApiKeyConfig,
+  isHttpsBaseUrl,
+} from "./codex.js";
+export { CURSOR_AUTH_MOUNT, CURSOR_CONFIG_HOME } from "./cursor.js";
+export { KNOWN_ROPEX_TOOLS, classifyPolicy, isKnownRopexTool } from "./policy.js";
+export type {
+  AuthApply,
+  AuthApplyInput,
+  AuthMount,
+  AuthProbe,
+  CliArgvInput,
+  CliRuntimeDescriptor,
+  CliRuntimeKind,
+  PermissionPlan,
+  PolicyInput,
+  PreparedRuntimeAuth,
+  PromptChannel,
+  RuntimeAuthStrategy,
+  SelectedAuth,
+} from "./types.js";
 
 /** Ropex tool → Claude Code tool names. */
 const CLAUDE_TOOL_MAP: Record<string, string[] | undefined> = {
@@ -177,11 +95,53 @@ function jsonLines(stdout: string): Array<Record<string, unknown>> {
   return out;
 }
 
+function mergeContainerArgs(args: string[], extra: string[]): string[] {
+  if (!extra.length) return args;
+  const next = [...args];
+  const consumed = new Set<number>();
+  for (let i = 0; i < extra.length; i++) {
+    const flag = extra[i];
+    if (!flag.startsWith("--")) continue;
+    const value = extra[i + 1];
+    const hasValue = value !== undefined && !value.startsWith("-");
+    const idx = next.indexOf(flag);
+    if (idx !== -1 && (!hasValue || idx + 1 < next.length)) {
+      if (hasValue) next[idx + 1] = value;
+      consumed.add(i);
+      if (hasValue) consumed.add(i + 1);
+    }
+    if (hasValue) i += 1;
+  }
+  const tail = extra.filter((_, index) => !consumed.has(index));
+  return tail.length ? [...next, ...tail] : next;
+}
+
+/** Permission flags for a host run, or for a run that is already inside a container. */
+export function permissionPlan(
+  descriptor: CliRuntimeDescriptor,
+  policy: PolicyInput,
+  opts: { container: boolean },
+): PermissionPlan {
+  const plan = descriptor.permissions(policy);
+  if (!opts.container) return plan;
+  return { ...plan, args: mergeContainerArgs(plan.args, descriptor.containerArgs(policy)) };
+}
+
+function cliDescriptor(record: Omit<CliRuntimeDescriptor, "credentialEnv">): CliRuntimeDescriptor {
+  return {
+    ...record,
+    credentialEnv: record.auth.flatMap((strategy) => strategy.env),
+  };
+}
+
 export const CLI_RUNTIMES: Record<CliRuntimeKind, CliRuntimeDescriptor> = {
-  "claude-code": {
+  "claude-code": cliDescriptor({
     kind: "claude-code",
     bin: "claude",
-    credentialEnv: ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"],
+    auth: [
+      { method: "api-key", env: ["ANTHROPIC_API_KEY"] },
+      { method: "oauth", env: ["CLAUDE_CODE_OAUTH_TOKEN"] },
+    ],
     label: "Claude Code CLI",
     docsUrl: "https://docs.claude.com/en/docs/claude-code/cli-reference",
     // `-p` is boolean (--print). The brief goes on stdin so large souls do not
@@ -207,6 +167,12 @@ export const CLI_RUNTIMES: Record<CliRuntimeKind, CliRuntimeDescriptor> = {
       // which would silently enforce no gate at all. Keep it last in argv.
       if (patterns.length) args.push("--disallowedTools", ...patterns);
       return { args, unmappable, advisory };
+    },
+    containerArgs() {
+      return [];
+    },
+    applyAuth(input) {
+      return envApplyAuth("Claude Code CLI", input);
     },
     parse(stdout, stderr) {
       // `--output-format json` emits a single result envelope.
@@ -234,42 +200,30 @@ export const CLI_RUNTIMES: Record<CliRuntimeKind, CliRuntimeDescriptor> = {
       }
       return textFallback(stdout, stderr);
     },
-  },
+  }),
 
-  codex: {
+  codex: cliDescriptor({
     kind: "codex",
     bin: "codex",
-    credentialEnv: ["OPENAI_API_KEY", "CODEX_API_KEY"],
+    auth: [CODEX_API_KEY, CODEX_OAUTH_FILE],
     label: "Codex CLI",
     docsUrl: "https://developers.openai.com/codex/cli",
     // `codex exec` reads the prompt from stdin when the positional is omitted.
     promptChannel: "stdin",
-    argv({ model, cwd, permissionArgs }) {
+    argv({ model, cwd, permissionArgs, authArgs }: CliArgvInput) {
       return [
         "exec",
         "--json",
         "--cd",
         cwd,
         ...(model ? ["--model", model] : []),
+        ...(authArgs ?? []),
         ...permissionArgs,
       ];
     },
-    permissions(policy) {
-      const { toolDenies, advisory } = classifyPolicy(policy);
-      // Codex gates by sandbox level, not per tool.
-      const blocksWrite = toolDenies.some((t) => t === "fs" || t === "str_replace_editor");
-      const blocksShell = toolDenies.some((t) => t === "shell" || t === "bash");
-      const sandbox = blocksWrite || blocksShell ? "read-only" : "workspace-write";
-      const expressible = new Set(["fs", "str_replace_editor", "shell", "bash", "memory"]);
-      const unmappable = toolDenies.filter((t) => !expressible.has(t));
-      // `approval_policy=never` is required for headless exec — without it a
-      // sandbox escalation can block on an interactive prompt until timeout.
-      return {
-        args: ["--sandbox", sandbox, "-c", "approval_policy=never"],
-        unmappable,
-        advisory,
-      };
-    },
+    permissions: codexPermissions,
+    containerArgs: codexContainerArgs,
+    applyAuth: codexApplyAuth,
     parse(stdout, stderr) {
       const events = jsonLines(stdout);
       const messages: string[] = [];
@@ -282,12 +236,12 @@ export const CLI_RUNTIMES: Record<CliRuntimeKind, CliRuntimeDescriptor> = {
       }
       return textFallback(stdout, stderr);
     },
-  },
+  }),
 
-  copilot: {
+  copilot: cliDescriptor({
     kind: "copilot",
     bin: "copilot",
-    credentialEnv: ["GITHUB_TOKEN", "COPILOT_CLI_TOKEN", "GH_TOKEN"],
+    auth: [{ method: "api-key", env: ["GITHUB_TOKEN", "COPILOT_CLI_TOKEN", "GH_TOKEN"] }],
     label: "GitHub Copilot CLI",
     docsUrl: "https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli",
     // Programmatic mode requires `-p <prompt>` as a flag value (not a boolean).
@@ -308,16 +262,46 @@ export const CLI_RUNTIMES: Record<CliRuntimeKind, CliRuntimeDescriptor> = {
       // `--allow-all-tools` is required for headless `-p` runs; without it
       // Copilot prompts for every tool and the worker hangs until timeout.
       // `--deny-tool` still wins over allow-all.
-      const args = [
-        "--allow-all-tools",
-        ...patterns.flatMap((tool) => ["--deny-tool", tool]),
-      ];
+      const args = ["--allow-all-tools", ...patterns.flatMap((tool) => ["--deny-tool", tool])];
       return { args, unmappable, advisory };
+    },
+    containerArgs() {
+      return [];
+    },
+    applyAuth(input) {
+      return envApplyAuth("GitHub Copilot CLI", input);
     },
     parse(stdout, stderr) {
       return textFallback(stdout, stderr);
     },
-  },
+  }),
+
+  cursor: cliDescriptor({
+    kind: "cursor",
+    bin: "agent",
+    auth: [CURSOR_API_KEY, CURSOR_OAUTH_FILE],
+    label: "Cursor CLI",
+    docsUrl: "https://cursor.com/docs/cli/overview",
+    // `-p` is boolean (--print). The brief goes on stdin so large souls do not
+    // hit ARG_MAX. `--output-format json` is a single result envelope.
+    promptChannel: "stdin",
+    argv({ model, cwd, permissionArgs, authArgs }) {
+      return [
+        "-p",
+        "--output-format",
+        "json",
+        "--workspace",
+        cwd,
+        ...(model ? ["--model", model] : []),
+        ...(authArgs ?? []),
+        ...permissionArgs,
+      ];
+    },
+    permissions: cursorPermissions,
+    containerArgs: cursorContainerArgs,
+    applyAuth: cursorApplyAuth,
+    parse: cursorParse,
+  }),
 };
 
 export function cliRuntime(kind: CliRuntimeKind): CliRuntimeDescriptor {

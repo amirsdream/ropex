@@ -45,7 +45,7 @@ If a Cloud Agent is stuck on Starting remote server, the usual cause is a blocki
 | --- | --- |
 | Spec / reconcile | `spec.ts`, `controller.ts`, `image.ts`, `worktree.ts`, `watch.ts`, `gitrepo.ts`, `clone.ts`, `tick.ts`, `canary.ts`, `snapshot.ts`, `drift.ts` |
 | Brain / execute | `hermes.ts`, `dsh.ts`, `harness.ts`, `plugins.ts`, `workflow.ts`, `runtime.ts`, `brief.ts` |
-| Worker runtimes | `worker-runtime.ts` (registry + boot dispatch), `cli-runtimes.ts` (per-CLI descriptors), `proc.ts` (subprocess primitive) |
+| Worker runtimes | `worker-runtime.ts` (registry + boot dispatch), `cli-runtimes/` (per-CLI descriptors, auth selection, Codex and Cursor adapters), `proc.ts` (subprocess primitive) |
 | Sandboxes | `sandbox/` — `index.ts` (provider contract + registry), `local.ts`, `docker.ts`, `image.ts`, `store.ts`, `spec.ts`, `client.ts`; where `execute` runs (see `docs/sandboxes.md`) |
 | Executor API | `pipeline.ts`, `executor.ts` — multi-stage pipelines, SSE, scoped drain |
 | Memory / skills | `memory.ts`, `skills.ts`, `gitmemory.ts`, `contracts.ts` |

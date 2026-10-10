@@ -448,7 +448,7 @@ flowchart LR
 
 ## Worker runtime seam
 
-`bootWorker(spec, { hermes })` selects the execute-stage adapter. The default is still `bootDsh`: it loads a **profile pack** (`minimal` | `code` | `standard` | `creator`) and runs Hermes plans through the in-process Cordis harness (`ROPEX_DSH_BACKEND=live` swaps in `@deepseek-ai/dsh` and fails closed when unavailable). Agents may declare `spec.runtime.kind: claude-code | codex | copilot` to run a headless coding CLI in the worker worktree instead — Hermes still composes, plans, and learns. See [dsh.md](./dsh.md), [worker-runtimes.md](./worker-runtimes.md), and `workerRuntimeScaffold()` for the wiring checklist. The Services page renders a card per runtime.
+`bootWorker(spec, { hermes })` selects the execute-stage adapter. The default is still `bootDsh`: it loads a **profile pack** (`minimal` | `code` | `standard` | `creator`) and runs Hermes plans through the in-process Cordis harness (`ROPEX_DSH_BACKEND=live` swaps in `@deepseek-ai/dsh` and fails closed when unavailable). Agents may declare `spec.runtime.kind: claude-code | codex | copilot | cursor` to run a headless coding CLI in the worker worktree instead — Hermes still composes, plans, and learns. See [dsh.md](./dsh.md), [worker-runtimes.md](./worker-runtimes.md), and `workerRuntimeScaffold()` for the wiring checklist. The Services page renders a card per runtime.
 
 ## One-click stack lifecycle
 

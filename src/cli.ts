@@ -31,7 +31,7 @@ import { DEFAULT_STACK_MANIFEST, stackDown, stackUp } from "./stack.js";
 import { cloneAllGitRepos } from "./clone.js";
 import { simulatePolicies } from "./policy-sim.js";
 import { healthReport } from "./health.js";
-import { workerRuntimeScaffold } from "./worker-runtime.js";
+import { formatRuntimeReport, workerRuntimeScaffold } from "./worker-runtime.js";
 import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { deliveriesFor, replayDelivery } from "./journal.js";
@@ -121,7 +121,7 @@ Usage:
                                      Clone + sync declared GitRepos (Flux-style)
   ropex metrics [--prometheus]    Export cluster metrics
   ropex health                    Worker probes + backlog SLO
-  ropex runtimes                  Worker runtimes (dsh, claude-code, codex, copilot)
+  ropex runtimes                  Worker runtimes (dsh, claude-code, codex, copilot, cursor)
   ropex sandboxes [--json]        Sandbox providers, agents, snapshots, live containers
   ropex sandbox build <agent>     Build (or reuse) the agent's environment image
   ropex sandbox prune [--keep N] [--ttl-ms N]
@@ -883,10 +883,8 @@ async function main(argv: string[]): Promise<number> {
         console.log(JSON.stringify(statuses, null, 2));
         return 0;
       }
-      for (const s of statuses) {
-        console.log(`${s.ready ? "ready " : "      "} ${s.kind.padEnd(12)} ${s.label}`);
-        console.log(`        ${s.hint}`);
-      }
+      const color = process.stdout.isTTY === true && process.env.NO_COLOR === undefined;
+      process.stdout.write(formatRuntimeReport(statuses, { color }));
       return 0;
     }
     case "sandboxes": {

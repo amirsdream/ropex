@@ -1,0 +1,4 @@
+Add src/clamp.ts. Export clamp(n, lo, hi). Return n limited to the inclusive range from lo to hi.
+Add src/clamp.check.ts. It imports clamp from "./clamp.js" and throws an Error unless clamp(5, 0, 3) is 3 and clamp(-1, 0, 3) is 0.
+Commit every change in this worktree with the subject "add clamp".
+Do not open a pull request. Do not clone or switch repositories.

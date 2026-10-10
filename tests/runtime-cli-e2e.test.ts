@@ -37,6 +37,7 @@ spec:
   replicas: 1
   runtime:
     kind: claude-code
+    auth: api-key
     model: claude-opus-5
     command: ${JSON.stringify(process.execPath)}
     commandArgs: [${JSON.stringify(FAKE_CLAUDE)}]
@@ -199,7 +200,7 @@ describe("cli runtimes fail closed", () => {
   });
 
   it("refuses to run without credentials", async () => {
-    await expect(boot(yaml())).rejects.toThrow(/requires one of: ANTHROPIC_API_KEY/);
+    await expect(boot(yaml())).rejects.toThrow(/ANTHROPIC_API_KEY/);
   });
 
   it("refuses to run when a declared tool deny cannot be expressed as a flag", async () => {

@@ -100,8 +100,14 @@ describe("docker sandbox lifecycle", () => {
     expect(exec.args.slice(-3)).toEqual(["codex", "exec", "--json"]);
     expect(exec.args).toContain("OPENAI_API_KEY");
     expect(exec.args).toContain("EXTRA");
+    expect(exec.args).toContain("GIT_AUTHOR_NAME");
     expect(exec.stdin).toBe("the brief");
     expect(exec.env?.OPENAI_API_KEY).toBe(API_KEY);
+    expect(exec.env?.GIT_AUTHOR_NAME).toBe("Ropex");
+    expect(exec.env?.GIT_AUTHOR_EMAIL).toBe("ropex@localhost");
+    expect(exec.env?.GIT_COMMITTER_NAME).toBe("Ropex");
+    expect(exec.env?.GIT_COMMITTER_EMAIL).toBe("ropex@localhost");
+    expect(exec.args.join(" ")).not.toContain("ropex@localhost");
   });
 
   it("resolves binaries inside the container", async () => {
@@ -124,6 +130,29 @@ describe("docker sandbox lifecycle", () => {
     await expect(
       acquireSandbox(repoSpec(), { ...ctx(tmp(), docker), env: { PATH: "" } as NodeJS.ProcessEnv }),
     ).rejects.toThrow(/OPENAI_API_KEY/);
+    expect(docker.verbs()).not.toContain("run");
+  });
+
+  it("bind-mounts an auth directory read-only outside the workspace", async () => {
+    const docker = fakeDocker();
+    const source = "/home/tester/.codex";
+    await acquireSandbox(repoSpec(), {
+      ...ctx(tmp(), docker),
+      authMounts: [{ source, target: "/run/ropex/auth/codex" }],
+    });
+    const run = docker.calls.find((c) => c.args[0] === "run")!.args.join(" ");
+    expect(run).toContain(`--mount type=bind,source=${source},target=/run/ropex/auth/codex,readonly`);
+    expect(run).not.toContain("sk-test");
+  });
+
+  it("rejects an auth mount aimed at the workspace", async () => {
+    const docker = fakeDocker();
+    await expect(
+      acquireSandbox(repoSpec(), {
+        ...ctx(tmp(), docker),
+        authMounts: [{ source: "/home/tester/.codex", target: "/workspace" }],
+      }),
+    ).rejects.toThrow(/under \/run\/ropex\/auth/);
     expect(docker.verbs()).not.toContain("run");
   });
 
@@ -328,6 +357,7 @@ spec:
   replicas: 1
   runtime:
     kind: codex
+    auth: api-key
 ${sandbox}
   harness:
     profile: code
@@ -360,6 +390,7 @@ describe("runTask with a docker sandbox", () => {
 
   afterEach(() => {
     delete process.env.OPENAI_API_KEY;
+    delete process.env.ROPEX_AUTH_FILE_CODEX;
   });
 
   it("runs the CLI runtime inside the container and disposes it afterwards", async () => {
@@ -381,6 +412,9 @@ describe("runTask with a docker sandbox", () => {
     const codexCall = docker.calls.find((c) => c.args[0] === "exec" && c.args.includes("--sandbox"))!;
     expect(codexCall.args.slice(0, 4)).toEqual(["exec", "-i", "-w", "/workspace"]);
     expect(codexCall.args).toContain("/usr/local/bin/codex");
+    expect(codexCall.args).toContain("--sandbox");
+    expect(codexCall.args[codexCall.args.indexOf("--sandbox") + 1]).toBe("danger-full-access");
+    expect(codexCall.args).toContain('model_providers.ropex.env_key="OPENAI_API_KEY"');
     expect(codexCall.args[codexCall.args.indexOf("--cd") + 1]).toBe("/workspace");
     expect(codexCall.stdin).toContain("fix the bug");
     expect(JSON.stringify(docker.calls.map((c) => c.args))).not.toContain(API_KEY);
@@ -389,6 +423,35 @@ describe("runTask with a docker sandbox", () => {
     expect(w.sandbox).toBeUndefined();
     expect(w.worktree).toBeUndefined();
     expect(result.worktree).toBe(scratchPath(root, w.id));
+  });
+
+  it("mounts a Codex login directory and leaves the provider config alone", async () => {
+    const root = tmp();
+    const file = join(root, "auth.json");
+    writeFileSync(file, '{"token":"codex-login-secret"}\n');
+    process.env.ROPEX_AUTH_FILE_CODEX = file;
+    delete process.env.OPENAI_API_KEY;
+    const docker = fakeDocker({
+      onExec: (args) =>
+        args.includes("--sandbox") ? { stdout: JSON.stringify({ message: "patched from login" }) } : undefined,
+    });
+    const manifest = codexAgent(`  sandbox:
+    provider: docker
+    image: { npm: ["@openai/codex"] }
+    repo: { url: "https://github.com/org/repo.git", ref: main }`).replace("auth: api-key", "auth: oauth-file");
+    const { state, worker: w } = runnable(manifest);
+    const result = await runTask(state, w, { id: "t-login", agent: "builder", prompt: "fix the bug" }, {
+      root,
+      sandboxDocker: docker.run,
+    });
+    expect(result.output).toContain("patched from login");
+    const run = docker.calls.find((c) => c.args[0] === "run")!.args.join(" ");
+    expect(run).toContain(`--mount type=bind,source=${root},target=/run/ropex/auth/codex,readonly`);
+    const codexCall = docker.calls.find((c) => c.args.includes("--sandbox"))!;
+    expect(codexCall.args.join(" ")).not.toContain("model_provider");
+    expect(codexCall.env?.CODEX_HOME).toBe("/run/ropex/auth/codex");
+    expect(JSON.stringify(docker.calls)).not.toContain("codex-login-secret");
+    delete process.env.ROPEX_AUTH_FILE_CODEX;
   });
 
   it("disposes the container even when the task fails", async () => {
