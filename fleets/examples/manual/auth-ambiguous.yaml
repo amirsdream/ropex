@@ -1,0 +1,29 @@
+# Boots far enough to select auth. `command: node` is only a binary that exists.
+# The task is not expected to edit the repo.
+apiVersion: ropex.dev/v1
+kind: Policy
+metadata:
+  name: manual-guardrails
+spec:
+  maxReplicas: 2
+  permissions:
+    deny: []
+    requireApproval: []
+---
+apiVersion: ropex.dev/v1
+kind: Agent
+metadata:
+  name: writer
+spec:
+  scale: static
+  replicas: 1
+  runtime:
+    kind: claude-code
+    command: node
+  harness:
+    profile: code
+    plugins: [fs, shell]
+  hermes:
+    memory: none
+    learning: false
+    skills: []
