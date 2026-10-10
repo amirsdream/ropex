@@ -17,8 +17,14 @@ Manual steps, starting from a clean checkout and a throwaway repo, are in [manua
 Check what is usable on this machine:
 
 ```bash
-ropex runtimes          # or: curl -s :7780/api/v1/runtimes | jq
+ropex runtimes          # one block per runtime
+ropex runtimes --json   # same objects as GET /api/v1/runtimes
 ```
+
+Each block leads with `ready` or `not ready`, then the kind and label. The
+following lines name the binary and the credential source. A missing
+credential lists each accepted strategy on its own line. `dsh` is embedded
+and always ready.
 
 ## The spine is unchanged
 

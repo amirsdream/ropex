@@ -197,6 +197,70 @@ export function workerRuntimeScaffold(
   return statuses;
 }
 
+const RUNTIME_STATUS_WIDTH = 12;
+const RUNTIME_KIND_WIDTH = 14;
+const RUNTIME_FIELD_WIDTH = 13;
+const RUNTIME_TEXT_WIDTH = 68;
+
+function wrapRuntimeText(text: string, width: number): string[] {
+  const lines: string[] = [];
+  let current = "";
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    if (!current) {
+      current = word;
+      continue;
+    }
+    if (current.length + 1 + word.length <= width) {
+      current = `${current} ${word}`;
+      continue;
+    }
+    lines.push(current);
+    current = word;
+  }
+  if (current) lines.push(current);
+  return lines.length ? lines : [""];
+}
+
+function runtimeField(name: string, value: string): string {
+  return `${name.padEnd(RUNTIME_FIELD_WIDTH)}${value}`;
+}
+
+function credentialSummary(status: WorkerRuntimeStatus): string {
+  if (status.hint.includes("more than one auth method")) return "ambiguous";
+  if (status.credentialSource) return status.credentialSource;
+  if (status.credentialPresent) return "present";
+  return "missing";
+}
+
+/**
+ * Human layout for `ropex runtimes`. One block per runtime: status, kind,
+ * label, then binary, credentials, and the next step. `--json` keeps the
+ * scaffold objects.
+ */
+export function formatRuntimeReport(statuses: WorkerRuntimeStatus[]): string {
+  const blocks = statuses.map((status) => {
+    const mark = (status.ready ? "ready" : "not ready").padEnd(RUNTIME_STATUS_WIDTH);
+    const lines = [`${mark}${status.kind.padEnd(RUNTIME_KIND_WIDTH)}${status.label}`];
+    if (status.kind === "dsh") {
+      lines.push(runtimeField("binary", "embedded"));
+      lines.push(runtimeField("credentials", "built in"));
+    } else {
+      lines.push(runtimeField("binary", status.binPresent && status.bin ? status.bin : "not on PATH"));
+      lines.push(runtimeField("credentials", credentialSummary(status)));
+    }
+    const requires = status.hint.match(/^(.*) requires one of: (.*)$/);
+    if (requires) {
+      lines.push("needs one of:");
+      for (const part of requires[2].split("; ").filter(Boolean)) lines.push(`  ${part}`);
+    } else if (!(status.ready && status.hint.startsWith("Ready — "))) {
+      lines.push(...wrapRuntimeText(status.hint, RUNTIME_TEXT_WIDTH));
+    }
+    const pad = " ".repeat(RUNTIME_STATUS_WIDTH);
+    return [lines[0], ...lines.slice(1).map((line) => `${pad}${line}`)].join("\n");
+  });
+  return `${blocks.join("\n\n")}\n`;
+}
+
 function alignPack(spec: AgentSpec, kind: WorkerRuntimeKind): DshProfilePack {
   const pack = profilePack(spec.harness.profile);
   const resolvedTools = toolsFor(spec);

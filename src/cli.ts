@@ -31,7 +31,7 @@ import { DEFAULT_STACK_MANIFEST, stackDown, stackUp } from "./stack.js";
 import { cloneAllGitRepos } from "./clone.js";
 import { simulatePolicies } from "./policy-sim.js";
 import { healthReport } from "./health.js";
-import { workerRuntimeScaffold } from "./worker-runtime.js";
+import { formatRuntimeReport, workerRuntimeScaffold } from "./worker-runtime.js";
 import { auditsFor, exportAuditJsonl } from "./audit.js";
 import { metricsPrometheus, metricsSnapshot } from "./metrics.js";
 import { deliveriesFor, replayDelivery } from "./journal.js";
@@ -883,10 +883,7 @@ async function main(argv: string[]): Promise<number> {
         console.log(JSON.stringify(statuses, null, 2));
         return 0;
       }
-      for (const s of statuses) {
-        console.log(`${s.ready ? "ready " : "      "} ${s.kind.padEnd(12)} ${s.label}`);
-        console.log(`        ${s.hint}`);
-      }
+      process.stdout.write(formatRuntimeReport(statuses));
       return 0;
     }
     case "sandboxes": {

@@ -15,11 +15,13 @@ import { buildAgentImage } from "../src/image.ts";
 import { expandDesired, parseManifests } from "../src/spec.ts";
 import {
   credentialPresent,
+  formatRuntimeReport,
   resolveRuntimeBin,
   resolveRuntimeKind,
   runtimeBinEnvVar,
   workerRuntimeScaffold,
   WORKER_RUNTIME_KINDS,
+  type WorkerRuntimeStatus,
 } from "../src/worker-runtime.ts";
 import { composeWorkflow } from "../src/workflow.ts";
 
@@ -538,6 +540,78 @@ describe("workflow execute stage", () => {
       owner: "worker",
       purpose: "Run claude-code in the worker worktree",
     });
+  });
+});
+
+describe("ropex runtimes text", () => {
+  const status = (patch: Partial<WorkerRuntimeStatus> & Pick<WorkerRuntimeStatus, "kind" | "label" | "hint">): WorkerRuntimeStatus => ({
+    binPresent: false,
+    credentialPresent: false,
+    credentialEnv: [],
+    ready: false,
+    docsUrl: "https://example.test",
+    ...patch,
+  });
+
+  it("prints one block per runtime with an explicit status", () => {
+    const text = formatRuntimeReport([
+      status({
+        kind: "dsh",
+        label: "DeepSeek Harness (default)",
+        binPresent: true,
+        credentialPresent: true,
+        ready: true,
+        hint: "Embedded Cordis kernel — always available. Set ROPEX_DSH_BACKEND=live for the headless dsh CLI.",
+      }),
+      status({
+        kind: "claude-code",
+        label: "Claude Code CLI",
+        credentialEnv: ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"],
+        hint: "Claude Code CLI requires one of: ANTHROPIC_API_KEY (api-key); CLAUDE_CODE_OAUTH_TOKEN (oauth)",
+      }),
+      status({
+        kind: "codex",
+        label: "Codex CLI",
+        binPresent: true,
+        bin: "/usr/bin/codex",
+        credentialPresent: true,
+        hint: "Codex CLI has more than one auth method available (api-key, oauth-file). Set spec.runtime.auth.",
+      }),
+      status({
+        kind: "cursor",
+        label: "Cursor CLI",
+        binPresent: true,
+        bin: "/home/kovi/.local/bin/agent",
+        credentialPresent: true,
+        credentialSource: "oauth-file",
+        ready: true,
+        hint: "Ready — agent on PATH, credentials from oauth-file.",
+      }),
+    ]);
+
+    expect(text).toBe(`ready       dsh           DeepSeek Harness (default)
+            binary       embedded
+            credentials  built in
+            Embedded Cordis kernel — always available. Set
+            ROPEX_DSH_BACKEND=live for the headless dsh CLI.
+
+not ready   claude-code   Claude Code CLI
+            binary       not on PATH
+            credentials  missing
+            needs one of:
+              ANTHROPIC_API_KEY (api-key)
+              CLAUDE_CODE_OAUTH_TOKEN (oauth)
+
+not ready   codex         Codex CLI
+            binary       /usr/bin/codex
+            credentials  ambiguous
+            Codex CLI has more than one auth method available (api-key,
+            oauth-file). Set spec.runtime.auth.
+
+ready       cursor        Cursor CLI
+            binary       /home/kovi/.local/bin/agent
+            credentials  oauth-file
+`);
   });
 });
 
