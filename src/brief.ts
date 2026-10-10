@@ -14,6 +14,7 @@ import type { Task } from "./types.js";
 export type ComposeBriefOptions = {
   /** Cap on memory facts injected (most recent first). */
   maxFacts?: number;
+  workspace?: { branch: string; base: string };
 };
 
 function section(heading: string, body: string): string {
@@ -50,12 +51,18 @@ export function composeBrief(
     section("Task", task.prompt),
     section(
       "Working directory",
-      [
-        "You are already in the worker worktree. Act here; do not clone or switch repositories.",
-        "Carry out the intended actions in order. Each one is a tool call: a name and its input.",
-        "When the input has argv, run that command. When it has path and content, write that file.",
-        "Every other call is yours to perform with the tools you have.",
-      ].join(" "),
+      opts.workspace
+        ? [
+            `You are on branch ${opts.workspace.branch}, cut from ${opts.workspace.base}.`,
+            "You may commit on this branch.",
+            "You must not push, switch branches, or change remotes.",
+          ].join(" ")
+        : [
+            "You are already in the worker worktree. Act here; do not clone or switch repositories.",
+            "Carry out the intended actions in order. Each one is a tool call: a name and its input.",
+            "When the input has argv, run that command. When it has path and content, write that file.",
+            "Every other call is yours to perform with the tools you have.",
+          ].join(" "),
     ),
   ]
     .filter(Boolean)
