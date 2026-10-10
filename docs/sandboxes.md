@@ -85,6 +85,8 @@ A runnable version is in [`fleets/examples/docker-sandbox.yaml`](../fleets/examp
 
 `workspace: mount` skips the clone and bind-mounts the worker's host worktree at `/workspace`. Use it when the control plane runs on the host. Do not use it when the control plane itself runs in a container, because the path would be wrong. Files the container writes are owned by the container user.
 
+When the agent also sets `spec.workspace`, the prepared task worktree is the directory a Docker sandbox mounts. The container does not clone `sandbox.repo`. Publish runs on the host, in that worktree, and uses the checkout's existing remote.
+
 ## Tokens and secrets
 
 - The container is **created with no secrets**.

@@ -1,0 +1,32 @@
+apiVersion: ropex.dev/v1
+kind: Policy
+metadata:
+  name: default-guardrails
+spec:
+  maxReplicas: 4
+  permissions:
+    deny: []
+    requireApproval: []
+---
+apiVersion: ropex.dev/v1
+kind: Agent
+metadata:
+  name: builder
+spec:
+  scale: onDemand
+  maxConcurrent: 1
+  idleTTLMs: 0
+  replicas: 1
+  runtime:
+    kind: dsh
+  workspace:
+    path: /home/you/my-app
+    remote: origin
+    base: main
+  harness:
+    profile: standard
+    plugins: [fs, shell]
+  hermes:
+    memory: shared
+    learning: true
+    skills: []
