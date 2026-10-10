@@ -32,6 +32,18 @@ export const WORKER_RUNTIME_KINDS: WorkerRuntimeKind[] = ["dsh", ...CLI_RUNTIME_
 
 export const DEFAULT_RUNTIME_TIMEOUT_MS = 600_000;
 
+/**
+ * A host CLI has whatever git identity the operator's shell does. Fleet commits
+ * use the same author the container exec path sets, and these values stay in
+ * the process environment — they are not written into a snapshot.
+ */
+const CLI_GIT_IDENTITY: Record<string, string> = {
+  GIT_AUTHOR_NAME: "Ropex",
+  GIT_AUTHOR_EMAIL: "ropex@localhost",
+  GIT_COMMITTER_NAME: "Ropex",
+  GIT_COMMITTER_EMAIL: "ropex@localhost",
+};
+
 export type WorkerAdapter = DshAdapter & { runtime: WorkerRuntimeKind };
 
 /** `spec.runtime.kind`, defaulting to the DeepSeek harness. */
@@ -270,14 +282,14 @@ async function bootCliRuntime(
   const cwd = sandbox?.cwd ?? opts.cwd ?? process.cwd();
   const timeoutMs = runtime?.timeoutMs ?? DEFAULT_RUNTIME_TIMEOUT_MS;
   // Credentials the CLI needs inside an isolate. Forwarded by name; values stay off argv.
-  const forwardEnv: Record<string, string> = { ...prepared.injectEnv };
+  const forwardEnv: Record<string, string> = { ...CLI_GIT_IDENTITY, ...prepared.injectEnv };
   if (isolated) {
     for (const name of [...prepared.env, ...(runtime?.requireEnv ?? [])]) {
       const value = env[name]?.trim();
       if (value) forwardEnv[name] = value;
     }
   }
-  const hostEnv = Object.keys(prepared.injectEnv).length ? { ...env, ...prepared.injectEnv } : undefined;
+  const hostEnv: NodeJS.ProcessEnv = { ...env, ...CLI_GIT_IDENTITY, ...prepared.injectEnv };
   const model = runtime?.model ?? descriptor.defaultModel;
 
   return {

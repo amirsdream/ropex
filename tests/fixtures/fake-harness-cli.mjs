@@ -51,19 +51,9 @@ if (!calls.length) {
 for (const input of calls) {
   if (Array.isArray(input.argv) && input.argv.length && input.argv.every((part) => typeof part === "string")) {
     const [bin, ...args] = input.argv;
-    const gitArgs =
-      bin === "git"
-        ? ["-c", "user.name=Ropex", "-c", "user.email=ropex@localhost", "-c", "commit.gpgsign=false", ...args]
-        : args;
-    execFileSync(bin, gitArgs, {
+    execFileSync(bin, args, {
       cwd: process.cwd(),
-      env: {
-        ...process.env,
-        GIT_AUTHOR_NAME: "Ropex",
-        GIT_AUTHOR_EMAIL: "ropex@localhost",
-        GIT_COMMITTER_NAME: "Ropex",
-        GIT_COMMITTER_EMAIL: "ropex@localhost",
-      },
+      env: process.env,
     });
     continue;
   }

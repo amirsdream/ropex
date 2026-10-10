@@ -15,6 +15,7 @@ const RUNTIMES: Array<{ kind: Exclude<WorkerRuntimeKind, "dsh">; env: string }> 
   { kind: "claude-code", env: "ANTHROPIC_API_KEY" },
   { kind: "codex", env: "OPENAI_API_KEY" },
   { kind: "copilot", env: "GH_TOKEN" },
+  { kind: "cursor", env: "CURSOR_API_KEY" },
 ];
 
 const temps: string[] = [];
@@ -108,6 +109,8 @@ describe("CLI runtimes are the harness", () => {
 
     const worktree = result.worktree as string;
     expect(git(worktree, ["log", "-1", "--format=%s"])).toBe("add a greeting argument");
+    expect(git(worktree, ["log", "-1", "--format=%an <%ae>"])).toBe("Ropex <ropex@localhost>");
+    expect(git(worktree, ["log", "-1", "--format=%cn <%ce>"])).toBe("Ropex <ropex@localhost>");
     expect(git(worktree, ["show", "HEAD:src/hello.ts"])).toContain("hello, ${name}");
     expect(git(worktree, ["show", "HEAD:src/hello.test.ts"])).toContain("hello, world");
     expect(git(worktree, ["merge-base", "HEAD", base])).toBe(base);
