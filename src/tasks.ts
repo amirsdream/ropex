@@ -187,6 +187,12 @@ export function writeTaskManifestDelivery(
     output?: string;
     workerId?: string;
     error?: string;
+    workspace?: {
+      branch: string;
+      commit?: string;
+      remote: string;
+      pushed: boolean;
+    };
   },
 ): void {
   const raw = readFileSync(manifestPath, "utf8");
@@ -199,6 +205,13 @@ export function writeTaskManifestDelivery(
     workerId: outcome.workerId,
     completedAt: new Date().toISOString(),
     error: outcome.error,
+    ...(outcome.workspace
+      ? {
+          branch: outcome.workspace.branch,
+          commit: outcome.workspace.commit,
+          remote: outcome.workspace.remote,
+        }
+      : {}),
   });
   if (!spec.has("delivery")) {
     spec.set("delivery", { mode: "git" });
@@ -214,6 +227,12 @@ export function deliverGitTaskManifest(
     output?: string;
     workerId?: string;
     error?: string;
+    workspace?: {
+      branch: string;
+      commit?: string;
+      remote: string;
+      pushed: boolean;
+    };
   },
 ): boolean {
   if (!task.manifestPath) return false;
@@ -222,25 +241,35 @@ export function deliverGitTaskManifest(
     output: outcome.output,
     workerId: outcome.workerId,
     error: outcome.error,
+    workspace: outcome.workspace,
   });
   return true;
 }
 
-export function deliverGitTaskFromQueueItem(item: QueuedTask, output?: string): boolean {
+export function deliverGitTaskFromQueueItem(
+  item: QueuedTask,
+  outcome: {
+    output?: string;
+    workspace?: { branch: string; commit?: string; remote: string; pushed: boolean };
+  } = {},
+): boolean {
   if (!item.task.manifestPath) return false;
   if (item.status === "done") {
     deliverGitTaskManifest(item.task, {
       ok: true,
-      output,
+      output: outcome.output,
       workerId: item.workerId,
+      workspace: outcome.workspace,
     });
     return true;
   }
   if (item.status === "dead") {
     deliverGitTaskManifest(item.task, {
       ok: false,
+      output: outcome.output,
       workerId: item.workerId,
       error: item.error,
+      workspace: outcome.workspace,
     });
     return true;
   }

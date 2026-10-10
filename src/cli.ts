@@ -61,6 +61,7 @@ import { parseManifests } from "./spec.js";
 import { ingestGithubWebhook, signGithubPayload } from "./webhook.js";
 import { parseInterval, watchLoop, watchOnce, watchDeclaredRepos, watchReposLoop } from "./watch.js";
 import type { AuditKind, GithubEvent, ReconcilePlan } from "./types.js";
+import { workspaceCheck } from "./workspace-check.js";
 
 loadDotEnv();
 
@@ -123,6 +124,7 @@ Usage:
   ropex health                    Worker probes + backlog SLO
   ropex runtimes                  Worker runtimes (dsh, claude-code, codex, copilot, cursor)
   ropex sandboxes [--json]        Sandbox providers, agents, snapshots, live containers
+  ropex workspace check <agent>   Check runtime, checkout, remote, and base. Creates no branch.
   ropex sandbox build <agent>     Build (or reuse) the agent's environment image
   ropex sandbox prune [--keep N] [--ttl-ms N]
                                      Evict snapshots (default: all)
@@ -324,6 +326,14 @@ async function main(argv: string[]): Promise<number> {
       if (result.delivery) console.log(`deliver ${result.delivery.kind}`);
       if (result.learned) console.log(`learned skill ${result.learned.name}`);
       console.log(`image ${result.imageDigest}  workflow ${result.workflow.map((s) => `${s.id}:${s.owner}`).join(" → ")}`);
+      if (result.workspaceResult) {
+        const { branch, commit, remote, pushed } = result.workspaceResult;
+        console.log(`workspace ${branch} commit=${commit ?? "-"} remote=${remote} pushed=${pushed}`);
+      }
+      if (result.workspaceError) {
+        console.error(result.workspaceError);
+        return 1;
+      }
       return 0;
     }
     case "github": {
@@ -912,6 +922,8 @@ async function main(argv: string[]): Promise<number> {
       for (const c of report.containers) console.log(`  ${c.name} worker=${c.worker || "-"}`);
       return 0;
     }
+    case "workspace":
+      return workspaceCheck(root, rest);
     case "sandbox": {
       const [sub, ...args] = rest;
       if (sub === "build") {

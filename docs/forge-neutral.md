@@ -55,6 +55,18 @@ commit Task YAML (status: pending)
   → git commit the result
 ```
 
+## Workspace — edit a checkout you already have
+
+An agent may set `spec.workspace` to a local git checkout. That block is not part of the agent image. Apply the fleet, then check it:
+
+```sh
+npx tsx src/cli.ts workspace check builder
+```
+
+The check confirms the runtime, the checkout, the remote, and the base branch. It creates nothing.
+
+Submit a Task whose `spec.agent` is that agent. Drain cuts `ropex/<task-id>` from `base`, runs the spine in a worktree, and `git push -u` sends the branch to `remote`. The Task file's `spec.result` then includes `branch`, `commit`, and `remote`. A run that changes nothing fails and does not push. Ropex does not fetch and does not call GitHub.
+
 ## Task manifest
 
 ```yaml

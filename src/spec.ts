@@ -105,37 +105,47 @@ function validateAgentSpec(spec: Record<string, unknown> | undefined, where: str
         baseUrl?: unknown;
       }
     | undefined;
-  if (runtime === undefined) return;
-  if (!WORKER_RUNTIME_KINDS_LIST.includes(runtime.kind as never)) {
-    throw new Error(
-      `${where}: unsupported runtime.kind "${String(runtime.kind)}" (expected ${WORKER_RUNTIME_KINDS_LIST.join(" | ")})`,
-    );
-  }
-  if (runtime.commandArgs !== undefined && runtime.command === undefined) {
-    throw new Error(`${where}: runtime.commandArgs requires runtime.command`);
-  }
-  if (runtime.auth !== undefined && !RUNTIME_AUTH_METHODS.includes(runtime.auth as RuntimeAuthMethod)) {
-    throw new Error(
-      `${where}: unsupported runtime.auth "${String(runtime.auth)}" (expected ${RUNTIME_AUTH_METHODS.join(" | ")})`,
-    );
-  }
-  if (runtime.kind === "dsh" && runtime.auth !== undefined) {
-    throw new Error(`${where}: runtime.auth does not apply to dsh`);
-  }
-  if (runtime.kind !== "dsh" && runtime.auth !== undefined) {
-    const methods = cliRuntime(runtime.kind as CliRuntimeKind).auth.map((item) => item.method);
-    if (!methods.includes(runtime.auth as RuntimeAuthMethod)) {
+  if (runtime !== undefined) {
+    if (!WORKER_RUNTIME_KINDS_LIST.includes(runtime.kind as never)) {
       throw new Error(
-        `${where}: runtime.auth "${String(runtime.auth)}" is not supported by ${String(runtime.kind)} (expected ${methods.join(" | ")})`,
+        `${where}: unsupported runtime.kind "${String(runtime.kind)}" (expected ${WORKER_RUNTIME_KINDS_LIST.join(" | ")})`,
       );
     }
-  }
-  if (runtime.baseUrl !== undefined) {
-    if (typeof runtime.baseUrl !== "string" || !isHttpsBaseUrl(runtime.baseUrl)) {
-      throw new Error(`${where}: runtime.baseUrl must be an https URL without embedded credentials`);
+    if (runtime.commandArgs !== undefined && runtime.command === undefined) {
+      throw new Error(`${where}: runtime.commandArgs requires runtime.command`);
     }
-    if (runtime.kind !== "codex" || (runtime.auth !== undefined && runtime.auth !== "api-key")) {
-      throw new Error(`${where}: runtime.baseUrl applies to codex auth api-key`);
+    if (runtime.auth !== undefined && !RUNTIME_AUTH_METHODS.includes(runtime.auth as RuntimeAuthMethod)) {
+      throw new Error(
+        `${where}: unsupported runtime.auth "${String(runtime.auth)}" (expected ${RUNTIME_AUTH_METHODS.join(" | ")})`,
+      );
+    }
+    if (runtime.kind === "dsh" && runtime.auth !== undefined) {
+      throw new Error(`${where}: runtime.auth does not apply to dsh`);
+    }
+    if (runtime.kind !== "dsh" && runtime.auth !== undefined) {
+      const methods = cliRuntime(runtime.kind as CliRuntimeKind).auth.map((item) => item.method);
+      if (!methods.includes(runtime.auth as RuntimeAuthMethod)) {
+        throw new Error(
+          `${where}: runtime.auth "${String(runtime.auth)}" is not supported by ${String(runtime.kind)} (expected ${methods.join(" | ")})`,
+        );
+      }
+    }
+    if (runtime.baseUrl !== undefined) {
+      if (typeof runtime.baseUrl !== "string" || !isHttpsBaseUrl(runtime.baseUrl)) {
+        throw new Error(`${where}: runtime.baseUrl must be an https URL without embedded credentials`);
+      }
+      if (runtime.kind !== "codex" || (runtime.auth !== undefined && runtime.auth !== "api-key")) {
+        throw new Error(`${where}: runtime.baseUrl applies to codex auth api-key`);
+      }
+    }
+  }
+  const workspace = spec?.workspace as { path?: unknown } | undefined;
+  if (workspace !== undefined) {
+    if (!workspace || typeof workspace !== "object" || Array.isArray(workspace)) {
+      throw new Error(`${where}: workspace must be an object`);
+    }
+    if (typeof workspace.path !== "string" || !workspace.path.trim()) {
+      throw new Error(`${where}: workspace.path is required`);
     }
   }
 }
@@ -193,10 +203,22 @@ function cloneAgentSpec(tpl: Omit<AgentSpec, "replicas"> & { replicas?: number }
           tolerations: tpl.placement.tolerations?.map((t) => ({ ...t })),
         }
       : undefined,
+    workspace: tpl.workspace ? { ...tpl.workspace } : undefined,
+  };
+}
+
+function withWorkspace(spec: AgentSpec): AgentSpec {
+  if (!spec.workspace) return spec;
+  const remote = spec.workspace.remote?.trim() || "origin";
+  const base = spec.workspace.base?.trim() || undefined;
+  return {
+    ...spec,
+    workspace: { path: spec.workspace.path.trim(), remote, ...(base ? { base } : {}) },
   };
 }
 
 function normalizeAgentSpec(spec: AgentSpec): AgentSpec {
+  spec = withWorkspace(spec);
   const scale = resolveScaleMode(spec);
   const maxConcurrent = resolveMaxConcurrent({ ...spec, scale });
   if (scale === "onDemand") {
