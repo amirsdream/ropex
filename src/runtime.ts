@@ -18,6 +18,14 @@ import {
 } from "./worker-runtime.js";
 import { acquireSandbox, needsHostWorktree, type Sandbox } from "./sandbox/index.js";
 import { sandboxProvider } from "./sandbox/spec.js";
+import {
+  cleanupWorkspace,
+  prepareWorkspace,
+  publishWorkspace,
+  sandboxSpecForWorkspace,
+  type GitRunner,
+  type PreparedWorkspace,
+} from "./workspace.js";
 import { recordAudit } from "./audit.js";
 import type { DockerRun } from "./sandbox/client.js";
 import type {
@@ -40,6 +48,7 @@ export type RunTaskOptions = ImageResolveOptions & {
   sandboxDocker?: DockerRun;
   /** Credential-file probe. Tests pass a fake so a host login file is not selected. */
   authProbe?: RuntimeAuthProbe;
+  git?: GitRunner;
 };
 
 export type TaskProgress = {
@@ -68,31 +77,59 @@ export async function runTask(
   }
 
   const root = opts.worktreeRoot ?? opts.root ?? process.cwd();
-  const container = sandboxProvider(agent.spec.sandbox) !== "local";
-  const auth = prepareRuntimeAuth(agent.spec, {
-    env: process.env,
-    container,
-    fileExists: opts.authProbe?.fileExists,
-    homedir: opts.authProbe?.homedir,
-  });
-  const sandbox = await acquireSandbox(agent.spec.sandbox, {
-    root,
-    worker,
-    taskId: task.id,
-    policies: state.policies,
-    docker: opts.sandboxDocker,
-    authMounts: auth?.mount ? [auth.mount] : undefined,
-  });
-  worker.sandbox =
-    sandbox.kind === "local"
-      ? undefined
-      : { provider: sandbox.kind, id: sandbox.id, imageRef: sandbox.imageRef };
-  if (needsHostWorktree(agent.spec.sandbox)) worker.worktree = sandbox.hostCwd;
-
+  let prepared: PreparedWorkspace | undefined;
+  const settlement = { published: false, keepBranch: false };
+  let sandbox: Sandbox | undefined;
   try {
-    return await executeTask(state, worker, task, { agent, workflow, root, sandbox, auth }, opts);
+    if (agent.spec.workspace) {
+      prepared = prepareWorkspace({
+        root,
+        agent,
+        taskId: task.id,
+        git: opts.git,
+        fileExists: opts.authProbe?.fileExists,
+        homedir: opts.authProbe?.homedir,
+      });
+      worker.worktree = prepared.worktree;
+    }
+    const sandboxSpec = sandboxSpecForWorkspace(agent.spec.sandbox, Boolean(prepared));
+    const container = sandboxProvider(agent.spec.sandbox) !== "local";
+    const auth = prepareRuntimeAuth(agent.spec, {
+      env: process.env,
+      container,
+      fileExists: opts.authProbe?.fileExists,
+      homedir: opts.authProbe?.homedir,
+    });
+    sandbox = await acquireSandbox(sandboxSpec, {
+      root,
+      worker,
+      taskId: task.id,
+      policies: state.policies,
+      docker: opts.sandboxDocker,
+      authMounts: auth?.mount ? [auth.mount] : undefined,
+    });
+    worker.sandbox =
+      sandbox.kind === "local"
+        ? undefined
+        : { provider: sandbox.kind, id: sandbox.id, imageRef: sandbox.imageRef };
+    if (needsHostWorktree(sandboxSpec)) {
+      worker.worktree = sandbox.hostCwd;
+    }
+    return await executeTask(
+      state,
+      worker,
+      task,
+      { agent, workflow, root, sandbox, auth, prepared, settlement },
+      opts,
+    );
   } finally {
-    await releaseSandbox(state, worker, task, agent, sandbox);
+    if (sandbox) await releaseSandbox(state, worker, task, agent, sandbox);
+    if (prepared) {
+      cleanupWorkspace(prepared, {
+        deleteBranch: !(settlement.published && settlement.keepBranch),
+        git: opts.git,
+      });
+    }
   }
 }
 
@@ -142,6 +179,8 @@ async function executeTask(
     root: string;
     sandbox: Sandbox;
     auth?: PreparedRuntimeAuth;
+    prepared?: PreparedWorkspace;
+    settlement: { published: boolean; keepBranch: boolean };
   },
   opts: RunTaskOptions,
 ): Promise<RunResult> {
@@ -215,7 +254,13 @@ async function executeTask(
       })),
     });
   }
-  const brief = composeBrief(workflow, hermes, task, planned);
+  const brief = composeBrief(
+    workflow,
+    hermes,
+    task,
+    planned,
+    run.prepared ? { workspace: { branch: run.prepared.branch, base: run.prepared.base } } : {},
+  );
   const { steps: execSteps } = await runtimeAdapter.execute(
     { thoughts: planned.thoughts, calls: admission.allowed },
     { task, brief },
@@ -262,6 +307,16 @@ async function executeTask(
     ...execSteps,
   ];
   const steps = gatedSteps;
+
+  let workspaceResult: RunResult["workspaceResult"];
+  let workspaceError: string | undefined;
+  if (run.prepared) {
+    const outcome = publishWorkspace({ prepared: run.prepared, taskId: task.id, git: opts.git });
+    run.settlement.published = true;
+    run.settlement.keepBranch = outcome.keepBranch;
+    workspaceResult = outcome.result;
+    workspaceError = outcome.error;
+  }
 
   // deliver (DeepSeek)
   let delivery: RunResult["delivery"];
@@ -325,6 +380,8 @@ async function executeTask(
     learned,
     output: summarize(task, steps),
     worktree,
+    workspaceResult,
+    workspaceError,
   };
   recordDelivery(state, result);
   recordTrajectory(state, result);

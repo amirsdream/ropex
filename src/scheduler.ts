@@ -115,9 +115,11 @@ export async function drainQueue(
           const queueItem = state.queue.find((q) => q.id === c.queueId);
           if (queueItem) markNativeTaskRunning(state, queueItem);
           const result = await runTask(state, worker, c.task, opts);
-          const updated = completeQueued(state, c.queueId, true, undefined, {
+          const failed = Boolean(result.workspaceError);
+          const updated = completeQueued(state, c.queueId, !failed, result.workspaceError, {
             maxAttempts: opts.maxAttempts,
             root: opts.root,
+            terminal: failed,
           });
           if (updated)
             deliverTaskOutcome(state, updated, {
@@ -125,6 +127,8 @@ export async function drainQueue(
               delivery: result.delivery,
               worker: result.worker,
               imageDigest: result.imageDigest,
+              workspace: result.workspaceResult,
+              error: result.workspaceError,
             });
           return result;
         } catch (err) {
