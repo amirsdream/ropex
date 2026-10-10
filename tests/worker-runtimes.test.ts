@@ -617,6 +617,34 @@ cursor         status: ready
                credentials  oauth-file
 `);
   });
+
+  it("colors the kind and the status without moving the columns", () => {
+    const sample = [
+      status({
+        kind: "dsh",
+        label: "DeepSeek Harness (default)",
+        binPresent: true,
+        credentialPresent: true,
+        ready: true,
+        hint: "Embedded Cordis kernel — always available.",
+      }),
+      status({
+        kind: "cursor",
+        label: "Cursor CLI",
+        credentialEnv: ["CURSOR_API_KEY"],
+        hint: "Cursor CLI requires one of: CURSOR_API_KEY (api-key); ~/.config/cursor/auth.json (oauth-file)",
+      }),
+    ];
+    const plain = formatRuntimeReport(sample);
+    const colored = formatRuntimeReport(sample, { color: true });
+    expect(colored.replace(/\x1b\[[0-9;]*m/g, "")).toBe(plain);
+    expect(colored).toContain("\x1b[1;36mcursor");
+    expect(colored).toContain("\x1b[1;32mready");
+    expect(colored).toContain("\x1b[1;33mnot ready");
+    expect(colored).toContain("\x1b[33mmissing");
+    expect(colored).toContain("\x1b[36mCURSOR_API_KEY (api-key)");
+    expect(plain).not.toContain("\x1b[");
+  });
 });
 
 describe("runtimes API and UI", () => {

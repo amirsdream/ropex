@@ -26,6 +26,10 @@ Each block starts with the runtime kind, then `status: ready` or
 the credential source. A missing credential lists each accepted strategy on
 its own line. `dsh` is embedded and always ready.
 
+In a terminal the kind is cyan, `ready` is green, and `not ready` is yellow.
+A missing credential is yellow. Each accepted strategy is cyan. Set `NO_COLOR`,
+or pipe the command, to print plain text.
+
 ## The spine is unchanged
 
 Hermes still owns three of the five stages. Only `execute` moves:

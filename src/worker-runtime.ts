@@ -220,8 +220,24 @@ function wrapRuntimeText(text: string, width: number): string[] {
   return lines.length ? lines : [""];
 }
 
-function runtimeField(name: string, value: string): string {
-  return `${name.padEnd(RUNTIME_FIELD_WIDTH)}${value}`;
+const RUNTIME_COLOR = {
+  reset: "\x1b[0m",
+  kind: "\x1b[1;36m",
+  ready: "\x1b[1;32m",
+  notReady: "\x1b[1;33m",
+  dim: "\x1b[2m",
+  good: "\x1b[32m",
+  warn: "\x1b[33m",
+  action: "\x1b[36m",
+} as const;
+
+function paint(text: string, open: string, enabled: boolean): string {
+  if (!enabled || text.length === 0) return text;
+  return `${open}${text}${RUNTIME_COLOR.reset}`;
+}
+
+function runtimeField(name: string, value: string, tone: (text: string) => string, dim: (text: string) => string): string {
+  return `${dim(name.padEnd(RUNTIME_FIELD_WIDTH))}${tone(value)}`;
 }
 
 function credentialSummary(status: WorkerRuntimeStatus): string {
@@ -235,25 +251,37 @@ function credentialSummary(status: WorkerRuntimeStatus): string {
  * Human layout for `ropex runtimes`. One block per runtime. The first line is
  * the kind, then `status: ready` or `status: not ready`. Later lines are the
  * label, binary, credentials, and the next step. `--json` keeps the scaffold
- * objects.
+ * objects. `color` paints the kind, the status, and the credential result.
+ * The CLI turns it on for a terminal and leaves it off when `NO_COLOR` is set.
  */
-export function formatRuntimeReport(statuses: WorkerRuntimeStatus[]): string {
+export function formatRuntimeReport(statuses: WorkerRuntimeStatus[], opts: { color?: boolean } = {}): string {
+  const color = opts.color === true;
+  const dim = (text: string) => paint(text, RUNTIME_COLOR.dim, color);
   const blocks = statuses.map((status) => {
     const mark = status.ready ? "ready" : "not ready";
-    const lines = [`${status.kind.padEnd(RUNTIME_KIND_WIDTH)}status: ${mark}`, status.label];
+    const kind = status.kind.padEnd(RUNTIME_KIND_WIDTH);
+    const gap = kind.length - status.kind.length;
+    const head = `${paint(status.kind, RUNTIME_COLOR.kind, color)}${" ".repeat(gap)}${dim("status:")} ${paint(mark, status.ready ? RUNTIME_COLOR.ready : RUNTIME_COLOR.notReady, color)}`;
+    const lines = [head, dim(status.label)];
+    const valueTone = (value: string) => {
+      if (value === "missing" || value === "ambiguous" || value === "not on PATH") return paint(value, RUNTIME_COLOR.warn, color);
+      if (value === "embedded" || value === "built in" || status.credentialSource === value) return paint(value, RUNTIME_COLOR.good, color);
+      return dim(value);
+    };
+    const field = (name: string, value: string) => runtimeField(name, value, valueTone, dim);
     if (status.kind === "dsh") {
-      lines.push(runtimeField("binary", "embedded"));
-      lines.push(runtimeField("credentials", "built in"));
+      lines.push(field("binary", "embedded"));
+      lines.push(field("credentials", "built in"));
     } else {
-      lines.push(runtimeField("binary", status.binPresent && status.bin ? status.bin : "not on PATH"));
-      lines.push(runtimeField("credentials", credentialSummary(status)));
+      lines.push(field("binary", status.binPresent && status.bin ? status.bin : "not on PATH"));
+      lines.push(field("credentials", credentialSummary(status)));
     }
     const requires = status.hint.match(/^(.*) requires one of: (.*)$/);
     if (requires) {
-      lines.push("needs one of:");
-      for (const part of requires[2].split("; ").filter(Boolean)) lines.push(`  ${part}`);
+      lines.push(dim("needs one of:"));
+      for (const part of requires[2].split("; ").filter(Boolean)) lines.push(`  ${paint(part, RUNTIME_COLOR.action, color)}`);
     } else if (!(status.ready && status.hint.startsWith("Ready — "))) {
-      lines.push(...wrapRuntimeText(status.hint, RUNTIME_TEXT_WIDTH));
+      lines.push(...wrapRuntimeText(status.hint, RUNTIME_TEXT_WIDTH).map(dim));
     }
     const pad = " ".repeat(RUNTIME_KIND_WIDTH);
     return [lines[0], ...lines.slice(1).map((line) => `${pad}${line}`)].join("\n");

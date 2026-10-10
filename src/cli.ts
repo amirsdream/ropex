@@ -883,7 +883,8 @@ async function main(argv: string[]): Promise<number> {
         console.log(JSON.stringify(statuses, null, 2));
         return 0;
       }
-      process.stdout.write(formatRuntimeReport(statuses));
+      const color = process.stdout.isTTY === true && process.env.NO_COLOR === undefined;
+      process.stdout.write(formatRuntimeReport(statuses, { color }));
       return 0;
     }
     case "sandboxes": {
